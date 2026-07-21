@@ -2,7 +2,7 @@ name: Build MyBrain AI APK
 
 on:
   push:
-    branches: ["mybrain-ai-restart-v1"]
+    branches: ["main", "mybrain-ai-restart-v1"]
   workflow_dispatch:
 
 jobs:
