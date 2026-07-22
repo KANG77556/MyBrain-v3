@@ -7,6 +7,12 @@ on:
     paths:
       - 'allfilehub-apk/**'
       - '.github/workflows/build-allfilehub-apk.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'allfilehub-apk/**'
+      - '.github/workflows/build-allfilehub-apk.yml'
   workflow_dispatch:
 
 permissions:
