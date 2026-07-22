@@ -15,14 +15,25 @@ import java.util.Calendar;
 import java.util.Locale;
 
 /**
- * 일정이 있는 날짜에 점과 건수를 표시하는 전용 월간 달력입니다.
+ * 일정이 있는 날짜에 색상 점과 건수를 표시하는 전용 월간 달력입니다.
  * 외부 라이브러리를 사용하지 않아 APK 크기와 오류 가능성을 줄입니다.
  */
 public class EventCalendarView extends LinearLayout {
 
-    /** 날짜별 일정 개수를 제공하는 함수입니다. */
-    public interface EventCountProvider {
-        int getEventCount(String date);
+    /** 날짜별 표시 정보입니다. */
+    public static class EventMarker {
+        public final int count;
+        public final int color;
+
+        public EventMarker(int count, int color) {
+            this.count = count;
+            this.color = color;
+        }
+    }
+
+    /** 날짜별 일정 표시 정보를 제공하는 함수입니다. */
+    public interface EventMarkerProvider {
+        EventMarker getEventMarker(String date);
     }
 
     /** 날짜를 눌렀을 때 선택 결과를 전달합니다. */
@@ -33,7 +44,7 @@ public class EventCalendarView extends LinearLayout {
     private final Calendar shownMonth = Calendar.getInstance();
     private final GridLayout dayGrid;
     private final TextView monthTitle;
-    private EventCountProvider eventCountProvider;
+    private EventMarkerProvider eventMarkerProvider;
     private OnDateSelectedListener dateSelectedListener;
     private String selectedDate;
 
@@ -90,8 +101,8 @@ public class EventCalendarView extends LinearLayout {
         render();
     }
 
-    public void setEventCountProvider(EventCountProvider provider) {
-        eventCountProvider = provider;
+    public void setEventMarkerProvider(EventMarkerProvider provider) {
+        eventMarkerProvider = provider;
         render();
     }
 
@@ -104,7 +115,9 @@ public class EventCalendarView extends LinearLayout {
         selectedDate = date;
         try {
             Calendar value = Calendar.getInstance();
-            value.setTime(new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).parse(date));
+            SimpleDateFormat parser = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+            parser.setLenient(false);
+            value.setTime(parser.parse(date));
             shownMonth.set(Calendar.YEAR, value.get(Calendar.YEAR));
             shownMonth.set(Calendar.MONTH, value.get(Calendar.MONTH));
             shownMonth.set(Calendar.DAY_OF_MONTH, 1);
@@ -146,7 +159,10 @@ public class EventCalendarView extends LinearLayout {
             Calendar date = (Calendar) shownMonth.clone();
             date.set(Calendar.DAY_OF_MONTH, day);
             String value = format(date);
-            int count = eventCountProvider == null ? 0 : eventCountProvider.getEventCount(value);
+            EventMarker markerInfo = eventMarkerProvider == null
+                    ? new EventMarker(0, Color.rgb(29, 99, 216))
+                    : eventMarkerProvider.getEventMarker(value);
+            if (markerInfo == null) markerInfo = new EventMarker(0, Color.rgb(29, 99, 216));
 
             LinearLayout cell = new LinearLayout(getContext());
             cell.setOrientation(VERTICAL);
@@ -172,8 +188,8 @@ public class EventCalendarView extends LinearLayout {
             TextView marker = new TextView(getContext());
             marker.setGravity(Gravity.CENTER);
             marker.setTextSize(10);
-            marker.setTextColor(Color.rgb(29, 99, 216));
-            marker.setText(count <= 0 ? "" : (count == 1 ? "●" : "● " + count));
+            marker.setTextColor(markerInfo.color);
+            marker.setText(markerInfo.count <= 0 ? "" : (markerInfo.count == 1 ? "●" : "● " + markerInfo.count));
             cell.addView(marker, new LayoutParams(LayoutParams.MATCH_PARENT, dp(18)));
 
             cell.setOnClickListener(v -> {

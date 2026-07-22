@@ -5,6 +5,8 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -28,25 +30,31 @@ import java.util.regex.Pattern;
 
 /**
  * MyBrain AI 메인 화면입니다.
- * 일정·할 일·메모·알림·반복 일정과 날짜별 표시 달력을 관리합니다.
+ * 일정·할 일·메모·알림·반복 일정·달력·항목별 색상을 관리합니다.
  */
 public class MainActivity extends Activity {
     private static final String PREFS = "mybrain_data";
     private static final String KEY_ITEMS = "items";
 
+    private static final int COLOR_PRIMARY = Color.rgb(35, 92, 190);
+    private static final int COLOR_TEXT = Color.rgb(31, 42, 55);
+    private static final int COLOR_MUTED = Color.rgb(104, 116, 132);
+    private static final int COLOR_BACKGROUND = Color.rgb(244, 247, 251);
+    private static final int COLOR_SCHEDULE = Color.rgb(37, 99, 235);
+    private static final int COLOR_TASK = Color.rgb(234, 120, 35);
+    private static final int COLOR_MEMO = Color.rgb(123, 86, 188);
+
     private static final String[] REMINDER_LABELS = {
             "알림 없음", "정각", "5분 전", "10분 전", "30분 전", "1시간 전"
     };
     private static final int[] REMINDER_MINUTES = {-1, 0, 5, 10, 30, 60};
-
-    private static final String[] REPEAT_LABELS = {
-            "반복 없음", "매일", "매주", "매월", "평일"
-    };
-    private static final String[] REPEAT_VALUES = {
-            "NONE", "DAILY", "WEEKLY", "MONTHLY", "WEEKDAYS"
-    };
+    private static final String[] REPEAT_LABELS = {"반복 없음", "매일", "매주", "매월", "평일"};
+    private static final String[] REPEAT_VALUES = {"NONE", "DAILY", "WEEKLY", "MONTHLY", "WEEKDAYS"};
+    private static final String[] COLOR_LABELS = {"기본 색상", "파랑", "빨강", "주황", "초록", "보라", "회색"};
+    private static final String[] COLOR_VALUES = {"DEFAULT", "BLUE", "RED", "ORANGE", "GREEN", "PURPLE", "GRAY"};
 
     private final List<Item> items = new ArrayList<>();
+    private final List<Button> tabButtons = new ArrayList<>();
     private LinearLayout listArea;
     private TextView summary;
     private EditText searchInput;
@@ -72,60 +80,79 @@ public class MainActivity extends Activity {
     private void buildScreen() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(14), dp(16), dp(14));
-        root.setBackgroundColor(Color.rgb(247, 249, 252));
+        root.setPadding(dp(16), dp(12), dp(16), dp(12));
+        root.setBackgroundColor(COLOR_BACKGROUND);
 
-        root.addView(text("MyBrain AI", 28, Color.rgb(20, 45, 80)), fullWrap());
-        TextView version = text("v1.3.2 · 일정 표시 달력·알림·위젯", 14, Color.DKGRAY);
+        TextView title = text("MyBrain AI", 28, Color.rgb(18, 48, 89));
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        root.addView(title, fullWrap());
+
+        TextView version = text("v1.4.1 · 항목별 색상·달력 연동", 13, COLOR_MUTED);
         version.setPadding(0, dp(2), 0, dp(10));
         root.addView(version, fullWrap());
 
-        summary = text("", 16, Color.rgb(29, 99, 216));
-        summary.setPadding(dp(12), dp(12), dp(12), dp(12));
-        summary.setBackgroundColor(Color.WHITE);
+        summary = text("", 15, COLOR_PRIMARY);
+        summary.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        summary.setPadding(dp(14), dp(13), dp(14), dp(13));
+        summary.setBackground(rounded(Color.WHITE, 16, Color.rgb(226, 232, 240), 1));
         root.addView(summary, fullWrap());
 
-        Button addButton = new Button(this);
-        addButton.setText("+ 메시지 분석 및 추가");
-        addButton.setAllCaps(false);
+        Button addButton = actionButton("＋ 메시지 분석 및 추가", COLOR_PRIMARY, Color.WHITE);
         addButton.setOnClickListener(v -> showInputDialog(""));
         LinearLayout.LayoutParams addParams = fullWrap();
-        addParams.setMargins(0, dp(10), 0, dp(6));
+        addParams.setMargins(0, dp(10), 0, dp(8));
         root.addView(addButton, addParams);
 
         searchInput = new EditText(this);
         searchInput.setHint("제목 또는 원문 검색");
+        searchInput.setTextSize(16);
         searchInput.setSingleLine(true);
+        searchInput.setPadding(dp(14), 0, dp(14), 0);
+        searchInput.setBackground(rounded(Color.WHITE, 14, Color.rgb(210, 219, 232), 1));
         searchInput.setOnEditorActionListener((v, actionId, event) -> {
             refreshList();
             return true;
         });
-        root.addView(searchInput, fullWrap());
+        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
+        searchParams.setMargins(0, 0, 0, dp(10));
+        root.addView(searchInput, searchParams);
 
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabButtons.clear();
         for (String name : new String[]{"전체", "일정", "할 일", "메모", "달력"}) {
             Button tab = new Button(this);
             tab.setText(name);
             tab.setTextSize(12);
             tab.setAllCaps(false);
+            tab.setPadding(0, 0, 0, 0);
+            tab.setTag(name);
             tab.setOnClickListener(v -> selectTab(name));
-            tabs.addView(tab, new LinearLayout.LayoutParams(0, dp(48), 1f));
+            tabButtons.add(tab);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1f);
+            params.setMargins(dp(2), 0, dp(2), 0);
+            tabs.addView(tab, params);
         }
         root.addView(tabs, fullWrap());
+        updateTabStyles();
 
         calendarView = new EventCalendarView(this);
         calendarView.setVisibility(View.GONE);
-        calendarView.setEventCountProvider(this::countEventsOnDate);
+        calendarView.setEventMarkerProvider(this::eventMarkerOnDate);
         calendarView.setOnDateSelectedListener(date -> {
             selectedDate = date;
             refreshList();
         });
-        root.addView(calendarView, fullWrap());
+        LinearLayout.LayoutParams calendarParams = fullWrap();
+        calendarParams.setMargins(0, dp(8), 0, dp(8));
+        root.addView(calendarView, calendarParams);
 
         ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
         listArea = new LinearLayout(this);
         listArea.setOrientation(LinearLayout.VERTICAL);
+        listArea.setPadding(0, dp(10), 0, dp(20));
         scroll.addView(listArea, fullWrap());
         root.addView(scroll, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -144,7 +171,18 @@ public class MainActivity extends Activity {
             calendarView.setVisibility(View.GONE);
             selectedDate = "";
         }
+        updateTabStyles();
         refreshList();
+    }
+
+    private void updateTabStyles() {
+        for (Button button : tabButtons) {
+            boolean selected = selectedTab.equals(String.valueOf(button.getTag()));
+            button.setTextColor(selected ? Color.WHITE : COLOR_TEXT);
+            button.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
+            button.setBackground(rounded(selected ? COLOR_PRIMARY : Color.WHITE,
+                    12, selected ? COLOR_PRIMARY : Color.rgb(218, 226, 237), 1));
+        }
     }
 
     private void showInputDialog(String preset) {
@@ -154,11 +192,9 @@ public class MainActivity extends Activity {
         input.setHint("예: 매주 월요일 오후 2시 교무실 회의");
         input.setText(preset);
         input.setSelection(input.getText().length());
-
         LinearLayout holder = new LinearLayout(this);
         holder.setPadding(dp(18), 0, dp(18), 0);
         holder.addView(input, fullWrap());
-
         new AlertDialog.Builder(this)
                 .setTitle("메시지 분석")
                 .setView(holder)
@@ -175,14 +211,14 @@ public class MainActivity extends Activity {
         }
         Analysis result = analyze(value);
         showItemEditor(null, result.type, result.title, result.date, result.time,
-                value, 0, result.repeatType, "");
+                value, 0, result.repeatType, "", "DEFAULT");
     }
 
     /** 새 항목과 기존 항목을 같은 화면에서 저장·수정합니다. */
     private void showItemEditor(Item target, String typeValue, String titleValue,
                                 String dateValue, String timeValue, String originalValue,
                                 int reminderMinutesValue, String repeatTypeValue,
-                                String repeatEndDateValue) {
+                                String repeatEndDateValue, String colorValue) {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(18), 0, dp(18), 0);
@@ -191,12 +227,15 @@ public class MainActivity extends Activity {
         EditText itemTitle = field("제목", titleValue);
         EditText date = field("시작 날짜: 2026-07-22", dateValue);
         EditText time = field("시간: 14:00", timeValue);
-        TextView reminderTitle = text("알림 시간", 14, Color.DKGRAY);
+        TextView reminderTitle = text("알림 시간", 14, COLOR_MUTED);
         Spinner reminderSpinner = spinner(REMINDER_LABELS, reminderIndex(reminderMinutesValue));
-        TextView repeatTitle = text("반복 설정", 14, Color.DKGRAY);
+        TextView repeatTitle = text("반복 설정", 14, COLOR_MUTED);
         repeatTitle.setPadding(0, dp(8), 0, 0);
         Spinner repeatSpinner = spinner(REPEAT_LABELS, repeatIndex(repeatTypeValue));
         EditText repeatEndDate = field("반복 종료일: 2026-12-31 (비워두면 계속)", repeatEndDateValue);
+        TextView colorTitle = text("항목 색상", 14, COLOR_MUTED);
+        colorTitle.setPadding(0, dp(8), 0, 0);
+        Spinner colorSpinner = spinner(COLOR_LABELS, colorIndex(colorValue));
         EditText original = field("원문", originalValue);
 
         form.addView(type);
@@ -208,6 +247,8 @@ public class MainActivity extends Activity {
         form.addView(repeatTitle);
         form.addView(repeatSpinner, fullWrap());
         form.addView(repeatEndDate);
+        form.addView(colorTitle);
+        form.addView(colorSpinner, fullWrap());
         form.addView(original);
 
         new AlertDialog.Builder(this)
@@ -224,17 +265,16 @@ public class MainActivity extends Activity {
                     item.reminderMinutes = REMINDER_MINUTES[reminderSpinner.getSelectedItemPosition()];
                     item.repeatType = REPEAT_VALUES[repeatSpinner.getSelectedItemPosition()];
                     item.repeatEndDate = repeatEndDate.getText().toString().trim();
+                    item.colorValue = COLOR_VALUES[colorSpinner.getSelectedItemPosition()];
                     if (target == null) items.add(0, item);
                     saveItems();
                     refreshList();
-                })
-                .show();
+                }).show();
     }
 
     private Spinner spinner(String[] labels, int selection) {
         Spinner spinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item, labels);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);
         spinner.setSelection(selection);
@@ -255,7 +295,6 @@ public class MainActivity extends Activity {
         result.date = extractDate(text);
         result.time = extractTime(text);
         result.repeatType = extractRepeatType(text);
-
         String[] taskWords = {"제출", "작성", "확인", "준비", "보내", "전달", "신청", "완료", "처리", "연락"};
         String[] scheduleWords = {"회의", "연수", "수업", "상담", "면담", "행사", "출장", "약속", "모임", "방문"};
         boolean task = containsAny(text, taskWords) || text.contains("까지") || text.contains("마감");
@@ -293,7 +332,6 @@ public class MainActivity extends Activity {
         return formatDate(cal.getTime());
     }
 
-    /** 매주 월요일 같은 표현의 첫 시작일을 계산합니다. */
     private String extractWeekdayDate(String text, Calendar now) {
         String[] names = {"일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"};
         for (int i = 0; i < names.length; i++) {
@@ -328,7 +366,7 @@ public class MainActivity extends Activity {
                 if (item.completed) completed++;
             } else memos++;
         }
-        summary.setText("일정 " + schedules + " · 할 일 " + tasks + "(완료 " + completed + ") · 메모 " + memos);
+        summary.setText("일정 " + schedules + "  ·  할 일 " + tasks + " (완료 " + completed + ")  ·  메모 " + memos);
         if (calendarView != null) calendarView.refreshEvents();
 
         String query = searchInput == null ? "" : searchInput.getText().toString().trim().toLowerCase(Locale.KOREA);
@@ -339,9 +377,10 @@ public class MainActivity extends Activity {
             listArea.addView(createCard(item), cardParams());
         }
         if (shown == 0) {
-            TextView empty = text("조건에 맞는 항목이 없습니다.", 16, Color.DKGRAY);
+            TextView empty = text("조건에 맞는 항목이 없습니다.", 16, COLOR_MUTED);
             empty.setGravity(Gravity.CENTER);
-            empty.setPadding(dp(12), dp(38), dp(12), dp(38));
+            empty.setPadding(dp(12), dp(42), dp(12), dp(42));
+            empty.setBackground(rounded(Color.WHITE, 16, Color.rgb(226, 232, 240), 1));
             listArea.addView(empty, fullWrap());
         }
     }
@@ -354,30 +393,34 @@ public class MainActivity extends Activity {
                 || item.original.toLowerCase(Locale.KOREA).contains(query);
     }
 
-    /** 달력에 표시할 일정과 미완료 할 일의 개수를 계산합니다. */
-    private int countEventsOnDate(String targetDate) {
+    /** 해당 날짜의 일정 개수와 첫 번째 항목 색상을 달력에 전달합니다. */
+    private EventCalendarView.EventMarker eventMarkerOnDate(String targetDate) {
         int count = 0;
+        int markerColor = COLOR_SCHEDULE;
+        boolean colorSet = false;
         for (Item item : items) {
             if (!("일정".equals(item.type) || "할 일".equals(item.type))) continue;
             if ("할 일".equals(item.type) && item.completed) continue;
-            if (occursOnDate(item, targetDate)) count++;
+            if (!occursOnDate(item, targetDate)) continue;
+            count++;
+            if (!colorSet) {
+                markerColor = itemColor(item);
+                colorSet = true;
+            }
         }
-        return count;
+        return new EventCalendarView.EventMarker(count, markerColor);
     }
 
-    /** 달력에서 선택한 날짜에 반복 일정이 발생하는지 판단합니다. */
     private boolean occursOnDate(Item item, String targetDate) {
         if (item.date.equals(targetDate)) return true;
         if ("NONE".equals(item.repeatType) || item.date.isEmpty() || targetDate.isEmpty()) return false;
-        long start = parseDate(item.date);
-        long target = parseDate(targetDate);
+        long start = parseDate(item.date), target = parseDate(targetDate);
         if (start < 0 || target < start) return false;
         if (!item.repeatEndDate.isEmpty()) {
             long end = parseDate(item.repeatEndDate);
             if (end >= 0 && target > end) return false;
         }
-        Calendar s = Calendar.getInstance();
-        Calendar t = Calendar.getInstance();
+        Calendar s = Calendar.getInstance(), t = Calendar.getInstance();
         s.setTimeInMillis(start);
         t.setTimeInMillis(target);
         switch (item.repeatType) {
@@ -392,43 +435,66 @@ public class MainActivity extends Activity {
     }
 
     private View createCard(Item item) {
+        int itemColor = itemColor(item);
+        LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.HORIZONTAL);
+        outer.setBackground(rounded(Color.WHITE, 16, Color.rgb(222, 228, 238), 1));
+
+        View stripe = new View(this);
+        stripe.setBackgroundColor(item.completed ? Color.LTGRAY : itemColor);
+        outer.addView(stripe, new LinearLayout.LayoutParams(dp(6), LinearLayout.LayoutParams.MATCH_PARENT));
+
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(12), dp(14), dp(12));
-        card.setBackgroundColor(Color.WHITE);
+        card.setPadding(dp(14), dp(13), dp(12), dp(11));
+
+        TextView badge = text(item.type, 12, item.completed ? Color.GRAY : itemColor);
+        badge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        card.addView(badge, fullWrap());
 
         String done = item.completed ? "✓ " : "";
-        card.addView(text(done + "[" + item.type + "] " + item.title, 17,
-                item.completed ? Color.GRAY : Color.rgb(20, 45, 80)), fullWrap());
+        TextView cardTitle = text(done + (item.title.isEmpty() ? "제목 없음" : item.title), 17,
+                item.completed ? Color.GRAY : COLOR_TEXT);
+        cardTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        cardTitle.setPadding(0, dp(3), 0, dp(4));
+        card.addView(cardTitle, fullWrap());
+
         String info = joinInfo(item.date, item.time);
-        if (!info.isEmpty()) card.addView(text(info, 14, Color.rgb(29, 99, 216)), fullWrap());
+        if (!info.isEmpty()) card.addView(text(info, 14, item.completed ? Color.GRAY : itemColor), fullWrap());
         if (!"NONE".equals(item.repeatType)) {
             String end = item.repeatEndDate.isEmpty() ? "계속" : item.repeatEndDate + "까지";
-            card.addView(text("반복: " + repeatLabel(item.repeatType) + " · " + end, 13, Color.GRAY), fullWrap());
+            card.addView(text("반복 · " + repeatLabel(item.repeatType) + " · " + end, 13, COLOR_MUTED), fullWrap());
         }
         if (("일정".equals(item.type) || "할 일".equals(item.type)) && !item.time.isEmpty()) {
-            card.addView(text("알림: " + reminderLabel(item.reminderMinutes), 13, Color.GRAY), fullWrap());
+            card.addView(text("알림 · " + reminderLabel(item.reminderMinutes), 13, COLOR_MUTED), fullWrap());
         }
-        card.addView(text(item.original, 14, Color.DKGRAY), fullWrap());
+        card.addView(text("색상 · " + colorLabel(item.colorValue), 13, COLOR_MUTED), fullWrap());
+        if (!item.original.isEmpty() && !item.original.equals(item.title)) {
+            TextView original = text(item.original, 13, COLOR_MUTED);
+            original.setPadding(0, dp(5), 0, 0);
+            card.addView(original, fullWrap());
+        }
 
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
-        Button edit = smallButton("수정");
+        buttons.setPadding(0, dp(8), 0, 0);
+        Button edit = smallButton("수정", Color.rgb(239, 244, 251), COLOR_TEXT);
         edit.setOnClickListener(v -> showItemEditor(item, item.type, item.title, item.date,
-                item.time, item.original, item.reminderMinutes, item.repeatType, item.repeatEndDate));
-        buttons.addView(edit, new LinearLayout.LayoutParams(0, dp(46), 1f));
+                item.time, item.original, item.reminderMinutes, item.repeatType,
+                item.repeatEndDate, item.colorValue));
+        buttons.addView(edit, buttonParams());
 
         if ("할 일".equals(item.type)) {
-            Button complete = smallButton(item.completed ? "완료 취소" : "완료");
+            Button complete = smallButton(item.completed ? "완료 취소" : "완료", Color.rgb(255, 245, 230), COLOR_TASK);
             complete.setOnClickListener(v -> {
                 item.completed = !item.completed;
                 saveItems();
                 refreshList();
             });
-            buttons.addView(complete, new LinearLayout.LayoutParams(0, dp(46), 1f));
+            buttons.addView(complete, buttonParams());
         }
 
-        Button delete = smallButton("삭제");
+        Button delete = smallButton("삭제", Color.rgb(255, 239, 239), Color.rgb(190, 52, 52));
         delete.setOnClickListener(v -> new AlertDialog.Builder(this)
                 .setTitle("항목 삭제")
                 .setMessage("이 항목을 삭제할까요?")
@@ -438,17 +504,65 @@ public class MainActivity extends Activity {
                     saveItems();
                     refreshList();
                 }).show());
-        buttons.addView(delete, new LinearLayout.LayoutParams(0, dp(46), 1f));
+        buttons.addView(delete, buttonParams());
         card.addView(buttons, fullWrap());
-        return card;
+        outer.addView(card, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        return outer;
     }
 
-    private Button smallButton(String label) {
+    private int itemColor(Item item) {
+        String value = normalizeColor(item.colorValue);
+        switch (value) {
+            case "BLUE": return Color.rgb(37, 99, 235);
+            case "RED": return Color.rgb(220, 60, 60);
+            case "ORANGE": return Color.rgb(234, 120, 35);
+            case "GREEN": return Color.rgb(34, 150, 90);
+            case "PURPLE": return Color.rgb(123, 86, 188);
+            case "GRAY": return Color.rgb(110, 118, 130);
+            default: return typeColor(item.type);
+        }
+    }
+
+    private int typeColor(String type) {
+        if ("일정".equals(type)) return COLOR_SCHEDULE;
+        if ("할 일".equals(type)) return COLOR_TASK;
+        return COLOR_MEMO;
+    }
+
+    private Button actionButton(String label, int background, int textColor) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextSize(15);
+        button.setTextColor(textColor);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setAllCaps(false);
+        button.setBackground(rounded(background, 14, background, 0));
+        return button;
+    }
+
+    private Button smallButton(String label, int background, int textColor) {
         Button button = new Button(this);
         button.setText(label);
         button.setTextSize(12);
+        button.setTextColor(textColor);
         button.setAllCaps(false);
+        button.setPadding(dp(4), 0, dp(4), 0);
+        button.setBackground(rounded(background, 10, background, 0));
         return button;
+    }
+
+    private LinearLayout.LayoutParams buttonParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(42), 1f);
+        params.setMargins(dp(2), 0, dp(2), 0);
+        return params;
+    }
+
+    private GradientDrawable rounded(int fillColor, int radiusDp, int strokeColor, int strokeDp) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(fillColor);
+        shape.setCornerRadius(dp(radiusDp));
+        if (strokeDp > 0) shape.setStroke(dp(strokeDp), strokeColor);
+        return shape;
     }
 
     private LinearLayout.LayoutParams cardParams() {
@@ -464,7 +578,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** 기존 저장 형식을 유지해 업데이트 설치 시 자료가 보존됩니다. */
+    /** 기존 9개 열 뒤에 색상 열만 추가해 구버전 데이터와 호환합니다. */
     private void saveItems() {
         StringBuilder output = new StringBuilder();
         for (Item item : items) {
@@ -477,7 +591,8 @@ public class MainActivity extends Activity {
                     .append(item.completed ? "1" : "0").append("\t")
                     .append(item.reminderMinutes).append("\t")
                     .append(item.repeatType).append("\t")
-                    .append(escape(item.repeatEndDate));
+                    .append(escape(item.repeatEndDate)).append("\t")
+                    .append(normalizeColor(item.colorValue));
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_ITEMS, output.toString()).apply();
     }
@@ -499,6 +614,7 @@ public class MainActivity extends Activity {
             item.reminderMinutes = parseReminderMinutes(values.length >= 7 ? values[6] : "0");
             item.repeatType = normalizeRepeat(values.length >= 8 ? values[7] : "NONE");
             item.repeatEndDate = values.length >= 9 ? unescape(values[8]) : "";
+            item.colorValue = normalizeColor(values.length >= 10 ? values[9] : "DEFAULT");
             items.add(item);
         }
     }
@@ -518,6 +634,11 @@ public class MainActivity extends Activity {
         return "NONE";
     }
 
+    private String normalizeColor(String value) {
+        for (String allowed : COLOR_VALUES) if (allowed.equals(value)) return value;
+        return "DEFAULT";
+    }
+
     private int reminderIndex(int minutes) {
         for (int i = 0; i < REMINDER_MINUTES.length; i++) if (REMINDER_MINUTES[i] == minutes) return i;
         return 1;
@@ -528,8 +649,14 @@ public class MainActivity extends Activity {
         return 0;
     }
 
+    private int colorIndex(String value) {
+        for (int i = 0; i < COLOR_VALUES.length; i++) if (COLOR_VALUES[i].equals(normalizeColor(value))) return i;
+        return 0;
+    }
+
     private String reminderLabel(int minutes) { return REMINDER_LABELS[reminderIndex(minutes)]; }
     private String repeatLabel(String value) { return REPEAT_LABELS[repeatIndex(value)]; }
+    private String colorLabel(String value) { return COLOR_LABELS[colorIndex(value)]; }
 
     private long parseDate(String value) {
         try {
@@ -608,5 +735,6 @@ public class MainActivity extends Activity {
         int reminderMinutes = 0;
         String repeatType = "NONE";
         String repeatEndDate = "";
+        String colorValue = "DEFAULT";
     }
 }
