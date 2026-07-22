@@ -16,10 +16,12 @@ public class AlarmReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         String title = intent.getStringExtra("title");
         String type = intent.getStringExtra("type");
+        int reminderMinutes = intent.getIntExtra("reminderMinutes", 0);
         int notificationId = intent.getIntExtra("notificationId", 1);
 
         NotificationManager manager =
                 (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return;
         createChannel(manager);
 
         Intent openIntent = new Intent(context, MainActivity.class);
@@ -35,13 +37,26 @@ public class AlarmReceiver extends BroadcastReceiver {
                 ? new android.app.Notification.Builder(context, CHANNEL_ID)
                 : new android.app.Notification.Builder(context);
 
+        String content = title == null || title.isEmpty() ? "확인할 항목이 있습니다." : title;
+        String timing = reminderText(reminderMinutes);
+        if (!timing.isEmpty()) content = timing + " · " + content;
+
         builder.setSmallIcon(android.R.drawable.ic_popup_reminder)
                 .setContentTitle((type == null ? "일정" : type) + " 알림")
-                .setContentText(title == null || title.isEmpty() ? "확인할 항목이 있습니다." : title)
+                .setContentText(content)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent);
 
         manager.notify(notificationId, builder.build());
+    }
+
+    /** 알림이 일정 시각보다 얼마나 먼저 울렸는지 표시합니다. */
+    private String reminderText(int minutes) {
+        if (minutes == 5) return "5분 전";
+        if (minutes == 10) return "10분 전";
+        if (minutes == 30) return "30분 전";
+        if (minutes == 60) return "1시간 전";
+        return "";
     }
 
     /** Android 8 이상에서 필요한 알림 채널을 만듭니다. */
