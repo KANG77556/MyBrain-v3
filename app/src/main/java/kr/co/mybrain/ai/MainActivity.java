@@ -10,7 +10,6 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.CalendarView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -28,8 +27,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * MyBrain AI v1.2 메인 화면입니다.
- * 일정·할 일·메모와 사전 알림, 반복 일정을 한 화면에서 관리합니다.
+ * MyBrain AI 메인 화면입니다.
+ * 일정·할 일·메모·알림·반복 일정과 날짜별 표시 달력을 관리합니다.
  */
 public class MainActivity extends Activity {
     private static final String PREFS = "mybrain_data";
@@ -51,7 +50,7 @@ public class MainActivity extends Activity {
     private LinearLayout listArea;
     private TextView summary;
     private EditText searchInput;
-    private CalendarView calendarView;
+    private EventCalendarView calendarView;
     private String selectedTab = "전체";
     private String selectedDate = "";
 
@@ -77,7 +76,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(247, 249, 252));
 
         root.addView(text("MyBrain AI", 28, Color.rgb(20, 45, 80)), fullWrap());
-        TextView version = text("v1.2.2 · 알림·반복 일정 통합 관리", 14, Color.DKGRAY);
+        TextView version = text("v1.3.2 · 일정 표시 달력·알림·위젯", 14, Color.DKGRAY);
         version.setPadding(0, dp(2), 0, dp(10));
         root.addView(version, fullWrap());
 
@@ -115,10 +114,11 @@ public class MainActivity extends Activity {
         }
         root.addView(tabs, fullWrap());
 
-        calendarView = new CalendarView(this);
+        calendarView = new EventCalendarView(this);
         calendarView.setVisibility(View.GONE);
-        calendarView.setOnDateChangeListener((view, year, month, dayOfMonth) -> {
-            selectedDate = String.format(Locale.KOREA, "%04d-%02d-%02d", year, month + 1, dayOfMonth);
+        calendarView.setEventCountProvider(this::countEventsOnDate);
+        calendarView.setOnDateSelectedListener(date -> {
+            selectedDate = date;
             refreshList();
         });
         root.addView(calendarView, fullWrap());
@@ -138,7 +138,8 @@ public class MainActivity extends Activity {
         selectedTab = tab;
         if ("달력".equals(tab)) {
             calendarView.setVisibility(View.VISIBLE);
-            selectedDate = formatDate(new Date(calendarView.getDate()));
+            if (selectedDate.isEmpty()) selectedDate = formatDate(new Date());
+            calendarView.setSelectedDate(selectedDate);
         } else {
             calendarView.setVisibility(View.GONE);
             selectedDate = "";
@@ -190,14 +191,11 @@ public class MainActivity extends Activity {
         EditText itemTitle = field("제목", titleValue);
         EditText date = field("시작 날짜: 2026-07-22", dateValue);
         EditText time = field("시간: 14:00", timeValue);
-
         TextView reminderTitle = text("알림 시간", 14, Color.DKGRAY);
         Spinner reminderSpinner = spinner(REMINDER_LABELS, reminderIndex(reminderMinutesValue));
-
         TextView repeatTitle = text("반복 설정", 14, Color.DKGRAY);
         repeatTitle.setPadding(0, dp(8), 0, 0);
         Spinner repeatSpinner = spinner(REPEAT_LABELS, repeatIndex(repeatTypeValue));
-
         EditText repeatEndDate = field("반복 종료일: 2026-12-31 (비워두면 계속)", repeatEndDateValue);
         EditText original = field("원문", originalValue);
 
@@ -331,6 +329,7 @@ public class MainActivity extends Activity {
             } else memos++;
         }
         summary.setText("일정 " + schedules + " · 할 일 " + tasks + "(완료 " + completed + ") · 메모 " + memos);
+        if (calendarView != null) calendarView.refreshEvents();
 
         String query = searchInput == null ? "" : searchInput.getText().toString().trim().toLowerCase(Locale.KOREA);
         int shown = 0;
@@ -353,6 +352,17 @@ public class MainActivity extends Activity {
         if (query.isEmpty()) return true;
         return item.title.toLowerCase(Locale.KOREA).contains(query)
                 || item.original.toLowerCase(Locale.KOREA).contains(query);
+    }
+
+    /** 달력에 표시할 일정과 미완료 할 일의 개수를 계산합니다. */
+    private int countEventsOnDate(String targetDate) {
+        int count = 0;
+        for (Item item : items) {
+            if (!("일정".equals(item.type) || "할 일".equals(item.type))) continue;
+            if ("할 일".equals(item.type) && item.completed) continue;
+            if (occursOnDate(item, targetDate)) count++;
+        }
+        return count;
     }
 
     /** 달력에서 선택한 날짜에 반복 일정이 발생하는지 판단합니다. */
@@ -390,7 +400,6 @@ public class MainActivity extends Activity {
         String done = item.completed ? "✓ " : "";
         card.addView(text(done + "[" + item.type + "] " + item.title, 17,
                 item.completed ? Color.GRAY : Color.rgb(20, 45, 80)), fullWrap());
-
         String info = joinInfo(item.date, item.time);
         if (!info.isEmpty()) card.addView(text(info, 14, Color.rgb(29, 99, 216)), fullWrap());
         if (!"NONE".equals(item.repeatType)) {
@@ -455,10 +464,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    /**
-     * 기존 저장 형식 뒤에 반복 유형과 종료일을 추가합니다.
-     * 기존 데이터는 반복 없음으로 자동 복구됩니다.
-     */
+    /** 기존 저장 형식을 유지해 업데이트 설치 시 자료가 보존됩니다. */
     private void saveItems() {
         StringBuilder output = new StringBuilder();
         for (Item item : items) {
