@@ -8,11 +8,13 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CalendarView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -26,12 +28,20 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * MyBrain AI v1.1 메인 화면입니다.
- * 메시지를 일정·할 일·메모로 분류하고 탭, 검색, 월간 달력으로 관리합니다.
+ * MyBrain AI v1.2 메인 화면입니다.
+ * 메시지를 일정·할 일·메모로 분류하고 항목별 알림 시간을 관리합니다.
  */
 public class MainActivity extends Activity {
     private static final String PREFS = "mybrain_data";
     private static final String KEY_ITEMS = "items";
+
+    /** 화면에 표시할 알림 선택 문구입니다. */
+    private static final String[] REMINDER_LABELS = {
+            "알림 없음", "정각", "5분 전", "10분 전", "30분 전", "1시간 전"
+    };
+
+    /** 문구와 같은 순서로 저장되는 실제 사전 알림 시간(분)입니다. */
+    private static final int[] REMINDER_MINUTES = {-1, 0, 5, 10, 30, 60};
 
     private final List<Item> items = new ArrayList<>();
     private LinearLayout listArea;
@@ -65,7 +75,7 @@ public class MainActivity extends Activity {
         TextView title = text("MyBrain AI", 28, Color.rgb(20, 45, 80));
         root.addView(title, fullWrap());
 
-        TextView version = text("v1.1 · 일정·할 일·메모 통합 관리", 14, Color.DKGRAY);
+        TextView version = text("v1.2 · 일정·할 일·메모·알림 통합 관리", 14, Color.DKGRAY);
         version.setPadding(0, dp(2), 0, dp(10));
         root.addView(version, fullWrap());
 
@@ -169,12 +179,13 @@ public class MainActivity extends Activity {
             return;
         }
         Analysis result = analyze(value);
-        showItemEditor(null, result.type, result.title, result.date, result.time, value);
+        showItemEditor(null, result.type, result.title, result.date, result.time, value, 0);
     }
 
     /** 새 항목과 기존 항목을 같은 화면에서 저장·수정합니다. */
     private void showItemEditor(Item target, String typeValue, String titleValue,
-                                String dateValue, String timeValue, String originalValue) {
+                                String dateValue, String timeValue, String originalValue,
+                                int reminderMinutesValue) {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(18), 0, dp(18), 0);
@@ -184,10 +195,25 @@ public class MainActivity extends Activity {
         EditText date = field("날짜: 2026-07-22", dateValue);
         EditText time = field("시간: 14:00", timeValue);
         EditText original = field("원문", originalValue);
+
+        TextView reminderTitle = text("알림 시간", 14, Color.DKGRAY);
+        reminderTitle.setPadding(0, dp(8), 0, 0);
+        Spinner reminderSpinner = new Spinner(this);
+        ArrayAdapter<String> reminderAdapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_item,
+                REMINDER_LABELS
+        );
+        reminderAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        reminderSpinner.setAdapter(reminderAdapter);
+        reminderSpinner.setSelection(reminderIndex(reminderMinutesValue));
+
         form.addView(type);
         form.addView(itemTitle);
         form.addView(date);
         form.addView(time);
+        form.addView(reminderTitle);
+        form.addView(reminderSpinner, fullWrap());
         form.addView(original);
 
         new AlertDialog.Builder(this)
@@ -201,6 +227,7 @@ public class MainActivity extends Activity {
                     item.date = date.getText().toString().trim();
                     item.time = time.getText().toString().trim();
                     item.original = original.getText().toString().trim();
+                    item.reminderMinutes = REMINDER_MINUTES[reminderSpinner.getSelectedItemPosition()];
                     if (target == null) items.add(0, item);
                     saveItems();
                     refreshList();
@@ -272,8 +299,7 @@ public class MainActivity extends Activity {
 
         String query = searchInput == null ? "" : searchInput.getText().toString().trim().toLowerCase(Locale.KOREA);
         int shown = 0;
-        for (int i = 0; i < items.size(); i++) {
-            Item item = items.get(i);
+        for (Item item : items) {
             if (!matches(item, query)) continue;
             shown++;
             listArea.addView(createCard(item), cardParams());
@@ -309,16 +335,31 @@ public class MainActivity extends Activity {
         String info = joinInfo(item.date, item.time);
         if (!info.isEmpty()) {
             TextView meta = text(info, 14, Color.rgb(29, 99, 216));
-            meta.setPadding(0, dp(5), 0, dp(5));
+            meta.setPadding(0, dp(5), 0, dp(2));
             card.addView(meta, fullWrap());
         }
+
+        if (("일정".equals(item.type) || "할 일".equals(item.type)) && !item.time.isEmpty()) {
+            TextView reminder = text("알림: " + reminderLabel(item.reminderMinutes), 13, Color.GRAY);
+            reminder.setPadding(0, 0, 0, dp(5));
+            card.addView(reminder, fullWrap());
+        }
+
         TextView original = text(item.original, 14, Color.DKGRAY);
         card.addView(original, fullWrap());
 
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         Button edit = smallButton("수정");
-        edit.setOnClickListener(v -> showItemEditor(item, item.type, item.title, item.date, item.time, item.original));
+        edit.setOnClickListener(v -> showItemEditor(
+                item,
+                item.type,
+                item.title,
+                item.date,
+                item.time,
+                item.original,
+                item.reminderMinutes
+        ));
         buttons.addView(edit, new LinearLayout.LayoutParams(0, dp(46), 1f));
 
         if ("할 일".equals(item.type)) {
@@ -367,7 +408,10 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** 기존 v1.0 데이터와 호환되는 탭 구분 저장 형식입니다. */
+    /**
+     * 기존 데이터와 호환되는 탭 구분 저장 형식입니다.
+     * 일곱 번째 값에 사전 알림 시간(분)을 저장합니다.
+     */
     private void saveItems() {
         StringBuilder output = new StringBuilder();
         for (Item item : items) {
@@ -377,7 +421,8 @@ public class MainActivity extends Activity {
                     .append(escape(item.date)).append("\t")
                     .append(escape(item.time)).append("\t")
                     .append(escape(item.original)).append("\t")
-                    .append(item.completed ? "1" : "0");
+                    .append(item.completed ? "1" : "0").append("\t")
+                    .append(item.reminderMinutes);
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_ITEMS, output.toString()).apply();
     }
@@ -396,8 +441,32 @@ public class MainActivity extends Activity {
             item.time = unescape(values[3]);
             item.original = unescape(values[4]);
             item.completed = values.length >= 6 && "1".equals(values[5]);
+            item.reminderMinutes = parseReminderMinutes(values.length >= 7 ? values[6] : "0");
             items.add(item);
         }
+    }
+
+    private int parseReminderMinutes(String value) {
+        try {
+            int minutes = Integer.parseInt(value);
+            for (int allowed : REMINDER_MINUTES) {
+                if (allowed == minutes) return minutes;
+            }
+        } catch (NumberFormatException ignored) {
+            // 손상된 값은 기존 버전과 같은 정각 알림으로 복구합니다.
+        }
+        return 0;
+    }
+
+    private int reminderIndex(int minutes) {
+        for (int i = 0; i < REMINDER_MINUTES.length; i++) {
+            if (REMINDER_MINUTES[i] == minutes) return i;
+        }
+        return 1;
+    }
+
+    private String reminderLabel(int minutes) {
+        return REMINDER_LABELS[reminderIndex(minutes)];
     }
 
     private String escape(String value) {
@@ -462,5 +531,6 @@ public class MainActivity extends Activity {
         String time = "";
         String original = "";
         boolean completed = false;
+        int reminderMinutes = 0;
     }
 }
