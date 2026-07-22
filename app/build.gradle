@@ -2,6 +2,14 @@ plugins {
     id 'com.android.application'
 }
 
+// GitHub Actions 또는 로컬 환경변수에서만 서명 정보를 읽습니다.
+// 서명키와 비밀번호는 소스 저장소에 기록하지 않습니다.
+def releaseStoreFile = System.getenv('MYBRAIN_KEYSTORE_FILE')
+def releaseStorePassword = System.getenv('MYBRAIN_KEYSTORE_PASSWORD')
+def releaseKeyAlias = System.getenv('MYBRAIN_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('MYBRAIN_KEY_PASSWORD')
+def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 android {
     namespace 'kr.co.mybrain.ai'
     compileSdk 35
@@ -10,7 +18,40 @@ android {
         applicationId 'kr.co.mybrain.ai'
         minSdk 26
         targetSdk 35
-        versionCode 12
-        versionName '1.5.0'
+        versionCode 13
+        versionName '1.5.1'
+    }
+
+    // 고정 서명 정보가 준비된 경우에만 릴리스 서명 설정을 활성화합니다.
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+                enableV4Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            // 기존 개발·검증용 APK입니다.
+            debuggable true
+        }
+
+        release {
+            // 현재 프로젝트에는 난독화 규칙이 없으므로 기능 안정성을 우선합니다.
+            minifyEnabled false
+            shrinkResources false
+
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
     }
 }
