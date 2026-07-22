@@ -7,6 +7,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.view.View;
 import android.widget.RemoteViews;
 
 import java.text.ParseException;
@@ -19,16 +20,38 @@ import java.util.Locale;
 
 /**
  * 홈 화면에 오늘의 일정과 미완료 할 일을 표시하는 위젯입니다.
+ * 할 일 줄을 누르면 앱을 열지 않고 바로 완료 처리합니다.
  */
 public class TodayWidgetProvider extends AppWidgetProvider {
     private static final String PREFS = "mybrain_data";
     private static final String KEY_ITEMS = "items";
     private static final int MAX_ITEMS = 5;
 
+    private static final String ACTION_COMPLETE_TASK =
+            "kr.co.mybrain.ai.action.COMPLETE_WIDGET_TASK";
+    private static final String EXTRA_SOURCE_INDEX = "sourceIndex";
+
+    private static final int[] ITEM_VIEW_IDS = {
+            R.id.widget_item_1,
+            R.id.widget_item_2,
+            R.id.widget_item_3,
+            R.id.widget_item_4,
+            R.id.widget_item_5
+    };
+
     @Override
     public void onUpdate(Context context, AppWidgetManager manager, int[] appWidgetIds) {
         for (int appWidgetId : appWidgetIds) {
             updateWidget(context, manager, appWidgetId);
+        }
+    }
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        super.onReceive(context, intent);
+        if (intent != null && ACTION_COMPLETE_TASK.equals(intent.getAction())) {
+            int sourceIndex = intent.getIntExtra(EXTRA_SOURCE_INDEX, -1);
+            completeTask(context, sourceIndex);
         }
     }
 
@@ -50,18 +73,107 @@ public class TodayWidgetProvider extends AppWidgetProvider {
         String today = new SimpleDateFormat("M월 d일 E요일", Locale.KOREA).format(new Date());
         views.setTextViewText(R.id.widget_date, today);
         views.setTextViewText(R.id.widget_count, "오늘 " + items.size() + "건");
-        views.setTextViewText(R.id.widget_items, makeItemText(items));
 
+        PendingIntent openPendingIntent = createOpenPendingIntent(context);
+        views.setOnClickPendingIntent(R.id.widget_date, openPendingIntent);
+        views.setOnClickPendingIntent(R.id.widget_count, openPendingIntent);
+        views.setOnClickPendingIntent(R.id.widget_open, openPendingIntent);
+        views.setOnClickPendingIntent(R.id.widget_empty, openPendingIntent);
+
+        views.setViewVisibility(R.id.widget_empty, items.isEmpty() ? View.VISIBLE : View.GONE);
+
+        for (int i = 0; i < ITEM_VIEW_IDS.length; i++) {
+            int viewId = ITEM_VIEW_IDS[i];
+            if (i >= items.size()) {
+                views.setViewVisibility(viewId, View.GONE);
+                views.setOnClickPendingIntent(viewId, null);
+                continue;
+            }
+
+            WidgetItem item = items.get(i);
+            views.setViewVisibility(viewId, View.VISIBLE);
+            views.setTextViewText(viewId, makeItemText(item));
+
+            if ("할 일".equals(item.type)) {
+                views.setOnClickPendingIntent(
+                        viewId,
+                        createCompletePendingIntent(context, item.sourceIndex)
+                );
+            } else {
+                views.setOnClickPendingIntent(viewId, openPendingIntent);
+            }
+        }
+
+        manager.updateAppWidget(appWidgetId, views);
+    }
+
+    /** 위젯에서 앱을 여는 동작을 만듭니다. */
+    private static PendingIntent createOpenPendingIntent(Context context) {
         Intent openIntent = new Intent(context, NotificationPermissionActivity.class);
-        PendingIntent openPendingIntent = PendingIntent.getActivity(
+        return PendingIntent.getActivity(
                 context,
                 31001,
                 openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
-        views.setOnClickPendingIntent(R.id.widget_root, openPendingIntent);
+    }
 
-        manager.updateAppWidget(appWidgetId, views);
+    /** 특정 할 일을 완료 처리하는 방송 동작을 만듭니다. */
+    private static PendingIntent createCompletePendingIntent(Context context, int sourceIndex) {
+        Intent completeIntent = new Intent(context, TodayWidgetProvider.class);
+        completeIntent.setAction(ACTION_COMPLETE_TASK);
+        completeIntent.putExtra(EXTRA_SOURCE_INDEX, sourceIndex);
+
+        return PendingIntent.getBroadcast(
+                context,
+                32000 + sourceIndex,
+                completeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+    }
+
+    /** 저장된 원본 줄 번호를 기준으로 해당 할 일을 완료 상태로 바꿉니다. */
+    private static void completeTask(Context context, int sourceIndex) {
+        if (sourceIndex < 0) return;
+
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String stored = prefs.getString(KEY_ITEMS, "");
+        if (stored == null || stored.trim().isEmpty()) return;
+
+        String[] lines = stored.split("\n", -1);
+        if (sourceIndex >= lines.length) return;
+
+        String[] values = lines[sourceIndex].split("\t", -1);
+        if (values.length < 5 || !"할 일".equals(unescape(values[0]))) return;
+
+        // 구버전 데이터에도 완료 필드를 안전하게 추가합니다.
+        List<String> fields = new ArrayList<>();
+        for (String value : values) fields.add(value);
+        while (fields.size() < 6) fields.add("");
+        if ("1".equals(fields.get(5))) return;
+        fields.set(5, "1");
+        lines[sourceIndex] = joinFields(fields);
+
+        StringBuilder output = new StringBuilder();
+        for (String line : lines) {
+            if (output.length() > 0) output.append("\n");
+            output.append(line);
+        }
+
+        prefs.edit().putString(KEY_ITEMS, output.toString()).apply();
+
+        // 저장 감지기와 별개로 즉시 화면과 알림을 갱신합니다.
+        AlarmScheduler.rescheduleAll(context.getApplicationContext());
+        updateAll(context.getApplicationContext());
+    }
+
+    private static String joinFields(List<String> fields) {
+        StringBuilder output = new StringBuilder();
+        for (String field : fields) {
+            if (output.length() > 0) output.append("\t");
+            output.append(field);
+        }
+        return output.toString();
     }
 
     /** 저장된 자료 중 오늘 발생하는 일정과 미완료 할 일을 읽습니다. */
@@ -72,8 +184,9 @@ public class TodayWidgetProvider extends AppWidgetProvider {
         if (stored == null || stored.trim().isEmpty()) return result;
 
         String today = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        for (String line : stored.split("\n")) {
-            String[] values = line.split("\t", -1);
+        String[] lines = stored.split("\n");
+        for (int sourceIndex = 0; sourceIndex < lines.length; sourceIndex++) {
+            String[] values = lines[sourceIndex].split("\t", -1);
             if (values.length < 5) continue;
 
             String type = unescape(values[0]);
@@ -88,7 +201,7 @@ public class TodayWidgetProvider extends AppWidgetProvider {
             if ("할 일".equals(type) && completed) continue;
             if (!occursOn(date, repeatType, repeatEnd, today)) continue;
 
-            result.add(new WidgetItem(type, title, time));
+            result.add(new WidgetItem(type, title, time, sourceIndex));
             if (result.size() >= MAX_ITEMS) break;
         }
         return result;
@@ -123,17 +236,12 @@ public class TodayWidgetProvider extends AppWidgetProvider {
         return false;
     }
 
-    private static String makeItemText(List<WidgetItem> items) {
-        if (items.isEmpty()) return "오늘 예정된 일정이나 할 일이 없습니다.";
-
+    private static String makeItemText(WidgetItem item) {
         StringBuilder text = new StringBuilder();
-        for (WidgetItem item : items) {
-            if (text.length() > 0) text.append("\n");
-            String mark = "할 일".equals(item.type) ? "□" : "●";
-            text.append(mark).append(" ");
-            if (!item.time.isEmpty()) text.append(item.time).append("  ");
-            text.append(item.title.isEmpty() ? "제목 없음" : item.title);
-        }
+        text.append("할 일".equals(item.type) ? "□ " : "● ");
+        if (!item.time.isEmpty()) text.append(item.time).append("  ");
+        text.append(item.title.isEmpty() ? "제목 없음" : item.title);
+        if ("할 일".equals(item.type)) text.append("  (완료)");
         return text.toString();
     }
 
@@ -159,11 +267,13 @@ public class TodayWidgetProvider extends AppWidgetProvider {
         final String type;
         final String title;
         final String time;
+        final int sourceIndex;
 
-        WidgetItem(String type, String title, String time) {
+        WidgetItem(String type, String title, String time, int sourceIndex) {
             this.type = type;
             this.title = title;
             this.time = time;
+            this.sourceIndex = sourceIndex;
         }
     }
 }
