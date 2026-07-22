@@ -15,7 +15,7 @@ import java.util.Set;
 
 /**
  * SharedPreferences에 저장된 일정과 할 일을 읽어 알림을 예약합니다.
- * 기존 예약을 정리한 뒤 현재 데이터 기준으로 다시 예약합니다.
+ * 항목별 사전 알림 시간까지 반영해 현재 데이터 기준으로 다시 예약합니다.
  */
 public final class AlarmScheduler {
     private static final String PREFS = "mybrain_data";
@@ -43,15 +43,19 @@ public final class AlarmScheduler {
             String date = unescape(values[2]);
             String time = unescape(values[3]);
             boolean completed = values.length >= 6 && "1".equals(values[5]);
+            int reminderMinutes = parseReminderMinutes(values.length >= 7 ? values[6] : "0");
 
-            if (completed || date.isEmpty() || time.isEmpty()) continue;
+            if (completed || reminderMinutes < 0 || date.isEmpty() || time.isEmpty()) continue;
             if (!("일정".equals(type) || "할 일".equals(type))) continue;
 
-            long triggerAt = parseDateTime(date, time);
+            long itemTime = parseDateTime(date, time);
+            if (itemTime <= 0L) continue;
+
+            long triggerAt = itemTime - (reminderMinutes * 60_000L);
             if (triggerAt <= System.currentTimeMillis()) continue;
 
-            int requestCode = (type + "|" + title + "|" + date + "|" + time).hashCode();
-            schedule(context, requestCode, triggerAt, type, title);
+            int requestCode = (type + "|" + title + "|" + date + "|" + time + "|" + reminderMinutes).hashCode();
+            schedule(context, requestCode, triggerAt, type, title, reminderMinutes);
             newCodes.add(String.valueOf(requestCode));
         }
 
@@ -60,11 +64,14 @@ public final class AlarmScheduler {
 
     /** 한 개 알림을 절전 상태에서도 가능한 범위에서 예약합니다. */
     private static void schedule(Context context, int requestCode, long triggerAt,
-                                 String type, String title) {
+                                 String type, String title, int reminderMinutes) {
         AlarmManager manager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (manager == null) return;
+
         Intent intent = new Intent(context, AlarmReceiver.class);
         intent.putExtra("type", type);
         intent.putExtra("title", title);
+        intent.putExtra("reminderMinutes", reminderMinutes);
         intent.putExtra("notificationId", requestCode);
 
         PendingIntent pendingIntent = PendingIntent.getBroadcast(
@@ -80,6 +87,7 @@ public final class AlarmScheduler {
     private static void cancelPrevious(Context context, SharedPreferences prefs) {
         Set<String> codes = prefs.getStringSet(KEY_ALARM_CODES, new HashSet<>());
         AlarmManager manager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (manager == null) return;
 
         for (String value : codes) {
             try {
@@ -99,6 +107,20 @@ public final class AlarmScheduler {
                 // 손상된 예약 번호는 건너뜁니다.
             }
         }
+        prefs.edit().remove(KEY_ALARM_CODES).apply();
+    }
+
+    private static int parseReminderMinutes(String value) {
+        try {
+            int minutes = Integer.parseInt(value);
+            if (minutes == -1 || minutes == 0 || minutes == 5 || minutes == 10
+                    || minutes == 30 || minutes == 60) {
+                return minutes;
+            }
+        } catch (NumberFormatException ignored) {
+            // 기존 데이터나 손상된 값은 정각 알림으로 복구합니다.
+        }
+        return 0;
     }
 
     private static long parseDateTime(String date, String time) {
