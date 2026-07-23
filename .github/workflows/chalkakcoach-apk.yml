@@ -62,10 +62,27 @@ jobs:
           gradle-version: "8.13"
 
       - name: Build and test debug APK
+        id: gradle_build
+        shell: bash
         working-directory: ChalkakCoach
-        run: gradle --no-daemon clean testDebugUnitTest assembleDebug
+        run: |
+          set +e
+          gradle --no-daemon clean testDebugUnitTest assembleDebug 2>&1 | tee ../chalkakcoach-build.log
+          result=${PIPESTATUS[0]}
+          echo "exit_code=${result}" >> "$GITHUB_OUTPUT"
+          exit "$result"
+
+      - name: Upload Gradle build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Gradle-build-log
+          path: chalkakcoach-build.log
+          if-no-files-found: error
+          retention-days: 2
 
       - name: Prepare APK artifact
+        if: steps.gradle_build.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -73,6 +90,7 @@ jobs:
           sha256sum ChalkakCoach-Stage2-debug.apk > ChalkakCoach-Stage2-debug.apk.sha256
 
       - name: Upload installable APK
+        if: steps.gradle_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: ChalkakCoach-Stage2-debug-apk
