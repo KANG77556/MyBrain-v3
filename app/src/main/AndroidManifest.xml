@@ -34,6 +34,17 @@
             </intent-filter>
         </activity>
 
+        <!-- 앱 삭제 전 자료를 파일로 보관하고 다시 복원하는 전용 화면입니다. -->
+        <activity
+            android:name=".BackupActivity"
+            android:exported="true"
+            android:label="MyBrain 백업">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <!-- 예약된 시각에 실제 알림을 표시합니다. -->
         <receiver
             android:name=".AlarmReceiver"

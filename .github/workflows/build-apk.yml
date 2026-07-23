@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_RELEASE_KEY: ${{ secrets.MYBRAIN_KEYSTORE_BASE64 != '' }}
 
     steps:
       - name: 소스 내려받기
@@ -35,9 +37,39 @@ jobs:
       - name: 디버그 APK 빌드
         run: gradle --stacktrace assembleDebug
 
-      - name: APK 업로드
+      - name: 디버그 APK 업로드
         uses: actions/upload-artifact@v4
         with:
           name: MyBrainAI-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      # 아래 단계는 GitHub Actions Secrets에 고정 서명 정보가 등록된 경우에만 실행됩니다.
+      - name: 고정 서명키 복원
+        if: env.HAS_RELEASE_KEY == 'true'
+        shell: bash
+        run: |
+          echo "${{ secrets.MYBRAIN_KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/mybrain-release.jks"
+
+      - name: 고정 서명 릴리스 APK 빌드
+        if: env.HAS_RELEASE_KEY == 'true'
+        env:
+          MYBRAIN_KEYSTORE_FILE: ${{ runner.temp }}/mybrain-release.jks
+          MYBRAIN_KEYSTORE_PASSWORD: ${{ secrets.MYBRAIN_KEYSTORE_PASSWORD }}
+          MYBRAIN_KEY_ALIAS: ${{ secrets.MYBRAIN_KEY_ALIAS }}
+          MYBRAIN_KEY_PASSWORD: ${{ secrets.MYBRAIN_KEY_PASSWORD }}
+        run: gradle --stacktrace assembleRelease
+
+      - name: 릴리스 APK 이름 정리
+        if: env.HAS_RELEASE_KEY == 'true'
+        shell: bash
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk MyBrainAI-v1.5.2-release.apk
+
+      - name: 고정 서명 릴리스 APK 업로드
+        if: env.HAS_RELEASE_KEY == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrainAI-release-apk
+          path: MyBrainAI-v1.5.2-release.apk
           if-no-files-found: error
