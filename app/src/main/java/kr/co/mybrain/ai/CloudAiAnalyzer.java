@@ -8,6 +8,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -19,34 +20,82 @@ import java.util.TimeZone;
 import java.util.regex.Pattern;
 
 /**
- * GPT(OpenAI Responses API)와 Gemini(generateContent REST API)를 공통 형식으로 호출합니다.
+ * 휴대전화 Ollama, GPT(OpenAI Responses API), Gemini(generateContent REST API)를 공통 형식으로 호출합니다.
  * API 키는 호출할 때만 메모리에서 사용하며 로그나 오류 문구에 포함하지 않습니다.
  */
 public final class CloudAiAnalyzer {
     private static final int CONNECT_TIMEOUT_MS = 20_000;
-    private static final int READ_TIMEOUT_MS = 60_000;
+    private static final int READ_TIMEOUT_MS = 90_000;
     private static final Pattern MODEL_PATTERN = Pattern.compile("[A-Za-z0-9._:-]{2,100}");
 
     private CloudAiAnalyzer() {
     }
 
-    /** 선택된 공급자로 문장을 분석하고 앱 공통 결과로 변환합니다. */
+    /** 선택된 실제 AI 공급자로 문장을 분석하고 앱 공통 결과로 변환합니다. */
     public static AiAnalysisResult analyze(AiSettings settings, String apiKey, String userText) throws Exception {
-        if (settings == null || !settings.isCloudProvider()) {
-            throw new IllegalArgumentException("클라우드 AI 공급자가 선택되지 않았습니다.");
+        if (settings == null || !settings.isModelProvider()) {
+            throw new IllegalArgumentException("사용할 AI 모델이 선택되지 않았습니다.");
         }
+
         String key = apiKey == null ? "" : apiKey.trim();
         String input = userText == null ? "" : userText.trim();
-        if (key.isEmpty()) throw new IllegalArgumentException("API 키가 등록되지 않았습니다.");
         if (input.isEmpty()) throw new IllegalArgumentException("분석할 내용이 없습니다.");
+        if (settings.isCloudProvider() && key.isEmpty()) {
+            throw new IllegalArgumentException("API 키가 등록되지 않았습니다.");
+        }
 
         String output;
-        if (AiSettings.PROVIDER_OPENAI.equals(settings.provider)) {
+        if (AiSettings.PROVIDER_OLLAMA.equals(settings.provider)) {
+            output = requestOllama(settings.ollamaBaseUrl, settings.ollamaModel, input);
+        } else if (AiSettings.PROVIDER_OPENAI.equals(settings.provider)) {
             output = requestOpenAi(settings.openAiModel, key, input);
         } else {
             output = requestGemini(settings.geminiModel, key, input);
         }
         return parseAnalysis(output, input);
+    }
+
+    /** 같은 휴대전화에서 실행 중인 Ollama의 구조화 JSON 출력을 사용합니다. */
+    private static String requestOllama(String baseUrl, String model, String input) throws Exception {
+        validateModel(model);
+        if (!AiSettings.isAllowedOllamaBaseUrl(baseUrl)) {
+            throw new IllegalArgumentException("Ollama 주소는 같은 휴대전화의 localhost만 사용할 수 있습니다.");
+        }
+
+        JSONObject systemMessage = new JSONObject()
+                .put("role", "system")
+                .put("content", systemInstruction());
+        JSONObject userMessage = new JSONObject()
+                .put("role", "user")
+                .put("content", input);
+        JSONObject options = new JSONObject()
+                .put("temperature", 0)
+                .put("num_ctx", 4096);
+        JSONObject body = new JSONObject()
+                .put("model", model)
+                .put("messages", new JSONArray().put(systemMessage).put(userMessage))
+                .put("stream", false)
+                .put("format", "json")
+                .put("options", options)
+                .put("keep_alive", "2m");
+
+        String endpoint = AiSettings.normalizeOllamaBaseUrl(baseUrl) + "/api/chat";
+        try {
+            String response = postJson(openConnection(endpoint), body.toString(), "Ollama");
+            JSONObject root = new JSONObject(response);
+            JSONObject message = root.optJSONObject("message");
+            String content = message == null ? "" : message.optString("content", "").trim();
+            if (content.isEmpty()) {
+                throw new AiServiceException("Ollama 응답에서 분석 결과를 찾지 못했습니다.");
+            }
+            return content;
+        } catch (ConnectException e) {
+            throw new AiServiceException(
+                    "Ollama Server가 실행되지 않았습니다. Ollama Server 앱에서 서비스를 먼저 시작하세요.");
+        } catch (java.net.SocketTimeoutException e) {
+            throw new AiServiceException(
+                    "Ollama 분석 시간이 초과됐습니다. 더 작은 모델을 사용하거나 실행 중인 앱을 정리하세요.");
+        }
     }
 
     private static String requestOpenAi(String model, String apiKey, String input) throws Exception {
@@ -59,7 +108,7 @@ public final class CloudAiAnalyzer {
 
         HttpURLConnection connection = openConnection("https://api.openai.com/v1/responses");
         connection.setRequestProperty("Authorization", "Bearer " + apiKey);
-        String response = postJson(connection, body.toString());
+        String response = postJson(connection, body.toString(), "GPT");
         JSONObject root = new JSONObject(response);
 
         String direct = root.optString("output_text", "").trim();
@@ -101,7 +150,6 @@ public final class CloudAiAnalyzer {
                 .put("role", "user")
                 .put("parts", new JSONArray().put(userPart));
 
-        // 최신 Gemini 모델에서도 유지되는 JSON 응답 형식만 지정합니다.
         JSONObject generationConfig = new JSONObject()
                 .put("responseMimeType", "application/json");
         JSONObject body = new JSONObject()
@@ -111,7 +159,7 @@ public final class CloudAiAnalyzer {
 
         HttpURLConnection connection = openConnection(endpoint);
         connection.setRequestProperty("x-goog-api-key", apiKey);
-        String response = postJson(connection, body.toString());
+        String response = postJson(connection, body.toString(), "Gemini");
         JSONObject root = new JSONObject(response);
         JSONArray candidates = root.optJSONArray("candidates");
         if (candidates == null || candidates.length() == 0) {
@@ -145,7 +193,8 @@ public final class CloudAiAnalyzer {
         return connection;
     }
 
-    private static String postJson(HttpURLConnection connection, String json) throws Exception {
+    private static String postJson(HttpURLConnection connection, String json,
+                                   String providerLabel) throws Exception {
         try {
             try (OutputStream output = connection.getOutputStream()) {
                 output.write(json.getBytes(StandardCharsets.UTF_8));
@@ -157,7 +206,7 @@ public final class CloudAiAnalyzer {
                     ? connection.getInputStream() : connection.getErrorStream();
             String response = readAll(stream);
             if (status < 200 || status >= 300) {
-                throw new AiServiceException(buildHttpError(status, response));
+                throw new AiServiceException(buildHttpError(providerLabel, status, response));
             }
             return response;
         } finally {
@@ -176,12 +225,17 @@ public final class CloudAiAnalyzer {
         return result.toString();
     }
 
-    private static String buildHttpError(int status, String response) {
-        String message = "클라우드 AI 요청 실패 (HTTP " + status + ")";
+    private static String buildHttpError(String providerLabel, int status, String response) {
+        String message = providerLabel + " AI 요청 실패 (HTTP " + status + ")";
         try {
             JSONObject root = new JSONObject(response == null ? "" : response);
-            JSONObject error = root.optJSONObject("error");
-            String detail = error == null ? "" : error.optString("message", "").trim();
+            Object error = root.opt("error");
+            String detail = "";
+            if (error instanceof JSONObject) {
+                detail = ((JSONObject) error).optString("message", "").trim();
+            } else if (error instanceof String) {
+                detail = ((String) error).trim();
+            }
             if (!detail.isEmpty()) message += "\n" + limit(detail, 240);
         } catch (JSONException ignored) {
             // 공급자가 JSON이 아닌 오류 페이지를 반환하면 상태 코드만 안내합니다.
