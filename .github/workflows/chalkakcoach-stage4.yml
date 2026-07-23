@@ -1,0 +1,75 @@
+name: ChalkakCoach Stage4 Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chalkakcoach-stage4-build
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-chalkakcoach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 17 준비
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 4단계 프로젝트 복원 및 무결성 검사
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p chalkakcoach-stage4/build
+          cat chalkakcoach-stage4/parts/part_*.b64 | base64 --decode > /tmp/ChalkakCoach_Stage4_Project.tar.xz
+          echo "ffcf337ef9d949406d882ac22df7dbbcf2684623d7511b28d19648c651691c0e  /tmp/ChalkakCoach_Stage4_Project.tar.xz" | sha256sum --check
+          tar -xJf /tmp/ChalkakCoach_Stage4_Project.tar.xz -C chalkakcoach-stage4/build
+          chmod +x chalkakcoach-stage4/build/ChalkakCoach/gradlew
+          chmod +x chalkakcoach-stage4/build/ChalkakCoach/setup-wrapper.sh
+
+      - name: Gradle Wrapper 준비
+        working-directory: chalkakcoach-stage4/build/ChalkakCoach
+        run: ./setup-wrapper.sh
+
+      - name: 단위 테스트 및 디버그 APK 빌드
+        working-directory: chalkakcoach-stage4/build/ChalkakCoach
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+
+      - name: 결과 파일 정리
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p chalkakcoach-stage4/output
+          if [ -f chalkakcoach-stage4/build/ChalkakCoach/app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp chalkakcoach-stage4/build/ChalkakCoach/app/build/outputs/apk/debug/app-debug.apk chalkakcoach-stage4/output/ChalkakCoach-Stage4-debug.apk
+            sha256sum chalkakcoach-stage4/output/ChalkakCoach-Stage4-debug.apk > chalkakcoach-stage4/output/ChalkakCoach-Stage4-debug.apk.sha256
+          fi
+          find chalkakcoach-stage4/build/ChalkakCoach/app/build/reports -type f -maxdepth 5 -print 2>/dev/null || true
+
+      - name: APK 업로드
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage4-debug-apk
+          path: chalkakcoach-stage4/output/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 테스트 보고서 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage4-test-reports
+          path: |
+            chalkakcoach-stage4/build/ChalkakCoach/app/build/reports
+            chalkakcoach-stage4/build/ChalkakCoach/app/build/test-results
+          if-no-files-found: ignore
+          retention-days: 7
