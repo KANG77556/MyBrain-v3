@@ -1,0 +1,4 @@
+# 이 폴더에 넣은 모든 개인 서명 파일은 Git에서 제외합니다.
+*
+!.gitignore
+!README.md
