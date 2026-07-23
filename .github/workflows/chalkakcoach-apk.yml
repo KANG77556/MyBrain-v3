@@ -31,18 +31,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          {
-            cat build-input/chalkakcoach.part00
-            cat build-input/chalkakcoach.part01
-            cat build-input/chalkakcoach.part02
-            cat build-input/chalkakcoach.part03
-            cat build-input/chalkakcoach.part04
-            cat build-input/chalkakcoach.part05
-            head -c -2 build-input/chalkakcoach.part06
-            cat build-input/chalkakcoach.part07a
-            cat build-input/chalkakcoach.part07b
-            cat build-input/chalkakcoach.part08
-          } > ChalkakCoach.zip.b64
+          : > ChalkakCoach.zip.b64
+          for part in 00 01 02 03 04 05; do
+            tr -d '\r\n' < "build-input/chalkakcoach.part${part}" >> ChalkakCoach.zip.b64
+          done
+          tr -d '\r\n' < build-input/chalkakcoach.part06 | sed 's/==$//' >> ChalkakCoach.zip.b64
+          tr -d '\r\n' < build-input/chalkakcoach.part07a >> ChalkakCoach.zip.b64
+          tr -d '\r\n' < build-input/chalkakcoach.part07b >> ChalkakCoach.zip.b64
+          tr -d '\r\n' < build-input/chalkakcoach.part08 >> ChalkakCoach.zip.b64
+          test "$(wc -c < ChalkakCoach.zip.b64)" -eq 56768
+          echo "832a94dc641331943119ce723d518989929881b1e230f914e519507c7285dcc1  ChalkakCoach.zip.b64" | sha256sum --check
           base64 --decode ChalkakCoach.zip.b64 > ChalkakCoach.zip
           echo "58203a2947968d0921ed265aceda52e9331e8176a4ce66fbf670ceb9228313ec  ChalkakCoach.zip" | sha256sum --check
           unzip -q ChalkakCoach.zip
