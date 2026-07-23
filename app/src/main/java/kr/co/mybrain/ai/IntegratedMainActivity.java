@@ -33,7 +33,7 @@ public class IntegratedMainActivity extends MainActivity {
 
         if (mainRoot.getChildCount() > 1 && mainRoot.getChildAt(1) instanceof TextView) {
             TextView versionText = (TextView) mainRoot.getChildAt(1);
-            versionText.setText("v1.6.0 · 로컬·GPT·Gemini 선택");
+            versionText.setText("v1.6.1 · GPT·Gemini 연결 테스트");
         }
 
         AiSettings settings = AiSettings.load(this);
