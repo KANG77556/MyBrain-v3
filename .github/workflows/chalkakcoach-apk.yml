@@ -50,20 +50,21 @@ jobs:
           unzip -q ChalkakCoach.zip
           test -f ChalkakCoach/settings.gradle.kts
 
-      - name: Apply Kotlin 2 compiler options compatibility
+      - name: Apply Android 16 build compatibility
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          path = Path("ChalkakCoach/app/build.gradle.kts")
-          text = path.read_text(encoding="utf-8")
+
+          gradle_path = Path("ChalkakCoach/app/build.gradle.kts")
+          gradle_text = gradle_path.read_text(encoding="utf-8")
           old = '''    kotlinOptions {
                   jvmTarget = "17"
               }
           '''
-          if old not in text:
+          if old not in gradle_text:
               raise SystemExit("Expected kotlinOptions block was not found")
-          text = text.replace(old, "", 1)
+          gradle_text = gradle_text.replace(old, "", 1)
           marker = "\ndependencies {"
           replacement = '''
           
@@ -74,8 +75,21 @@ jobs:
           }
           
           dependencies {'''
-          text = text.replace(marker, replacement, 1)
-          path.write_text(text, encoding="utf-8")
+          gradle_text = gradle_text.replace(marker, replacement, 1)
+          gradle_path.write_text(gradle_text, encoding="utf-8")
+
+          catalog_path = Path("ChalkakCoach/gradle/libs.versions.toml")
+          catalog = catalog_path.read_text(encoding="utf-8")
+          replacements = {
+              'coreKtx = "1.19.0"': 'coreKtx = "1.17.0"',
+              'activityCompose = "1.13.0"': 'activityCompose = "1.11.0"',
+              'lifecycle = "2.11.0"': 'lifecycle = "2.9.4"',
+          }
+          for before, after in replacements.items():
+              if before not in catalog:
+                  raise SystemExit(f"Expected version entry not found: {before}")
+              catalog = catalog.replace(before, after, 1)
+          catalog_path.write_text(catalog, encoding="utf-8")
           PY
 
       - name: Set up Java 17
