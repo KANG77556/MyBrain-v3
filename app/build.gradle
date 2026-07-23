@@ -18,8 +18,8 @@ android {
         applicationId 'kr.co.mybrain.ai'
         minSdk 26
         targetSdk 35
-        versionCode 17
-        versionName '1.6.1'
+        versionCode 18
+        versionName '1.6.2'
     }
 
     // 고정 서명 정보가 준비된 경우에만 릴리스 서명 설정을 활성화합니다.
