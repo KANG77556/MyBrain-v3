@@ -1,0 +1,75 @@
+name: Build ChalkakCoach APK
+
+on:
+  push:
+    branches:
+      - build/chalkakcoach-apk
+    paths:
+      - "build-input/**"
+      - ".github/workflows/chalkakcoach-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout build branch
+        uses: actions/checkout@v4
+
+      - name: Reconstruct project archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            cat build-input/chalkakcoach.part00
+            cat build-input/chalkakcoach.part01
+            cat build-input/chalkakcoach.part02
+            cat build-input/chalkakcoach.part03
+            cat build-input/chalkakcoach.part04
+            cat build-input/chalkakcoach.part05
+            head -c -2 build-input/chalkakcoach.part06
+            cat build-input/chalkakcoach.part07a
+            cat build-input/chalkakcoach.part07b
+            cat build-input/chalkakcoach.part08
+          } > ChalkakCoach.zip.b64
+          base64 --decode ChalkakCoach.zip.b64 > ChalkakCoach.zip
+          echo "58203a2947968d0921ed265aceda52e9331e8176a4ce66fbf670ceb9228313ec  ChalkakCoach.zip" | sha256sum --check
+          unzip -q ChalkakCoach.zip
+          test -f ChalkakCoach/settings.gradle.kts
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Build and test debug APK
+        working-directory: ChalkakCoach
+        run: gradle --no-daemon clean testDebugUnitTest assembleDebug
+
+      - name: Prepare APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp ChalkakCoach/app/build/outputs/apk/debug/app-debug.apk ChalkakCoach-Stage2-debug.apk
+          sha256sum ChalkakCoach-Stage2-debug.apk > ChalkakCoach-Stage2-debug.apk.sha256
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage2-debug-apk
+          path: |
+            ChalkakCoach-Stage2-debug.apk
+            ChalkakCoach-Stage2-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
