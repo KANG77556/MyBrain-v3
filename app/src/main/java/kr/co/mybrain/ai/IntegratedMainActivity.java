@@ -13,12 +13,12 @@ import android.widget.TextView;
 
 /**
  * 기존 일정·할 일·메모 기능에 백업과 AI 공급자 설정을 통합한 실제 메인 화면입니다.
- * 로컬 모드는 MainActivity의 기존 분석기를 그대로 사용하고, GPT·Gemini 모드만 클라우드 화면으로 연결합니다.
+ * 기본 규칙 모드는 MainActivity 분석기를 유지하고, Ollama·GPT·Gemini는 AI 입력 화면으로 연결합니다.
  */
 public class IntegratedMainActivity extends MainActivity {
     private static final int COLOR_PRIMARY = Color.rgb(35, 92, 190);
     private static final int REQUEST_AI_SETTINGS = 1501;
-    private static final int REQUEST_CLOUD_ANALYSIS = 1502;
+    private static final int REQUEST_AI_ANALYSIS = 1502;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,7 +33,7 @@ public class IntegratedMainActivity extends MainActivity {
 
         if (mainRoot.getChildCount() > 1 && mainRoot.getChildAt(1) instanceof TextView) {
             TextView versionText = (TextView) mainRoot.getChildAt(1);
-            versionText.setText("v1.6.1 · GPT·Gemini 연결 테스트");
+            versionText.setText("v1.6.2 · 휴대전화 Ollama·GPT·Gemini");
         }
 
         AiSettings settings = AiSettings.load(this);
@@ -41,20 +41,20 @@ public class IntegratedMainActivity extends MainActivity {
         addManagementButtons(mainRoot, settings);
     }
 
-    /** 로컬 모드에서는 원래 클릭 동작을 유지하고 클라우드 모드에서만 연결 대상을 교체합니다. */
+    /** 기본 규칙 모드에서는 원래 클릭 동작을 유지하고 실제 AI 모드에서만 연결 대상을 교체합니다. */
     private void configureAnalyzeButton(LinearLayout mainRoot, AiSettings settings) {
         if (mainRoot.getChildCount() <= 3 || !(mainRoot.getChildAt(3) instanceof Button)) return;
         Button addButton = (Button) mainRoot.getChildAt(3);
 
         if (AiSettings.PROVIDER_LOCAL.equals(settings.provider)) {
-            addButton.setText("＋ 로컬 분석 및 추가");
-            // MainActivity가 등록한 기존 로컬 분석 클릭 동작을 그대로 사용합니다.
+            addButton.setText("＋ 기본 규칙 분석 및 추가");
+            // MainActivity가 등록한 기존 규칙 분석 클릭 동작을 그대로 사용합니다.
             return;
         }
 
         addButton.setText("＋ " + settings.providerLabel() + " AI 분석 및 추가");
         addButton.setOnClickListener(v -> startActivityForResult(
-                new Intent(this, AiInputActivity.class), REQUEST_CLOUD_ANALYSIS));
+                new Intent(this, AiInputActivity.class), REQUEST_AI_ANALYSIS));
     }
 
     /** 백업과 AI 설정을 한 줄에 배치하여 홈 화면 아이콘을 늘리지 않습니다. */
@@ -83,7 +83,7 @@ public class IntegratedMainActivity extends MainActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if ((requestCode == REQUEST_AI_SETTINGS || requestCode == REQUEST_CLOUD_ANALYSIS)
+        if ((requestCode == REQUEST_AI_SETTINGS || requestCode == REQUEST_AI_ANALYSIS)
                 && resultCode == RESULT_OK) {
             // 설정 변경 또는 새 항목 저장 후 메인 화면과 목록을 최신 상태로 다시 구성합니다.
             recreate();

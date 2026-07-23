@@ -7,6 +7,7 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -14,8 +15,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
 /**
- * GPT와 Gemini API 키·모델 연결 상태를 실제 문장 전송 없이 확인합니다.
- * 모델 정보 조회 API만 사용하므로 일정·메모 내용은 외부로 전송하지 않습니다.
+ * 휴대전화 Ollama와 GPT·Gemini의 모델 연결 상태를 확인합니다.
+ * Ollama는 같은 휴대전화의 localhost만 연결하며 클라우드 키 검사는 모델 정보 조회 API를 사용합니다.
  */
 public final class AiConnectionTester {
     private static final int CONNECT_TIMEOUT_MS = 15_000;
@@ -25,26 +26,74 @@ public final class AiConnectionTester {
     private AiConnectionTester() {
     }
 
-    /** 선택한 공급자의 API 키와 모델 접근 가능 여부를 확인합니다. */
+    /** 기존 호출부 호환용입니다. */
     public static String test(String provider, String model, String apiKey) throws Exception {
+        return test(provider, model, apiKey, AiSettings.DEFAULT_OLLAMA_BASE_URL);
+    }
+
+    /** 선택한 공급자의 서버·API 키·모델 접근 가능 여부를 확인합니다. */
+    public static String test(String provider, String model, String apiKey,
+                              String ollamaBaseUrl) throws Exception {
         String normalizedProvider = AiSettings.normalizeProvider(provider);
         String normalizedModel = model == null ? "" : model.trim();
         String normalizedKey = apiKey == null ? "" : apiKey.trim();
 
         if (AiSettings.PROVIDER_LOCAL.equals(normalizedProvider)) {
-            return "로컬 분석은 인터넷 연결이 필요하지 않습니다.";
+            return "기본 규칙 분석은 서버 연결이 필요하지 않습니다.";
         }
         if (!MODEL_PATTERN.matcher(normalizedModel).matches()) {
             throw new IllegalArgumentException("모델 이름 형식이 올바르지 않습니다.");
         }
+
+        if (AiSettings.PROVIDER_OLLAMA.equals(normalizedProvider)) {
+            return testOllama(normalizedModel, ollamaBaseUrl);
+        }
         if (normalizedKey.isEmpty()) {
             throw new IllegalArgumentException("API 키가 등록되지 않았습니다.");
         }
-
         if (AiSettings.PROVIDER_OPENAI.equals(normalizedProvider)) {
             return testOpenAi(normalizedModel, normalizedKey);
         }
         return testGemini(normalizedModel, normalizedKey);
+    }
+
+    /** 같은 휴대전화의 Ollama 모델 목록 API로 서버와 모델 설치 상태를 확인합니다. */
+    private static String testOllama(String model, String baseUrl) throws Exception {
+        if (!AiSettings.isAllowedOllamaBaseUrl(baseUrl)) {
+            throw new IllegalArgumentException("Ollama 주소는 같은 휴대전화의 localhost만 사용할 수 있습니다.");
+        }
+
+        String endpoint = AiSettings.normalizeOllamaBaseUrl(baseUrl) + "/api/tags";
+        HttpURLConnection connection = openGetConnection(endpoint);
+        String response;
+        try {
+            response = execute(connection, "Ollama");
+        } catch (ConnectException e) {
+            throw new ConnectionTestException(
+                    "Ollama Server가 실행되지 않았습니다. Ollama Server 앱에서 서비스를 먼저 시작하세요.");
+        } catch (java.net.SocketTimeoutException e) {
+            throw new ConnectionTestException(
+                    "Ollama 응답 시간이 초과됐습니다. 서버 실행 상태와 휴대전화 메모리를 확인하세요.");
+        }
+
+        JSONObject root = new JSONObject(response);
+        JSONArray models = root.optJSONArray("models");
+        if (models == null) {
+            throw new ConnectionTestException("Ollama 모델 목록을 읽지 못했습니다.");
+        }
+
+        for (int i = 0; i < models.length(); i++) {
+            JSONObject item = models.optJSONObject(i);
+            if (item == null) continue;
+            String name = item.optString("name", "").trim();
+            String modelName = item.optString("model", "").trim();
+            if (sameModel(model, name) || sameModel(model, modelName)) {
+                return "Ollama 연결 성공 · " + (name.isEmpty() ? model : name);
+            }
+        }
+
+        throw new ConnectionTestException(
+                "Ollama 서버는 실행 중이지만 '" + model + "' 모델이 없습니다. Ollama Server 앱에서 모델을 내려받으세요.");
     }
 
     /** OpenAI 모델 조회 API로 키와 모델 사용 가능 여부를 확인합니다. */
@@ -135,6 +184,9 @@ public final class AiConnectionTester {
             case 429:
                 friendly = "사용량 또는 결제 한도를 확인하세요.";
                 break;
+            case 500:
+                friendly = "모델 실행 중 오류가 발생했습니다. 메모리와 모델 상태를 확인하세요.";
+                break;
             default:
                 friendly = "잠시 후 다시 시도하세요.";
                 break;
@@ -149,12 +201,22 @@ public final class AiConnectionTester {
     private static String extractErrorMessage(String response) {
         try {
             JSONObject root = new JSONObject(response == null ? "" : response);
-            JSONObject error = root.optJSONObject("error");
-            if (error == null) return "";
-            return error.optString("message", "").trim();
+            Object error = root.opt("error");
+            if (error instanceof JSONObject) {
+                return ((JSONObject) error).optString("message", "").trim();
+            }
+            return error instanceof String ? ((String) error).trim() : "";
         } catch (JSONException ignored) {
             return "";
         }
+    }
+
+    private static boolean sameModel(String expected, String actual) {
+        if (expected == null || actual == null) return false;
+        String left = expected.trim();
+        String right = actual.trim();
+        if (left.equalsIgnoreCase(right)) return true;
+        return !left.contains(":") && (right.equalsIgnoreCase(left + ":latest"));
     }
 
     private static boolean contains(JSONArray values, String expected) {
