@@ -27,7 +27,7 @@ jobs:
       - name: Checkout build branch
         uses: actions/checkout@v4
 
-      - name: Reconstruct project archive
+      - name: Concatenate project archive parts
         shell: bash
         run: |
           set -euo pipefail
@@ -39,6 +39,21 @@ jobs:
           tr -d '\r\n' < build-input/chalkakcoach.part07a >> ChalkakCoach.zip.b64
           tr -d '\r\n' < build-input/chalkakcoach.part07b >> ChalkakCoach.zip.b64
           tr -d '\r\n' < build-input/chalkakcoach.part08 >> ChalkakCoach.zip.b64
+          wc -c ChalkakCoach.zip.b64
+          sha256sum ChalkakCoach.zip.b64
+
+      - name: Upload reconstruction diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-reconstruction-diagnostic
+          path: ChalkakCoach.zip.b64
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Validate and extract project archive
+        shell: bash
+        run: |
+          set -euo pipefail
           test "$(wc -c < ChalkakCoach.zip.b64)" -eq 56768
           echo "832a94dc641331943119ce723d518989929881b1e230f914e519507c7285dcc1  ChalkakCoach.zip.b64" | sha256sum --check
           base64 --decode ChalkakCoach.zip.b64 > ChalkakCoach.zip
