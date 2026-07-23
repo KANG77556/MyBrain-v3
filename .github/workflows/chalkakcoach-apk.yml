@@ -108,7 +108,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tr -d '\r\n' < stage3-overlay/stage3-overlay.zip.b64 > stage3-overlay.zip.b64
+          : > stage3-overlay.zip.b64
+          for part in 00 01 02 03; do
+            tr -d '\r\n' < "stage3-overlay/part${part}" >> stage3-overlay.zip.b64
+          done
+          test "$(wc -c < stage3-overlay.zip.b64)" -eq 23040
           echo "e1135fd4f9db417937242197ba2778c750481e7919c424a2650c7ea808de09a3  stage3-overlay.zip.b64" | sha256sum --check
           base64 --decode stage3-overlay.zip.b64 > stage3-overlay.zip
           echo "d618b980e13f0f003fb604ecc40cfcf949b984d0a4a43dcced4631a445c3a158  stage3-overlay.zip" | sha256sum --check
