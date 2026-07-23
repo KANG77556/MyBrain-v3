@@ -90,6 +90,30 @@ jobs:
                   raise SystemExit(f"Expected version entry not found: {before}")
               catalog = catalog.replace(before, after, 1)
           catalog_path.write_text(catalog, encoding="utf-8")
+
+          main_path = Path("ChalkakCoach/app/src/main/java/kr/co/chalkakcoach/MainActivity.kt")
+          main_text = main_path.read_text(encoding="utf-8")
+          if "import androidx.activity.compose.setContent" not in main_text:
+              main_text = main_text.replace(
+                  "import androidx.activity.compose.rememberLauncherForActivityResult\n",
+                  "import androidx.activity.compose.rememberLauncherForActivityResult\nimport androidx.activity.compose.setContent\n",
+                  1,
+              )
+          main_path.write_text(main_text, encoding="utf-8")
+
+          camera_path = Path("ChalkakCoach/app/src/main/java/kr/co/chalkakcoach/camera/CameraScreen.kt")
+          camera_text = camera_path.read_text(encoding="utf-8")
+          camera_text = camera_text.replace(
+              "import androidx.compose.ui.draw.border",
+              "import androidx.compose.foundation.border",
+              1,
+          )
+          camera_text = camera_text.replace(
+              'statusMessage = "$remaining초 후 촬영합니다"',
+              'statusMessage = "${remaining}초 후 촬영합니다"',
+              1,
+          )
+          camera_path.write_text(camera_text, encoding="utf-8")
           PY
 
       - name: Set up Java 17
