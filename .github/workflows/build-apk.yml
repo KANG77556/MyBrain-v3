@@ -113,13 +113,14 @@ jobs:
           fi
 
       - name: 릴리스 파일 이름과 검증값 생성
+        id: release_files
         if: env.HAS_RELEASE_SIGNING == 'true'
         shell: bash
         run: |
           RELEASE_APK="MyBrainAI-v${VERSION_NAME}-release.apk"
           cp app/build/outputs/apk/release/app-release.apk "$RELEASE_APK"
           sha256sum "$RELEASE_APK" > "$RELEASE_APK.sha256"
-          echo "RELEASE_APK=$RELEASE_APK" >> "$GITHUB_ENV"
+          echo "apk=$RELEASE_APK" >> "$GITHUB_OUTPUT"
 
       - name: 고정 서명 릴리스 APK 업로드
         if: env.HAS_RELEASE_SIGNING == 'true'
@@ -127,7 +128,7 @@ jobs:
         with:
           name: MyBrainAI-release-apk
           path: |
-            ${{ env.RELEASE_APK }}
-            ${{ env.RELEASE_APK }}.sha256
+            ${{ steps.release_files.outputs.apk }}
+            ${{ steps.release_files.outputs.apk }}.sha256
             apk-signature-report.txt
           if-no-files-found: error
