@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- GPT와 Gemini 클라우드 API를 호출하기 위한 권한 -->
+    <!-- Ollama localhost와 GPT·Gemini 클라우드 API를 호출하기 위한 권한 -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Android 13 이상 알림 권한 -->
@@ -15,7 +15,12 @@
         android:allowBackup="true"
         android:label="MyBrain AI"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
+
+        <!--
+            휴대전화 Ollama 기본 API는 http://127.0.0.1:11434를 사용합니다.
+            앱 코드에서는 localhost와 127.0.0.1만 허용하여 외부 평문 서버 연결을 차단합니다.
+        -->
 
         <!-- 앱 시작 시 알림 권한을 확인한 뒤 통합 메인 화면을 엽니다. -->
         <activity
@@ -28,12 +33,12 @@
             </intent-filter>
         </activity>
 
-        <!-- 기존 핵심 기능과 로컬 분석기를 보관하는 내부 메인 화면입니다. -->
+        <!-- 기존 핵심 기능과 비상용 규칙 분석기를 보관하는 내부 메인 화면입니다. -->
         <activity
             android:name=".MainActivity"
             android:exported="false" />
 
-        <!-- 로컬·GPT·Gemini 선택과 백업 기능이 포함된 사용자 메인 화면입니다. -->
+        <!-- Ollama·GPT·Gemini 선택과 백업 기능이 포함된 사용자 메인 화면입니다. -->
         <activity
             android:name=".IntegratedMainActivity"
             android:exported="true">
@@ -44,13 +49,13 @@
             </intent-filter>
         </activity>
 
-        <!-- GPT·Gemini 공급자와 암호화 API 키를 설정하는 내부 화면입니다. -->
+        <!-- Ollama·GPT·Gemini와 암호화 API 키를 설정하는 내부 화면입니다. -->
         <activity
             android:name=".AiSettingsActivity"
             android:exported="false"
             android:label="MyBrain AI 설정" />
 
-        <!-- 클라우드 AI 문장을 입력하고 결과를 확인하는 내부 화면입니다. -->
+        <!-- 선택한 AI로 문장을 분석하고 결과를 확인하는 내부 화면입니다. -->
         <activity
             android:name=".AiInputActivity"
             android:exported="false"
