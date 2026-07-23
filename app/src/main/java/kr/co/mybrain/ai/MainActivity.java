@@ -87,7 +87,7 @@ public class MainActivity extends Activity {
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         root.addView(title, fullWrap());
 
-        TextView version = text("v1.4.1 · 항목별 색상·달력 연동", 13, COLOR_MUTED);
+        TextView version = text("v1.5.2 · 날짜·시간 내용 자동 정리", 13, COLOR_MUTED);
         version.setPadding(0, dp(2), 0, dp(10));
         root.addView(version, fullWrap());
 
@@ -104,7 +104,7 @@ public class MainActivity extends Activity {
         root.addView(addButton, addParams);
 
         searchInput = new EditText(this);
-        searchInput.setHint("제목 또는 원문 검색");
+        searchInput.setHint("제목 또는 메모 내용 검색");
         searchInput.setTextSize(16);
         searchInput.setSingleLine(true);
         searchInput.setPadding(dp(14), 0, dp(14), 0);
@@ -189,7 +189,7 @@ public class MainActivity extends Activity {
         EditText input = new EditText(this);
         input.setMinLines(6);
         input.setGravity(Gravity.TOP);
-        input.setHint("예: 매주 월요일 오후 2시 교무실 회의");
+        input.setHint("예: 다음 주 월요일 오후 2시 교무실 회의");
         input.setText(preset);
         input.setSelection(input.getText().length());
         LinearLayout holder = new LinearLayout(this);
@@ -211,7 +211,7 @@ public class MainActivity extends Activity {
         }
         Analysis result = analyze(value);
         showItemEditor(null, result.type, result.title, result.date, result.time,
-                value, 0, result.repeatType, "", "DEFAULT");
+                result.content, 0, result.repeatType, "", "DEFAULT");
     }
 
     /** 새 항목과 기존 항목을 같은 화면에서 저장·수정합니다. */
@@ -236,7 +236,7 @@ public class MainActivity extends Activity {
         TextView colorTitle = text("항목 색상", 14, COLOR_MUTED);
         colorTitle.setPadding(0, dp(8), 0, 0);
         Spinner colorSpinner = spinner(COLOR_LABELS, colorIndex(colorValue));
-        EditText original = field("원문", originalValue);
+        EditText original = field("메모 내용", originalValue);
 
         form.addView(type);
         form.addView(itemTitle);
@@ -295,13 +295,18 @@ public class MainActivity extends Activity {
         result.date = extractDate(text);
         result.time = extractTime(text);
         result.repeatType = extractRepeatType(text);
-        String[] taskWords = {"제출", "작성", "확인", "준비", "보내", "전달", "신청", "완료", "처리", "연락"};
-        String[] scheduleWords = {"회의", "연수", "수업", "상담", "면담", "행사", "출장", "약속", "모임", "방문"};
+
+        String[] taskWords = {"제출", "작성", "확인", "준비", "보내", "전달", "신청", "완료", "처리", "연락", "하기"};
+        String[] scheduleWords = {"회의", "연수", "수업", "상담", "면담", "행사", "출장", "약속", "모임", "방문", "예약"};
         boolean task = containsAny(text, taskWords) || text.contains("까지") || text.contains("마감");
         boolean schedule = containsAny(text, scheduleWords) || (!result.date.isEmpty() && !result.time.isEmpty());
         result.type = task ? "할 일" : (schedule ? "일정" : "메모");
-        String title = text.replaceAll("[.!?]", "").trim();
-        result.title = title.length() > 40 ? title.substring(0, 40) + "…" : title;
+
+        // 날짜와 시간이 별도 필드로 인식된 경우 메모 내용에서는 해당 문구를 제거합니다.
+        String cleaned = cleanRecognizedDateTime(text, !result.date.isEmpty(), !result.time.isEmpty());
+        if (cleaned.isEmpty()) cleaned = defaultTitle(result.type);
+        result.content = cleaned;
+        result.title = cleaned.length() > 40 ? cleaned.substring(0, 40) + "…" : cleaned;
         return result;
     }
 
@@ -314,45 +319,135 @@ public class MainActivity extends Activity {
     }
 
     private String extractDate(String text) {
-        Calendar cal = Calendar.getInstance();
-        if (text.contains("모레")) cal.add(Calendar.DAY_OF_MONTH, 2);
-        else if (text.contains("내일")) cal.add(Calendar.DAY_OF_MONTH, 1);
-        else if (text.contains("오늘")) return formatDate(cal.getTime());
-        else {
-            Matcher full = Pattern.compile("(20\\d{2})년\\s*(\\d{1,2})월\\s*(\\d{1,2})일").matcher(text);
-            if (full.find()) return String.format(Locale.KOREA, "%s-%02d-%02d",
-                    full.group(1), Integer.parseInt(full.group(2)), Integer.parseInt(full.group(3)));
-            Matcher shortDate = Pattern.compile("(\\d{1,2})월\\s*(\\d{1,2})일").matcher(text);
-            if (shortDate.find()) return String.format(Locale.KOREA, "%04d-%02d-%02d",
-                    cal.get(Calendar.YEAR), Integer.parseInt(shortDate.group(1)), Integer.parseInt(shortDate.group(2)));
-            String weekday = extractWeekdayDate(text, cal);
-            if (!weekday.isEmpty()) return weekday;
-            return "";
+        Calendar now = Calendar.getInstance();
+        if (text.contains("모레")) {
+            now.add(Calendar.DAY_OF_MONTH, 2);
+            return formatDate(now.getTime());
         }
-        return formatDate(cal.getTime());
+        if (text.contains("내일")) {
+            now.add(Calendar.DAY_OF_MONTH, 1);
+            return formatDate(now.getTime());
+        }
+        if (text.contains("오늘")) return formatDate(now.getTime());
+
+        Matcher iso = Pattern.compile("(20\\d{2})\\s*[-./]\\s*(\\d{1,2})\\s*[-./]\\s*(\\d{1,2})").matcher(text);
+        if (iso.find()) return validDate(Integer.parseInt(iso.group(1)), Integer.parseInt(iso.group(2)), Integer.parseInt(iso.group(3)));
+
+        Matcher full = Pattern.compile("(20\\d{2})년\\s*(\\d{1,2})월\\s*(\\d{1,2})일").matcher(text);
+        if (full.find()) return validDate(Integer.parseInt(full.group(1)), Integer.parseInt(full.group(2)), Integer.parseInt(full.group(3)));
+
+        Matcher shortDate = Pattern.compile("(\\d{1,2})월\\s*(\\d{1,2})일").matcher(text);
+        if (shortDate.find()) return validDate(now.get(Calendar.YEAR), Integer.parseInt(shortDate.group(1)), Integer.parseInt(shortDate.group(2)));
+
+        return extractWeekdayDate(text, now);
     }
 
+    /** 이번 주·다음 주·다다음 주와 일반 요일 표현을 날짜로 변환합니다. */
     private String extractWeekdayDate(String text, Calendar now) {
-        String[] names = {"일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"};
+        String[] names = {"월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"};
+        int[] calendarDays = {
+                Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY,
+                Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY, Calendar.SUNDAY
+        };
         for (int i = 0; i < names.length; i++) {
             if (!text.contains(names[i])) continue;
-            int target = Calendar.SUNDAY + i;
-            int add = (target - now.get(Calendar.DAY_OF_WEEK) + 7) % 7;
-            if (add == 0 && !text.contains("오늘")) add = 7;
-            now.add(Calendar.DAY_OF_MONTH, add);
-            return formatDate(now.getTime());
+            Calendar target = (Calendar) now.clone();
+            int weekOffset = -1;
+            if (text.matches(".*다다음\\s*주.*")) weekOffset = 2;
+            else if (text.matches(".*다음\\s*주.*")) weekOffset = 1;
+            else if (text.matches(".*이번\\s*주.*")) weekOffset = 0;
+
+            if (weekOffset >= 0) {
+                int daysFromMonday = (target.get(Calendar.DAY_OF_WEEK) + 5) % 7;
+                target.add(Calendar.DAY_OF_MONTH, -daysFromMonday + weekOffset * 7 + i);
+            } else {
+                int add = (calendarDays[i] - target.get(Calendar.DAY_OF_WEEK) + 7) % 7;
+                if (add == 0) add = 7;
+                target.add(Calendar.DAY_OF_MONTH, add);
+            }
+            return formatDate(target.getTime());
         }
         return "";
     }
 
     private String extractTime(String text) {
-        Matcher matcher = Pattern.compile("(오전|오후)?\\s*(\\d{1,2})시(?:\\s*(\\d{1,2})분)?").matcher(text);
-        if (!matcher.find()) return "";
-        int hour = Integer.parseInt(matcher.group(2));
-        int minute = matcher.group(3) == null ? 0 : Integer.parseInt(matcher.group(3));
-        if ("오후".equals(matcher.group(1)) && hour < 12) hour += 12;
-        if ("오전".equals(matcher.group(1)) && hour == 12) hour = 0;
+        if (text.contains("정오")) return "12:00";
+        if (text.contains("자정")) return "00:00";
+
+        Matcher colon = Pattern.compile("(오전|오후)?\\s*(\\d{1,2}):(\\d{2})").matcher(text);
+        if (colon.find()) {
+            int hour = Integer.parseInt(colon.group(2));
+            int minute = Integer.parseInt(colon.group(3));
+            hour = convertHour(hour, colon.group(1));
+            return validTime(hour, minute);
+        }
+
+        Matcher korean = Pattern.compile("(오전|오후|아침|낮|저녁|밤|새벽)?\\s*(\\d{1,2})시(?:\\s*(?:(\\d{1,2})분|(반)))?").matcher(text);
+        if (!korean.find()) return "";
+        int hour = Integer.parseInt(korean.group(2));
+        int minute = korean.group(3) == null ? (korean.group(4) == null ? 0 : 30) : Integer.parseInt(korean.group(3));
+        hour = convertHour(hour, korean.group(1));
+        return validTime(hour, minute);
+    }
+
+    private int convertHour(int hour, String period) {
+        if (period == null || period.isEmpty()) return hour;
+        if ("오후".equals(period) || "낮".equals(period) || "저녁".equals(period) || "밤".equals(period)) {
+            if (hour < 12) hour += 12;
+        } else if (hour == 12) {
+            hour = 0;
+        }
+        return hour;
+    }
+
+    /** 인식에 성공한 날짜·시간 표현만 제목과 메모 내용에서 제거합니다. */
+    private String cleanRecognizedDateTime(String text, boolean hasDate, boolean hasTime) {
+        String cleaned = text == null ? "" : text;
+        if (hasDate) {
+            cleaned = remove(cleaned, "20\\d{2}년\\s*\\d{1,2}월\\s*\\d{1,2}일(?:까지|부터|에)?");
+            cleaned = remove(cleaned, "20\\d{2}\\s*[-./]\\s*\\d{1,2}\\s*[-./]\\s*\\d{1,2}(?:까지|부터|에)?");
+            cleaned = remove(cleaned, "\\d{1,2}월\\s*\\d{1,2}일(?:까지|부터|에)?");
+            cleaned = remove(cleaned, "(?:오늘|내일|모레)(?:까지|부터|에)?");
+            cleaned = remove(cleaned, "(?:(?:이번|다음|다다음)\\s*주\\s*)?[월화수목금토일]요일(?:까지|부터|에)?");
+        }
+        if (hasTime) {
+            cleaned = remove(cleaned, "(?:오전|오후|아침|낮|저녁|밤|새벽)\\s*\\d{1,2}\\s*시(?:\\s*(?:\\d{1,2}\\s*분|반))?(?:까지|부터|에)?");
+            cleaned = remove(cleaned, "(?:오전|오후)?\\s*\\d{1,2}:\\d{2}(?:까지|부터|에)?");
+            cleaned = remove(cleaned, "\\d{1,2}\\s*시(?:\\s*(?:\\d{1,2}\\s*분|반))?(?:까지|부터|에)?");
+            cleaned = remove(cleaned, "(?:정오|자정)(?:까지|부터|에)?");
+        }
+        cleaned = cleaned.replaceAll("[.!?]+$", "")
+                .replaceAll("\\s*[,;|·]+\\s*", " ")
+                .replaceAll("(^|\\s)[-–—]+(?=\\s|$)", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return cleaned.replaceAll("^[,;:·\\-–—\\s]+|[,;:·\\-–—\\s]+$", "").trim();
+    }
+
+    private String remove(String value, String regex) {
+        return value.replaceAll(regex, " ");
+    }
+
+    private String validDate(int year, int month, int day) {
+        try {
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+            format.setLenient(false);
+            Date parsed = format.parse(String.format(Locale.KOREA, "%04d-%02d-%02d", year, month, day));
+            return parsed == null ? "" : format.format(parsed);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private String validTime(int hour, int minute) {
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
         return String.format(Locale.KOREA, "%02d:%02d", hour, minute);
+    }
+
+    private String defaultTitle(String type) {
+        if ("일정".equals(type)) return "일정";
+        if ("할 일".equals(type)) return "할 일";
+        return "메모";
     }
 
     private void refreshList() {
@@ -511,8 +606,7 @@ public class MainActivity extends Activity {
     }
 
     private int itemColor(Item item) {
-        String value = normalizeColor(item.colorValue);
-        switch (value) {
+        switch (normalizeColor(item.colorValue)) {
             case "BLUE": return Color.rgb(37, 99, 235);
             case "RED": return Color.rgb(220, 60, 60);
             case "ORANGE": return Color.rgb(234, 120, 35);
@@ -720,6 +814,7 @@ public class MainActivity extends Activity {
     private static class Analysis {
         String type = "메모";
         String title = "";
+        String content = "";
         String date = "";
         String time = "";
         String repeatType = "NONE";
