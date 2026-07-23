@@ -1,17 +1,19 @@
-name: Build ChalkakCoach APK
+name: Build ChalkakCoach Stage 3 APK
 
 on:
   push:
     branches:
-      - build/chalkakcoach-apk
+      - build/chalkakcoach-stage3-apk
     paths:
       - "build-input/**"
+      - "stage3-overlay/**"
       - ".github/workflows/chalkakcoach-apk.yml"
   pull_request:
     branches:
       - main
     paths:
       - "build-input/**"
+      - "stage3-overlay/**"
       - ".github/workflows/chalkakcoach-apk.yml"
   workflow_dispatch:
 
@@ -27,7 +29,7 @@ jobs:
       - name: Checkout build branch
         uses: actions/checkout@v4
 
-      - name: Reconstruct project archive
+      - name: Reconstruct Stage 2 project archive
         shell: bash
         run: |
           set -euo pipefail
@@ -50,7 +52,7 @@ jobs:
           unzip -q ChalkakCoach.zip
           test -f ChalkakCoach/settings.gradle.kts
 
-      - name: Apply Android 16 build compatibility
+      - name: Apply Stage 2 build compatibility
         shell: bash
         run: |
           python3 - <<'PY'
@@ -100,21 +102,18 @@ jobs:
                   1,
               )
           main_path.write_text(main_text, encoding="utf-8")
-
-          camera_path = Path("ChalkakCoach/app/src/main/java/kr/co/chalkakcoach/camera/CameraScreen.kt")
-          camera_text = camera_path.read_text(encoding="utf-8")
-          camera_text = camera_text.replace(
-              "import androidx.compose.ui.draw.border",
-              "import androidx.compose.foundation.border",
-              1,
-          )
-          camera_text = camera_text.replace(
-              'statusMessage = "$remaining초 후 촬영합니다"',
-              'statusMessage = "${remaining}초 후 촬영합니다"',
-              1,
-          )
-          camera_path.write_text(camera_text, encoding="utf-8")
           PY
+
+      - name: Apply Stage 3 face AI overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          tr -d '\r\n' < stage3-overlay/stage3-overlay.zip.b64 > stage3-overlay.zip.b64
+          echo "e1135fd4f9db417937242197ba2778c750481e7919c424a2650c7ea808de09a3  stage3-overlay.zip.b64" | sha256sum --check
+          base64 --decode stage3-overlay.zip.b64 > stage3-overlay.zip
+          echo "d618b980e13f0f003fb604ecc40cfcf949b984d0a4a43dcced4631a445c3a158  stage3-overlay.zip" | sha256sum --check
+          unzip -qo stage3-overlay.zip -d ChalkakCoach
+          test -f ChalkakCoach/app/src/main/java/kr/co/chalkakcoach/face/FaceDetectionAnalyzer.kt
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -127,13 +126,13 @@ jobs:
         with:
           gradle-version: "8.13"
 
-      - name: Build and test debug APK
+      - name: Build and test Stage 3 debug APK
         id: gradle_build
         shell: bash
         working-directory: ChalkakCoach
         run: |
           set +e
-          gradle --no-daemon clean testDebugUnitTest assembleDebug 2>&1 | tee ../chalkakcoach-build.log
+          gradle --no-daemon clean testDebugUnitTest assembleDebug 2>&1 | tee ../chalkakcoach-stage3-build.log
           result=${PIPESTATUS[0]}
           echo "exit_code=${result}" >> "$GITHUB_OUTPUT"
           exit "$result"
@@ -142,26 +141,40 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ChalkakCoach-Gradle-build-log
-          path: chalkakcoach-build.log
+          name: ChalkakCoach-Stage3-Gradle-build-log
+          path: chalkakcoach-stage3-build.log
           if-no-files-found: error
           retention-days: 2
 
-      - name: Prepare APK artifact
+      - name: Prepare Stage 3 artifacts
         if: steps.gradle_build.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
-          cp ChalkakCoach/app/build/outputs/apk/debug/app-debug.apk ChalkakCoach-Stage2-debug.apk
-          sha256sum ChalkakCoach-Stage2-debug.apk > ChalkakCoach-Stage2-debug.apk.sha256
+          cp ChalkakCoach/app/build/outputs/apk/debug/app-debug.apk ChalkakCoach-Stage3-debug.apk
+          sha256sum ChalkakCoach-Stage3-debug.apk > ChalkakCoach-Stage3-debug.apk.sha256
+          rm -rf ChalkakCoach/app/build ChalkakCoach/.gradle ChalkakCoach/local.properties
+          zip -qr ChalkakCoach-Stage3-project.zip ChalkakCoach
+          sha256sum ChalkakCoach-Stage3-project.zip > ChalkakCoach-Stage3-project.zip.sha256
 
-      - name: Upload installable APK
+      - name: Upload installable Stage 3 APK
         if: steps.gradle_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: ChalkakCoach-Stage2-debug-apk
+          name: ChalkakCoach-Stage3-debug-apk
           path: |
-            ChalkakCoach-Stage2-debug.apk
-            ChalkakCoach-Stage2-debug.apk.sha256
+            ChalkakCoach-Stage3-debug.apk
+            ChalkakCoach-Stage3-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Stage 3 project
+        if: steps.gradle_build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage3-project
+          path: |
+            ChalkakCoach-Stage3-project.zip
+            ChalkakCoach-Stage3-project.zip.sha256
           if-no-files-found: error
           retention-days: 7
