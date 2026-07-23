@@ -13,7 +13,7 @@
         android:label="MyBrain AI"
         android:theme="@style/AppTheme">
 
-        <!-- 앱 시작 시 알림 권한을 확인한 뒤 메인 화면을 엽니다. -->
+        <!-- 앱 시작 시 알림 권한을 확인한 뒤 통합 메인 화면을 엽니다. -->
         <activity
             android:name=".NotificationPermissionActivity"
             android:exported="true"
@@ -24,8 +24,14 @@
             </intent-filter>
         </activity>
 
+        <!-- 기존 핵심 기능을 보관하는 내부 메인 화면입니다. -->
         <activity
             android:name=".MainActivity"
+            android:exported="false" />
+
+        <!-- 백업·복원 버튼이 포함된 실제 사용자 메인 화면입니다. -->
+        <activity
+            android:name=".IntegratedMainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -34,16 +40,11 @@
             </intent-filter>
         </activity>
 
-        <!-- 앱 삭제 전 자료를 파일로 보관하고 다시 복원하는 전용 화면입니다. -->
+        <!-- 메인 화면의 백업·복원 버튼으로만 여는 내부 화면입니다. -->
         <activity
             android:name=".BackupActivity"
-            android:exported="true"
-            android:label="MyBrain 백업">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:exported="false"
+            android:label="MyBrain 백업" />
 
         <!-- 예약된 시각에 실제 알림을 표시합니다. -->
         <receiver
