@@ -44,7 +44,7 @@ public class BackupActivity extends Activity {
         root.setPadding(dp(20), dp(24), dp(20), dp(24));
         root.setBackgroundColor(Color.rgb(244, 247, 251));
 
-        TextView title = text("MyBrain AI 백업", 26, Color.rgb(18, 48, 89));
+        TextView title = text("MyBrain AI 백업·복원", 26, Color.rgb(18, 48, 89));
         root.addView(title, fullWrap());
 
         TextView guide = text(
@@ -67,12 +67,8 @@ public class BackupActivity extends Activity {
         warning.setPadding(0, dp(18), 0, dp(18));
         root.addView(warning, fullWrap());
 
-        Button openApp = button("MyBrain AI 열기");
-        openApp.setOnClickListener(v -> {
-            Intent intent = new Intent(this, MainActivity.class);
-            startActivity(intent);
-            finish();
-        });
+        Button openApp = button("메인 화면으로 돌아가기");
+        openApp.setOnClickListener(v -> openIntegratedMainScreen());
         root.addView(openApp, buttonParams());
 
         setContentView(root);
@@ -154,10 +150,19 @@ public class BackupActivity extends Activity {
 
             AlarmScheduler.rescheduleAll(getApplicationContext());
             TodayWidgetProvider.updateAll(getApplicationContext());
-            Toast.makeText(this, "자료를 복원했습니다. 앱을 다시 열어 확인하세요.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "자료를 복원했습니다.", Toast.LENGTH_LONG).show();
+            openIntegratedMainScreen();
         } catch (Exception e) {
             Toast.makeText(this, "복원 실패: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    /** 복원된 자료를 즉시 다시 읽도록 통합 메인 화면을 새로 엽니다. */
+    private void openIntegratedMainScreen() {
+        Intent intent = new Intent(this, IntegratedMainActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        finish();
     }
 
     private Button button(String label) {

@@ -9,7 +9,7 @@ import android.os.Bundle;
 
 /**
  * 앱 시작 시 알림 권한을 확인하는 전용 화면입니다.
- * 권한 확인이 끝나면 즉시 메인 화면으로 이동합니다.
+ * 권한 확인이 끝나면 백업·복원 버튼이 포함된 통합 메인 화면으로 이동합니다.
  */
 public class NotificationPermissionActivity extends Activity {
     private static final int REQUEST_NOTIFICATIONS = 1201;
@@ -39,9 +39,9 @@ public class NotificationPermissionActivity extends Activity {
         }
     }
 
-    /** 실제 MyBrain AI 메인 화면을 엽니다. */
+    /** 백업·복원 기능이 통합된 실제 MyBrain AI 메인 화면을 엽니다. */
     private void openMainScreen() {
-        Intent intent = new Intent(this, MainActivity.class);
+        Intent intent = new Intent(this, IntegratedMainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
         finish();

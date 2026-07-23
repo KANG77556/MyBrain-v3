@@ -44,6 +44,19 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
+      # 고정 서명 비밀값이 아직 없을 때도 릴리스용 원본 APK를 확보합니다.
+      - name: 서명 전 릴리스 APK 빌드
+        if: env.HAS_RELEASE_KEY != 'true'
+        run: gradle --stacktrace assembleRelease
+
+      - name: 서명 전 릴리스 APK 업로드
+        if: env.HAS_RELEASE_KEY != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrainAI-unsigned-release-apk
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+
       # 아래 단계는 GitHub Actions Secrets에 고정 서명 정보가 등록된 경우에만 실행됩니다.
       - name: 고정 서명키 복원
         if: env.HAS_RELEASE_KEY == 'true'
@@ -64,12 +77,12 @@ jobs:
         if: env.HAS_RELEASE_KEY == 'true'
         shell: bash
         run: |
-          cp app/build/outputs/apk/release/app-release.apk MyBrainAI-v1.5.2-release.apk
+          cp app/build/outputs/apk/release/app-release.apk MyBrainAI-v1.5.3-release.apk
 
       - name: 고정 서명 릴리스 APK 업로드
         if: env.HAS_RELEASE_KEY == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: MyBrainAI-release-apk
-          path: MyBrainAI-v1.5.2-release.apk
+          path: MyBrainAI-v1.5.3-release.apk
           if-no-files-found: error
