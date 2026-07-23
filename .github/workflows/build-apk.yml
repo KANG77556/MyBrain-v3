@@ -64,12 +64,12 @@ jobs:
         if: env.HAS_RELEASE_KEY == 'true'
         shell: bash
         run: |
-          cp app/build/outputs/apk/release/app-release.apk MyBrainAI-v1.5.1-release.apk
+          cp app/build/outputs/apk/release/app-release.apk MyBrainAI-v1.5.2-release.apk
 
       - name: 고정 서명 릴리스 APK 업로드
         if: env.HAS_RELEASE_KEY == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: MyBrainAI-release-apk
-          path: MyBrainAI-v1.5.1-release.apk
+          path: MyBrainAI-v1.5.2-release.apk
           if-no-files-found: error
