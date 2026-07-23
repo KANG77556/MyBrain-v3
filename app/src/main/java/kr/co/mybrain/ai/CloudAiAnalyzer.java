@@ -81,7 +81,9 @@ public final class CloudAiAnalyzer {
                 }
             }
         }
-        if (outputText.length() == 0) throw new AiServiceException("GPT 응답에서 분석 결과를 찾지 못했습니다.");
+        if (outputText.length() == 0) {
+            throw new AiServiceException("GPT 응답에서 분석 결과를 찾지 못했습니다.");
+        }
         return outputText.toString();
     }
 
@@ -98,8 +100,9 @@ public final class CloudAiAnalyzer {
         JSONObject userContent = new JSONObject()
                 .put("role", "user")
                 .put("parts", new JSONArray().put(userPart));
+
+        // 최신 Gemini 모델에서도 유지되는 JSON 응답 형식만 지정합니다.
         JSONObject generationConfig = new JSONObject()
-                .put("temperature", 0.1)
                 .put("responseMimeType", "application/json");
         JSONObject body = new JSONObject()
                 .put("system_instruction", systemInstruction)
@@ -114,9 +117,13 @@ public final class CloudAiAnalyzer {
         if (candidates == null || candidates.length() == 0) {
             throw new AiServiceException("Gemini 응답에서 분석 결과를 찾지 못했습니다.");
         }
-        JSONObject content = candidates.optJSONObject(0).optJSONObject("content");
+
+        JSONObject firstCandidate = candidates.optJSONObject(0);
+        JSONObject content = firstCandidate == null ? null : firstCandidate.optJSONObject("content");
         JSONArray parts = content == null ? null : content.optJSONArray("parts");
-        if (parts == null) throw new AiServiceException("Gemini 응답 형식을 읽을 수 없습니다.");
+        if (parts == null) {
+            throw new AiServiceException("Gemini 응답 형식을 읽을 수 없습니다.");
+        }
 
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < parts.length(); i++) {
@@ -207,7 +214,9 @@ public final class CloudAiAnalyzer {
         }
         int start = text.indexOf('{');
         int end = text.lastIndexOf('}');
-        if (start < 0 || end <= start) throw new AiServiceException("AI 응답이 JSON 형식이 아닙니다.");
+        if (start < 0 || end <= start) {
+            throw new AiServiceException("AI 응답이 JSON 형식이 아닙니다.");
+        }
         return text.substring(start, end + 1);
     }
 
