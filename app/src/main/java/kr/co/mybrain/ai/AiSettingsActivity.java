@@ -33,6 +33,11 @@ public class AiSettingsActivity extends Activity {
             AiSettings.PROVIDER_GEMINI
     };
 
+    private static final int COLOR_PRIMARY = Color.rgb(35, 92, 190);
+    private static final int COLOR_SUCCESS = Color.rgb(20, 125, 72);
+    private static final int COLOR_ERROR = Color.rgb(190, 52, 52);
+    private static final int COLOR_MUTED = Color.rgb(84, 96, 112);
+
     private Spinner providerSpinner;
     private EditText openAiModelInput;
     private EditText geminiModelInput;
@@ -40,6 +45,10 @@ public class AiSettingsActivity extends Activity {
     private EditText geminiKeyInput;
     private TextView openAiKeyStatus;
     private TextView geminiKeyStatus;
+    private TextView openAiTestStatus;
+    private TextView geminiTestStatus;
+    private Button openAiTestButton;
+    private Button geminiTestButton;
     private CheckBox confirmCloudCheck;
     private CheckBox fallbackLocalCheck;
 
@@ -50,7 +59,7 @@ public class AiSettingsActivity extends Activity {
         loadValues();
     }
 
-    /** 초보자도 한 화면에서 공급자와 키를 관리할 수 있도록 설정 화면을 구성합니다. */
+    /** 초보자도 한 화면에서 공급자, 모델, 키, 연결 상태를 관리하도록 설정 화면을 구성합니다. */
     private void buildScreen() {
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
@@ -80,10 +89,15 @@ public class AiSettingsActivity extends Activity {
         root.addView(sectionTitle("GPT 설정"), fullWrap());
         openAiModelInput = field("GPT 모델 이름", AiSettings.DEFAULT_OPENAI_MODEL, false);
         root.addView(openAiModelInput, fieldParams());
-        openAiKeyStatus = text("", 13, Color.DKGRAY);
+        openAiKeyStatus = text("", 13, COLOR_MUTED);
         root.addView(openAiKeyStatus, fullWrap());
         openAiKeyInput = field("새 OpenAI API 키 입력 (빈칸이면 기존 키 유지)", "", true);
         root.addView(openAiKeyInput, fieldParams());
+        openAiTestButton = secondaryButton("GPT 연결 테스트");
+        openAiTestButton.setOnClickListener(v -> testProvider(AiSettings.PROVIDER_OPENAI));
+        root.addView(openAiTestButton, buttonParams());
+        openAiTestStatus = statusText();
+        root.addView(openAiTestStatus, statusParams());
         Button clearOpenAi = secondaryButton("저장된 GPT 키 삭제");
         clearOpenAi.setOnClickListener(v -> confirmClearKey(SecureApiKeyStore.KEY_OPENAI, "GPT"));
         root.addView(clearOpenAi, buttonParams());
@@ -91,13 +105,24 @@ public class AiSettingsActivity extends Activity {
         root.addView(sectionTitle("Gemini 설정"), fullWrap());
         geminiModelInput = field("Gemini 모델 이름", AiSettings.DEFAULT_GEMINI_MODEL, false);
         root.addView(geminiModelInput, fieldParams());
-        geminiKeyStatus = text("", 13, Color.DKGRAY);
+        geminiKeyStatus = text("", 13, COLOR_MUTED);
         root.addView(geminiKeyStatus, fullWrap());
         geminiKeyInput = field("새 Gemini API 키 입력 (빈칸이면 기존 키 유지)", "", true);
         root.addView(geminiKeyInput, fieldParams());
+        geminiTestButton = secondaryButton("Gemini 연결 테스트");
+        geminiTestButton.setOnClickListener(v -> testProvider(AiSettings.PROVIDER_GEMINI));
+        root.addView(geminiTestButton, buttonParams());
+        geminiTestStatus = statusText();
+        root.addView(geminiTestStatus, statusParams());
         Button clearGemini = secondaryButton("저장된 Gemini 키 삭제");
         clearGemini.setOnClickListener(v -> confirmClearKey(SecureApiKeyStore.KEY_GEMINI, "Gemini"));
         root.addView(clearGemini, buttonParams());
+
+        TextView testGuide = text(
+                "연결 테스트는 모델 정보만 조회합니다. 일정·메모 문장은 전송하지 않으며 분석 사용량도 발생시키지 않습니다.",
+                13, Color.rgb(50, 92, 145));
+        testGuide.setPadding(dp(12), dp(10), dp(12), dp(10));
+        root.addView(testGuide, fullWrap());
 
         root.addView(sectionTitle("보호 설정"), fullWrap());
         confirmCloudCheck = new CheckBox(this);
@@ -135,6 +160,59 @@ public class AiSettingsActivity extends Activity {
         confirmCloudCheck.setChecked(settings.confirmBeforeCloud);
         fallbackLocalCheck.setChecked(settings.fallbackToLocal);
         updateKeyStatuses();
+    }
+
+    /** 입력창의 새 키를 우선 사용하고, 비어 있으면 기기에 저장된 암호화 키로 연결을 검사합니다. */
+    private void testProvider(String provider) {
+        final boolean openAi = AiSettings.PROVIDER_OPENAI.equals(provider);
+        final EditText modelInput = openAi ? openAiModelInput : geminiModelInput;
+        final EditText keyInput = openAi ? openAiKeyInput : geminiKeyInput;
+        final TextView statusView = openAi ? openAiTestStatus : geminiTestStatus;
+        final String keyName = openAi ? SecureApiKeyStore.KEY_OPENAI : SecureApiKeyStore.KEY_GEMINI;
+        final String providerLabel = openAi ? "GPT" : "Gemini";
+
+        String model = modelInput.getText().toString().trim();
+        String typedKey = keyInput.getText().toString().trim();
+        String apiKey = typedKey.isEmpty() ? SecureApiKeyStore.read(this, keyName) : typedKey;
+
+        if (apiKey.isEmpty()) {
+            setStatus(statusView, providerLabel + " API 키를 먼저 입력하세요.", false);
+            return;
+        }
+
+        setTestButtonsEnabled(false);
+        statusView.setTextColor(COLOR_PRIMARY);
+        statusView.setText(providerLabel + " 연결을 확인하고 있습니다…");
+
+        new Thread(() -> {
+            try {
+                String message = AiConnectionTester.test(provider, model, apiKey);
+                runOnUiThread(() -> {
+                    if (isFinishing()) return;
+                    setStatus(statusView, message, true);
+                    setTestButtonsEnabled(true);
+                    Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                String message = safeMessage(e);
+                runOnUiThread(() -> {
+                    if (isFinishing()) return;
+                    setStatus(statusView, message, false);
+                    setTestButtonsEnabled(true);
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+                });
+            }
+        }, "mybrain-ai-connection-test").start();
+    }
+
+    private void setStatus(TextView view, String message, boolean success) {
+        view.setTextColor(success ? COLOR_SUCCESS : COLOR_ERROR);
+        view.setText(message);
+    }
+
+    private void setTestButtonsEnabled(boolean enabled) {
+        openAiTestButton.setEnabled(enabled);
+        geminiTestButton.setEnabled(enabled);
     }
 
     /** 일반 설정과 새로 입력된 API 키를 각각 안전한 저장소에 기록합니다. */
@@ -181,6 +259,8 @@ public class AiSettingsActivity extends Activity {
                 .setPositiveButton("삭제", (dialog, which) -> {
                     SecureApiKeyStore.clear(this, keyName);
                     updateKeyStatuses();
+                    if (SecureApiKeyStore.KEY_OPENAI.equals(keyName)) openAiTestStatus.setText("");
+                    if (SecureApiKeyStore.KEY_GEMINI.equals(keyName)) geminiTestStatus.setText("");
                     Toast.makeText(this, label + " API 키를 삭제했습니다.", Toast.LENGTH_SHORT).show();
                 })
                 .show();
@@ -213,6 +293,12 @@ public class AiSettingsActivity extends Activity {
         return editText;
     }
 
+    private TextView statusText() {
+        TextView view = text("", 13, COLOR_MUTED);
+        view.setPadding(dp(8), 0, dp(8), 0);
+        return view;
+    }
+
     private TextView sectionTitle(String value) {
         TextView view = text(value, 17, Color.rgb(31, 42, 55));
         view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -226,7 +312,7 @@ public class AiSettingsActivity extends Activity {
         button.setTextSize(16);
         button.setTextColor(Color.WHITE);
         button.setAllCaps(false);
-        button.setBackgroundColor(Color.rgb(35, 92, 190));
+        button.setBackgroundColor(COLOR_PRIMARY);
         return button;
     }
 
@@ -263,7 +349,13 @@ public class AiSettingsActivity extends Activity {
     private LinearLayout.LayoutParams buttonParams() {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
-        params.setMargins(0, 0, 0, dp(10));
+        params.setMargins(0, 0, 0, dp(8));
+        return params;
+    }
+
+    private LinearLayout.LayoutParams statusParams() {
+        LinearLayout.LayoutParams params = fullWrap();
+        params.setMargins(0, 0, 0, dp(8));
         return params;
     }
 
@@ -271,8 +363,8 @@ public class AiSettingsActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
-    private String safeMessage(Exception e) {
-        String message = e == null ? "알 수 없는 오류" : e.getMessage();
+    private String safeMessage(Throwable error) {
+        String message = error == null ? "알 수 없는 오류" : error.getMessage();
         return message == null || message.trim().isEmpty() ? "알 수 없는 오류" : message;
     }
 }
