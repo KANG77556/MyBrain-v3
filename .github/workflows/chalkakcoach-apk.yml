@@ -7,6 +7,12 @@ on:
     paths:
       - "build-input/**"
       - ".github/workflows/chalkakcoach-apk.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "build-input/**"
+      - ".github/workflows/chalkakcoach-apk.yml"
   workflow_dispatch:
 
 permissions:
