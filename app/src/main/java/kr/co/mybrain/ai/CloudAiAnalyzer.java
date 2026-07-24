@@ -14,36 +14,53 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.regex.Pattern;
 
 /**
  * 휴대전화 Ollama, GPT(OpenAI Responses API), Gemini(generateContent REST API)를 공통 형식으로 호출합니다.
- * API 키는 호출할 때만 메모리에서 사용하며 로그나 오류 문구에 포함하지 않습니다.
+ * 한 문장에서 최대 8개의 일정·할 일·메모를 분리하며 API 키는 로그나 오류 문구에 포함하지 않습니다.
  */
 public final class CloudAiAnalyzer {
     private static final int CONNECT_TIMEOUT_MS = 20_000;
     private static final int CLOUD_READ_TIMEOUT_MS = 90_000;
     private static final int OLLAMA_READ_TIMEOUT_MS = 120_000;
+    private static final int MAX_ANALYSIS_ITEMS = 8;
     private static final Pattern MODEL_PATTERN = Pattern.compile("[A-Za-z0-9._:-]{2,100}");
 
     private CloudAiAnalyzer() {
     }
 
-    /** 기존 호출 코드와의 호환성을 유지하는 기본 분석 함수입니다. */
+    /** 기존 단일 결과 호출 코드와의 호환성을 유지합니다. */
     public static AiAnalysisResult analyze(AiSettings settings, String apiKey,
                                            String userText) throws Exception {
         return analyze(settings, apiKey, userText, new RequestControl());
     }
 
-    /**
-     * 선택된 AI 공급자로 문장을 분석합니다.
-     * RequestControl을 전달하면 화면의 취소 버튼이 실제 HTTP 연결까지 중단할 수 있습니다.
-     */
+    /** 기존 단일 결과 호출 코드와 취소 기능의 호환성을 유지합니다. */
     public static AiAnalysisResult analyze(AiSettings settings, String apiKey,
                                            String userText, RequestControl control) throws Exception {
+        List<AiAnalysisResult> results = analyzeMultiple(settings, apiKey, userText, control);
+        if (results.isEmpty()) throw new AiServiceException("AI 분석 결과가 없습니다.");
+        return results.get(0);
+    }
+
+    /** 한 문장에서 여러 일정·할 일·메모를 분리합니다. */
+    public static List<AiAnalysisResult> analyzeMultiple(AiSettings settings, String apiKey,
+                                                         String userText) throws Exception {
+        return analyzeMultiple(settings, apiKey, userText, new RequestControl());
+    }
+
+    /** 취소 가능한 다중 분석 함수입니다. */
+    public static List<AiAnalysisResult> analyzeMultiple(AiSettings settings, String apiKey,
+                                                         String userText,
+                                                         RequestControl control) throws Exception {
         RequestControl activeControl = control == null ? new RequestControl() : control;
         try {
             activeControl.throwIfCancelled();
@@ -68,7 +85,7 @@ public final class CloudAiAnalyzer {
                 output = requestGemini(settings.geminiModel, key, input, activeControl);
             }
             activeControl.throwIfCancelled();
-            return parseAnalysis(output, input);
+            return parseAnalyses(output, input);
         } catch (AnalysisCancelledException e) {
             throw e;
         } catch (Exception e) {
@@ -79,7 +96,7 @@ public final class CloudAiAnalyzer {
         }
     }
 
-    /** 같은 휴대전화에서 실행 중인 Ollama의 짧은 구조화 JSON 출력을 사용합니다. */
+    /** 같은 휴대전화에서 실행 중인 Ollama의 구조화 JSON 출력을 사용합니다. */
     private static String requestOllama(String baseUrl, String model, String input,
                                         RequestControl control) throws Exception {
         validateModel(model);
@@ -94,11 +111,11 @@ public final class CloudAiAnalyzer {
                 .put("role", "user")
                 .put("content", input);
 
-        // 휴대전화 발열과 대기 시간을 줄이기 위해 문맥과 최대 출력 길이를 제한합니다.
+        // 여러 항목을 생성할 수 있도록 출력량은 늘리되 휴대전화 발열을 고려해 상한을 둡니다.
         JSONObject options = new JSONObject()
                 .put("temperature", 0)
                 .put("num_ctx", 2048)
-                .put("num_predict", 180);
+                .put("num_predict", 480);
 
         JSONObject body = new JSONObject()
                 .put("model", model)
@@ -107,7 +124,6 @@ public final class CloudAiAnalyzer {
                 .put("think", false)
                 .put("format", "json")
                 .put("options", options)
-                // 연속 입력 시 모델을 다시 적재하지 않도록 잠시 메모리에 유지합니다.
                 .put("keep_alive", "5m");
 
         String endpoint = AiSettings.normalizeOllamaBaseUrl(baseUrl) + "/api/chat";
@@ -292,10 +308,39 @@ public final class CloudAiAnalyzer {
         return message;
     }
 
-    /** AI가 반환한 JSON을 검증하고 날짜·시간·반복 값을 앱 형식으로 정리합니다. */
-    private static AiAnalysisResult parseAnalysis(String rawOutput, String originalInput) throws Exception {
+    /** AI가 반환한 배열을 검증하고 앱 공통 결과 목록으로 변환합니다. */
+    private static List<AiAnalysisResult> parseAnalyses(String rawOutput,
+                                                        String originalInput) throws Exception {
         String jsonText = extractJsonObject(rawOutput);
-        JSONObject json = new JSONObject(jsonText);
+        JSONObject root = new JSONObject(jsonText);
+        JSONArray array = root.optJSONArray("items");
+
+        // 이전 버전의 단일 객체 응답도 계속 읽을 수 있게 호환 처리합니다.
+        if (array == null) {
+            array = new JSONArray();
+            array.put(root);
+        }
+
+        List<AiAnalysisResult> results = new ArrayList<>();
+        Set<String> duplicateGuard = new HashSet<>();
+        int count = Math.min(array.length(), MAX_ANALYSIS_ITEMS);
+        for (int i = 0; i < count; i++) {
+            JSONObject item = array.optJSONObject(i);
+            if (item == null) continue;
+            AiAnalysisResult result = parseItem(item, originalInput);
+            String duplicateKey = (result.type + "|" + result.title + "|"
+                    + result.date + "|" + result.time).toLowerCase(Locale.KOREA);
+            if (duplicateGuard.add(duplicateKey)) results.add(result);
+        }
+
+        if (results.isEmpty()) {
+            throw new AiServiceException("AI가 저장할 수 있는 항목을 반환하지 않았습니다.");
+        }
+        return results;
+    }
+
+    /** JSON 항목 하나를 안전한 앱 데이터로 정리합니다. */
+    private static AiAnalysisResult parseItem(JSONObject json, String originalInput) {
         AiAnalysisResult result = new AiAnalysisResult();
         result.type = normalizeType(json.optString("type", "메모"));
         result.content = cleanText(json.optString("content", ""));
@@ -328,12 +373,14 @@ public final class CloudAiAnalyzer {
         format.setTimeZone(TimeZone.getDefault());
         String now = format.format(new Date());
         return "당신은 MyBrain AI의 한국어 일정 분석기입니다. 현재 기기 시각은 " + now + "입니다. "
-                + "사용자 문장을 분석하여 아래 JSON 객체 하나만 반환하세요. 설명, 마크다운, 코드블록은 금지합니다. "
-                + "필드 형식: {\"type\":\"일정|할 일|메모\",\"title\":\"짧은 제목\","
+                + "사용자 문장에 서로 다른 사건이나 행동이 여러 개 있으면 각각 분리하세요. 최대 8개만 반환하세요. "
+                + "아래 JSON 객체 하나만 반환하고 설명, 마크다운, 코드블록은 금지합니다. "
+                + "형식: {\"items\":[{\"type\":\"일정|할 일|메모\",\"title\":\"짧은 제목\","
                 + "\"content\":\"날짜와 시간 표현을 제거한 핵심 내용\",\"date\":\"yyyy-MM-dd 또는 빈 문자열\","
-                + "\"time\":\"HH:mm 또는 빈 문자열\",\"repeatType\":\"NONE|DAILY|WEEKLY|MONTHLY|WEEKDAYS\"}. "
-                + "회의·약속·방문·예약처럼 특정 시점의 사건은 일정, 제출·준비·처리처럼 해야 하는 행동은 할 일, "
-                + "그 외 기록은 메모로 분류하세요. 모호한 값은 추측하지 말고 빈 문자열 또는 NONE을 사용하세요.";
+                + "\"time\":\"HH:mm 또는 빈 문자열\",\"repeatType\":\"NONE|DAILY|WEEKLY|MONTHLY|WEEKDAYS\"}]}. "
+                + "회의·약속·방문·예약처럼 특정 시점의 사건은 일정, 제출·준비·처리·연락처럼 해야 하는 행동은 할 일, "
+                + "그 외 기록은 메모로 분류하세요. 같은 항목을 중복 생성하지 마세요. "
+                + "앞 문장의 날짜가 뒤 문장에도 명확히 이어질 때만 같은 날짜를 적용하고, 모호한 값은 추측하지 마세요.";
     }
 
     private static void validateModel(String model) {
