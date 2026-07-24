@@ -88,21 +88,16 @@ jobs:
           shutil.copytree(result_dir, target)
           PY
 
-      - name: Collect APK and reports
+      - name: Collect APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$GITHUB_WORKSPACE/chalkakcoach-stage9/build"
-          PROJECT="$ROOT/ChalkakCoach"
-          APK="$PROJECT/app/build/outputs/apk/debug/app-debug.apk"
+          APK="$ROOT/ChalkakCoach/app/build/outputs/apk/debug/app-debug.apk"
           OUT="$ROOT/delivery"
-          test -f "$APK"
-          unzip -t "$APK" > "$OUT/APK-ZIP-TEST.txt"
+          test -s "$APK"
           cp "$APK" "$OUT/ChalkakCoach-v0.9.0-Scene-AutoFraming-debug.apk"
-          cp "$ROOT/gradle-build.log" "$OUT/GRADLE-BUILD-LOG.txt"
-          cp "$PROJECT/CHANGELOG_STAGE9.md" "$OUT/CHANGELOG_STAGE9.md"
-          cp "$PROJECT/TEST_CHECKLIST_STAGE9.md" "$OUT/TEST_CHECKLIST_STAGE9.md"
-          cp "$PROJECT/BUILD_REPORT_STAGE9.md" "$OUT/BUILD_REPORT_STAGE9.md"
+          test -s "$OUT/ChalkakCoach-v0.9.0-Scene-AutoFraming-debug.apk"
 
       - name: Verify APK signature and checksum
         shell: bash
