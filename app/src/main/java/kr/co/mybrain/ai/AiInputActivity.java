@@ -2,17 +2,20 @@ package kr.co.mybrain.ai;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -20,6 +23,7 @@ import android.widget.Toast;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Ollama·GPT·Gemini로 문장을 분석하고 결과를 확인한 뒤 저장하는 화면입니다.
@@ -33,11 +37,31 @@ public class AiInputActivity extends Activity {
     private static final String[] REPEAT_VALUES = {"NONE", "DAILY", "WEEKLY", "MONTHLY", "WEEKDAYS"};
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
     private TextView providerText;
     private TextView noticeText;
     private EditText input;
     private Button analyzeButton;
-    private ProgressDialog progressDialog;
+
+    private AlertDialog progressDialog;
+    private TextView progressStatusText;
+    private TextView progressHintText;
+    private CloudAiAnalyzer.RequestControl currentRequest;
+    private Future<?> currentTask;
+    private long analysisStartedAt;
+    private boolean currentOllama;
+    private String currentProviderLabel = "AI";
+
+    /** 분석 경과 시간을 1초마다 갱신합니다. */
+    private final Runnable progressTicker = new Runnable() {
+        @Override
+        public void run() {
+            if (currentRequest == null || currentRequest.isCancelled()) return;
+            updateProgressText();
+            mainHandler.postDelayed(this, 1_000L);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,8 +72,9 @@ public class AiInputActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        cancelCurrentAnalysis(false);
         executor.shutdownNow();
-        if (progressDialog != null && progressDialog.isShowing()) progressDialog.dismiss();
+        mainHandler.removeCallbacks(progressTicker);
         super.onDestroy();
     }
 
@@ -106,7 +131,7 @@ public class AiInputActivity extends Activity {
                 ? settings.providerLabel() + "로 분석" : "기본 규칙으로 분석");
 
         if (settings.isOllamaProvider()) {
-            noticeText.setText("Ollama는 이 휴대전화의 127.0.0.1 서버에서 실행됩니다. 입력 문장은 외부 클라우드로 전송되지 않습니다.");
+            noticeText.setText("Ollama는 이 휴대전화의 127.0.0.1 서버에서 실행됩니다. 첫 분석은 모델을 메모리에 올리느라 시간이 더 걸릴 수 있습니다.");
         } else if (settings.isCloudProvider()) {
             noticeText.setText("GPT 또는 Gemini를 선택하면 입력 문장이 해당 회사의 클라우드 API로 전송됩니다. 개인정보 포함 여부를 확인하세요.");
         } else {
@@ -116,6 +141,11 @@ public class AiInputActivity extends Activity {
 
     /** 설정과 키를 확인하고 클라우드 공급자일 때만 전송 확인창을 표시합니다. */
     private void requestAnalysis() {
+        if (currentRequest != null) {
+            Toast.makeText(this, "이미 AI 분석이 진행 중입니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         String value = input.getText().toString().trim().replaceAll("\\s+", " ");
         if (value.isEmpty()) {
             Toast.makeText(this, "분석할 메시지를 입력하세요.", Toast.LENGTH_SHORT).show();
@@ -168,26 +198,135 @@ public class AiInputActivity extends Activity {
         }
 
         final String finalApiKey = apiKey;
-        showProgress(settings.providerLabel() + " 분석 중...");
+        final CloudAiAnalyzer.RequestControl requestControl = new CloudAiAnalyzer.RequestControl();
+        currentRequest = requestControl;
+        showProgress(settings);
         analyzeButton.setEnabled(false);
 
-        executor.execute(() -> {
+        currentTask = executor.submit(() -> {
             try {
-                AiAnalysisResult result = CloudAiAnalyzer.analyze(settings, finalApiKey, value);
+                AiAnalysisResult result = CloudAiAnalyzer.analyze(
+                        settings, finalApiKey, value, requestControl);
                 runOnUiThread(() -> {
-                    hideProgress();
-                    analyzeButton.setEnabled(true);
+                    if (!isCurrentRequest(requestControl) || isFinishing() || isDestroyed()) return;
+                    finishAnalysisUi();
                     showResultEditor(result);
+                });
+            } catch (CloudAiAnalyzer.AnalysisCancelledException ignored) {
+                // 사용자가 취소한 정상 흐름이므로 오류창을 띄우지 않습니다.
+                runOnUiThread(() -> {
+                    if (!isCurrentRequest(requestControl)) return;
+                    finishAnalysisUi();
                 });
             } catch (Exception e) {
                 String message = safeMessage(e);
                 runOnUiThread(() -> {
-                    hideProgress();
-                    analyzeButton.setEnabled(true);
+                    if (!isCurrentRequest(requestControl) || isFinishing() || isDestroyed()) return;
+                    finishAnalysisUi();
                     handleAiError(settings, value, message);
                 });
             }
         });
+    }
+
+    /** 분석 중 경과 시간과 취소 버튼이 포함된 대기창을 표시합니다. */
+    private void showProgress(AiSettings settings) {
+        currentOllama = settings.isOllamaProvider();
+        currentProviderLabel = settings.providerLabel();
+        analysisStartedAt = SystemClock.elapsedRealtime();
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER_HORIZONTAL);
+        content.setPadding(dp(24), dp(14), dp(24), dp(4));
+
+        ProgressBar progressBar = new ProgressBar(this);
+        content.addView(progressBar, new LinearLayout.LayoutParams(dp(54), dp(54)));
+
+        progressStatusText = text("", 16, Color.rgb(35, 92, 190));
+        progressStatusText.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        progressStatusText.setGravity(Gravity.CENTER);
+        progressStatusText.setPadding(0, dp(12), 0, dp(6));
+        content.addView(progressStatusText, fullWrap());
+
+        progressHintText = text("", 13, Color.DKGRAY);
+        progressHintText.setGravity(Gravity.CENTER);
+        content.addView(progressHintText, fullWrap());
+
+        progressDialog = new AlertDialog.Builder(this)
+                .setTitle(currentProviderLabel + " 분석 중")
+                .setView(content)
+                .setNegativeButton("분석 취소", null)
+                .create();
+        progressDialog.setCancelable(false);
+        progressDialog.setCanceledOnTouchOutside(false);
+        progressDialog.setOnShowListener(dialog -> progressDialog
+                .getButton(AlertDialog.BUTTON_NEGATIVE)
+                .setOnClickListener(v -> cancelCurrentAnalysis(true)));
+        progressDialog.show();
+
+        updateProgressText();
+        mainHandler.removeCallbacks(progressTicker);
+        mainHandler.postDelayed(progressTicker, 1_000L);
+    }
+
+    /** 모델 준비와 분석 단계에 맞춰 사용자가 현재 상태를 알 수 있게 안내합니다. */
+    private void updateProgressText() {
+        if (progressStatusText == null || progressHintText == null) return;
+        long seconds = Math.max(0L,
+                (SystemClock.elapsedRealtime() - analysisStartedAt) / 1_000L);
+
+        if (currentOllama) {
+            if (seconds < 4) {
+                progressStatusText.setText("Ollama 연결 중 · " + seconds + "초");
+            } else if (seconds < 20) {
+                progressStatusText.setText("모델 준비 및 문장 분석 중 · " + seconds + "초");
+            } else {
+                progressStatusText.setText("문장 분석 중 · " + seconds + "초");
+            }
+
+            if (seconds < 15) {
+                progressHintText.setText("첫 실행은 모델을 메모리에 올리는 시간이 필요합니다.");
+            } else if (seconds < 45) {
+                progressHintText.setText("qwen3 사고 모드는 꺼져 있으며 짧은 JSON 결과만 생성합니다.");
+            } else {
+                progressHintText.setText("오래 걸리면 취소 후 gemma3:1b 모델을 사용해 보세요.");
+            }
+        } else {
+            progressStatusText.setText(currentProviderLabel + " 응답 대기 중 · " + seconds + "초");
+            progressHintText.setText("네트워크 상태와 모델 사용량에 따라 시간이 달라질 수 있습니다.");
+        }
+    }
+
+    /** 취소 버튼을 누르면 작업 스레드와 실제 HTTP 연결을 함께 종료합니다. */
+    private void cancelCurrentAnalysis(boolean showMessage) {
+        CloudAiAnalyzer.RequestControl request = currentRequest;
+        Future<?> task = currentTask;
+        if (request != null) request.cancel();
+        if (task != null) task.cancel(true);
+        finishAnalysisUi();
+
+        if (showMessage && !isFinishing()) {
+            Toast.makeText(this,
+                    "AI 분석을 취소했습니다. 입력 내용은 그대로 유지됩니다.",
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private boolean isCurrentRequest(CloudAiAnalyzer.RequestControl request) {
+        return currentRequest == request;
+    }
+
+    /** 대기창과 타이머를 정리하고 분석 버튼을 다시 활성화합니다. */
+    private void finishAnalysisUi() {
+        mainHandler.removeCallbacks(progressTicker);
+        if (progressDialog != null && progressDialog.isShowing()) progressDialog.dismiss();
+        progressDialog = null;
+        progressStatusText = null;
+        progressHintText = null;
+        currentRequest = null;
+        currentTask = null;
+        if (analyzeButton != null) analyzeButton.setEnabled(true);
     }
 
     /** 분석 결과를 수정 가능한 확인창으로 보여주고 사용자 승인 후 저장합니다. */
@@ -292,19 +431,6 @@ public class AiInputActivity extends Activity {
         if (requestCode == REQUEST_SETTINGS) refreshProviderInfo();
     }
 
-    private void showProgress(String message) {
-        progressDialog = new ProgressDialog(this);
-        progressDialog.setMessage(message);
-        progressDialog.setIndeterminate(true);
-        progressDialog.setCancelable(false);
-        progressDialog.show();
-    }
-
-    private void hideProgress() {
-        if (progressDialog != null && progressDialog.isShowing()) progressDialog.dismiss();
-        progressDialog = null;
-    }
-
     private int repeatIndex(String value) {
         for (int i = 0; i < REPEAT_VALUES.length; i++) {
             if (REPEAT_VALUES[i].equals(value)) return i;
@@ -378,8 +504,8 @@ public class AiInputActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
-    private String safeMessage(Exception e) {
-        String message = e == null ? "알 수 없는 오류" : e.getMessage();
+    private String safeMessage(Throwable error) {
+        String message = error == null ? "알 수 없는 오류" : error.getMessage();
         return message == null || message.trim().isEmpty() ? "알 수 없는 오류" : message;
     }
 }
