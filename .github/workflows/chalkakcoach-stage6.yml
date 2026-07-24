@@ -1,0 +1,161 @@
+name: ChalkakCoach Stage6 Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chalkakcoach-stage6-build
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-stage6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 17 준비
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 5단계 기본 프로젝트 복원
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat chalkakcoach-stage5-composition/parts/chunk_*.b64 > /tmp/ChalkakCoach_Stage5.b64
+          test "$(wc -c < /tmp/ChalkakCoach_Stage5.b64)" -eq 48748
+          echo "c7c9bde9e10c901de6091a24f7787294cd4497cc9fff313763063368d119afd1  /tmp/ChalkakCoach_Stage5.b64" | sha256sum --check
+          base64 --decode /tmp/ChalkakCoach_Stage5.b64 > /tmp/ChalkakCoach_Stage5.tar.xz
+          echo "5316a6813aa64835b77e7d1182c06a0c687e4bae8fc1cc1eee6a99e00c990d02  /tmp/ChalkakCoach_Stage5.tar.xz" | sha256sum --check
+          mkdir -p chalkakcoach-stage6/build
+          tar -xJf /tmp/ChalkakCoach_Stage5.tar.xz -C chalkakcoach-stage6/build
+
+      - name: 6단계 변경 파일 적용
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat chalkakcoach-stage6/overlay/chunk_*.b64 > /tmp/ChalkakCoach_Stage6_Overlay.b64
+          test "$(wc -c < /tmp/ChalkakCoach_Stage6_Overlay.b64)" -eq 30256
+          echo "b2acb010bd5acea069317da16e1b40a22d461d62ff53318ab09e9f041d1ff0b4  /tmp/ChalkakCoach_Stage6_Overlay.b64" | sha256sum --check
+          base64 --decode /tmp/ChalkakCoach_Stage6_Overlay.b64 > /tmp/ChalkakCoach_Stage6_Overlay.tar.xz
+          echo "223559d72cc776a86bacb988fed9bfff481229a5beaf6e1927e70ad933011eef  /tmp/ChalkakCoach_Stage6_Overlay.tar.xz" | sha256sum --check
+          tar -xJf /tmp/ChalkakCoach_Stage6_Overlay.tar.xz -C chalkakcoach-stage6/build/ChalkakCoach
+          chmod +x chalkakcoach-stage6/build/ChalkakCoach/gradlew
+          chmod +x chalkakcoach-stage6/build/ChalkakCoach/setup-wrapper.sh
+          grep -q 'versionName = "0.6.0-subject-bestshot"' chalkakcoach-stage6/build/ChalkakCoach/app/build.gradle.kts
+          test -f chalkakcoach-stage6/build/ChalkakCoach/app/src/main/java/kr/co/chalkakcoach/subject/SubjectClassifier.kt
+          test -f chalkakcoach-stage6/build/ChalkakCoach/app/src/main/java/kr/co/chalkakcoach/bestshot/BestShotManager.kt
+
+      - name: Kotlin 및 Compose 호환성 보정
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("chalkakcoach-stage6/build/ChalkakCoach")
+          path = root / "app/src/main/java/kr/co/chalkakcoach/coach/FrameCompositionAnalyzer.kt"
+          text = path.read_text(encoding="utf-8")
+          start_marker = "        val eligibleTransitions = rowTransitions.mapIndexedNotNull"
+          end_marker = "\n\n        return SceneCompositionState"
+          start = text.find(start_marker)
+          if start >= 0:
+              end = text.find(end_marker, start)
+              if end < 0:
+                  raise SystemExit("수평선 후보 계산 블록의 끝을 찾지 못했습니다.")
+              replacement = '''        // FloatArray에는 mapIndexedNotNull을 직접 사용할 수 없으므로
+                  // 수평선 후보 행을 명시적으로 수집해 Kotlin 버전 호환성을 확보합니다.
+                  val eligibleTransitions = mutableListOf<Pair<Int, Float>>()
+                  for (index in rowTransitions.indices) {
+                      val normalizedY = (index + 1f) / GRID_ROWS
+                      if (normalizedY in HORIZON_MIN_Y..HORIZON_MAX_Y) {
+                          eligibleTransitions += index to rowTransitions[index]
+                      }
+                  }
+          
+                  val strongest = eligibleTransitions.maxByOrNull { candidate -> candidate.second }
+                  val transitionAverage = if (eligibleTransitions.isNotEmpty()) {
+                      eligibleTransitions.sumOf { candidate -> candidate.second.toDouble() }
+                          .div(eligibleTransitions.size)
+                          .toFloat()
+                          .coerceAtLeast(0.1f)
+                  } else {
+                      0.1f
+                  }
+                  val horizonConfidence = strongest?.let { candidate -> candidate.second / transitionAverage } ?: 0f
+                  val horizonY = strongest
+                      ?.takeIf { horizonConfidence >= MIN_HORIZON_CONFIDENCE }
+                      ?.let { candidate -> (candidate.first + 1f) / GRID_ROWS }'''
+              path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
+
+          overlay = root / "app/src/main/java/kr/co/chalkakcoach/bestshot/BestShotOverlay.kt"
+          overlay_text = overlay.read_text(encoding="utf-8")
+          overlay_text = overlay_text.replace("import androidx.compose.foundation.layout.weight\n", "")
+          overlay.write_text(overlay_text, encoding="utf-8")
+          PY
+
+      - name: Gradle Wrapper 준비
+        working-directory: chalkakcoach-stage6/build/ChalkakCoach
+        run: ./setup-wrapper.sh
+
+      - name: 단위 테스트 및 APK 빌드
+        id: gradle_build
+        shell: bash
+        working-directory: chalkakcoach-stage6/build/ChalkakCoach
+        run: |
+          set +e
+          ./gradlew clean testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee ../../../chalkakcoach-stage6-build.log
+          result=${PIPESTATUS[0]}
+          echo "exit_code=${result}" >> "$GITHUB_OUTPUT"
+          exit "$result"
+
+      - name: 전체 Gradle 로그 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage6-build-log
+          path: chalkakcoach-stage6-build.log
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: 결과 파일 정리
+        if: steps.gradle_build.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p chalkakcoach-stage6/output
+          cp chalkakcoach-stage6/build/ChalkakCoach/app/build/outputs/apk/debug/app-debug.apk chalkakcoach-stage6/output/ChalkakCoach-Stage6-debug.apk
+          sha256sum chalkakcoach-stage6/output/ChalkakCoach-Stage6-debug.apk > chalkakcoach-stage6/output/ChalkakCoach-Stage6-debug.apk.sha256
+          cd chalkakcoach-stage6/build
+          zip -qr ../output/ChalkakCoach-Stage6-Build-Success-Project.zip ChalkakCoach \
+            -x 'ChalkakCoach/.gradle/*' 'ChalkakCoach/.kotlin/*' 'ChalkakCoach/build/*' 'ChalkakCoach/app/build/*'
+          cd ../output
+          sha256sum ChalkakCoach-Stage6-Build-Success-Project.zip > ChalkakCoach-Stage6-Build-Success-Project.zip.sha256
+
+      - name: APK와 프로젝트 업로드
+        if: steps.gradle_build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage6-delivery
+          path: chalkakcoach-stage6/output/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 테스트 보고서 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage6-test-reports
+          path: |
+            chalkakcoach-stage6/build/ChalkakCoach/app/build/reports
+            chalkakcoach-stage6/build/ChalkakCoach/app/build/test-results
+          if-no-files-found: ignore
+          retention-days: 7
