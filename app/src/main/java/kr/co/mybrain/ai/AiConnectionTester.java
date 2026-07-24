@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 
 /**
  * 휴대전화 Ollama와 GPT·Gemini의 모델 연결 상태를 확인합니다.
- * Ollama는 같은 휴대전화의 localhost만 연결하며 클라우드 키 검사는 모델 정보 조회 API를 사용합니다.
+ * Ollama는 모델 목록 확인 후 실제 짧은 분석과 JSON 해석까지 통과해야 성공으로 표시합니다.
  */
 public final class AiConnectionTester {
     private static final int CONNECT_TIMEOUT_MS = 15_000;
@@ -57,12 +57,28 @@ public final class AiConnectionTester {
         return testGemini(normalizedModel, normalizedKey);
     }
 
-    /** 같은 휴대전화의 Ollama 모델 목록 API로 서버와 모델 설치 상태를 확인합니다. */
+    /**
+     * 모델 목록 확인 후 실제 추론을 실행합니다.
+     * 서버만 열려 있고 모델이 실행되지 않는 잘못된 성공 표시를 방지합니다.
+     */
     private static String testOllama(String model, String baseUrl) throws Exception {
         if (!AiSettings.isAllowedOllamaBaseUrl(baseUrl)) {
             throw new IllegalArgumentException("Ollama 주소는 같은 휴대전화의 localhost만 사용할 수 있습니다.");
         }
 
+        String installedName = findInstalledOllamaModel(model, baseUrl);
+        try {
+            CloudAiAnalyzer.verifyOllamaInference(baseUrl, model);
+            return "Ollama 실제 분석 성공 · " + installedName;
+        } catch (CloudAiAnalyzer.AiServiceException e) {
+            throw new ConnectionTestException(
+                    "서버와 모델 목록은 확인됐지만 실제 문장 분석에 실패했습니다.\n"
+                            + safeMessage(e));
+        }
+    }
+
+    /** Ollama 모델 목록 API에서 선택한 모델이 설치됐는지 확인합니다. */
+    private static String findInstalledOllamaModel(String model, String baseUrl) throws Exception {
         String endpoint = AiSettings.normalizeOllamaBaseUrl(baseUrl) + "/api/tags";
         HttpURLConnection connection = openGetConnection(endpoint);
         String response;
@@ -88,12 +104,13 @@ public final class AiConnectionTester {
             String name = item.optString("name", "").trim();
             String modelName = item.optString("model", "").trim();
             if (sameModel(model, name) || sameModel(model, modelName)) {
-                return "Ollama 연결 성공 · " + (name.isEmpty() ? model : name);
+                return name.isEmpty() ? model : name;
             }
         }
 
         throw new ConnectionTestException(
-                "Ollama 서버는 실행 중이지만 '" + model + "' 모델이 없습니다. Ollama Server 앱에서 모델을 내려받으세요.");
+                "Ollama 서버는 실행 중이지만 '" + model
+                        + "' 모델이 없습니다. Ollama Server 앱에서 모델을 내려받으세요.");
     }
 
     /** OpenAI 모델 조회 API로 키와 모델 사용 가능 여부를 확인합니다. */
@@ -209,6 +226,11 @@ public final class AiConnectionTester {
         } catch (JSONException ignored) {
             return "";
         }
+    }
+
+    private static String safeMessage(Throwable error) {
+        String message = error == null ? "알 수 없는 오류" : error.getMessage();
+        return message == null || message.trim().isEmpty() ? "알 수 없는 오류" : message.trim();
     }
 
     private static boolean sameModel(String expected, String actual) {
