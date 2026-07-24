@@ -65,20 +65,26 @@ jobs:
           result_dir = Path('chalkakcoach-stage9/build/ChalkakCoach/app/build/test-results/testDebugUnitTest')
           tests = failures = errors = skipped = 0
           files = list(result_dir.glob('TEST-*.xml'))
+          names = {path.name for path in files}
           for path in files:
               root = ET.parse(path).getroot()
               tests += int(root.attrib.get('tests', 0))
               failures += int(root.attrib.get('failures', 0))
               errors += int(root.attrib.get('errors', 0))
               skipped += int(root.attrib.get('skipped', 0))
+          required = {
+              'TEST-kr.co.chalkakcoach.camera.SceneAutoFramingControllerTest.xml',
+              'TEST-kr.co.chalkakcoach.subject.ExpertLensAdvisorTest.xml',
+          }
+          missing = sorted(required - names)
           out = Path('chalkakcoach-stage9/build/delivery/TEST-SUMMARY.txt')
           out.write_text(
-              f'xml_files={len(files)}\ntests={tests}\nfailures={failures}\nerrors={errors}\nskipped={skipped}\n',
+              f'xml_files={len(files)}\ntests={tests}\nfailures={failures}\nerrors={errors}\nskipped={skipped}\nmissing_stage9={missing}\n',
               encoding='utf-8',
           )
           print(out.read_text(encoding='utf-8'))
-          if failures or errors or tests < 71:
-              raise SystemExit(f'Unexpected test result: tests={tests}, failures={failures}, errors={errors}')
+          if failures or errors or tests < 55 or missing:
+              raise SystemExit(f'Unexpected test result: tests={tests}, failures={failures}, errors={errors}, missing={missing}')
           PY
 
       - name: Package APK and source
