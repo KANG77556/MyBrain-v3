@@ -1,0 +1,49 @@
+name: Export AllFileHub 1.5.1 Source
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/export-allfilehub-source.yml'
+      - '.github/workflows/build-allfilehub-apk.yml'
+      - 'allfilehub-apk/**'
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스 받기
+        uses: actions/checkout@v4
+
+      - name: 내부 실행 엔진 복원
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          import gzip
+
+          workflow = Path('.github/workflows/build-allfilehub-apk.yml').read_text(encoding='utf-8')
+          marker = "cat <<'B64' | base64 -d | gzip -d > allfilehub-apk/app/src/main/java/com/seongho/allfilehub/MainActivity.java"
+          marker_pos = workflow.index(marker)
+          payload_start = workflow.index('\n', marker_pos) + 1
+          payload_end = workflow.index('\n          B64', payload_start)
+          payload = workflow[payload_start:payload_end]
+          source = gzip.decompress(base64.b64decode(payload)).decode('utf-8')
+          Path('allfilehub-apk/app/src/main/java/com/seongho/allfilehub/MainActivity.java').write_text(source, encoding='utf-8')
+          PY
+
+      - name: 1.5.1 강제 종료 수정 반영
+        run: python3 allfilehub-apk/apply_crashfix_1_5_1.py
+
+      - name: 전체 프로젝트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: AllFileHub-1.5.1-Source
+          path: allfilehub-apk/
+          if-no-files-found: error
+          retention-days: 7
