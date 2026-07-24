@@ -1,0 +1,211 @@
++            target < current -> max(current - maxStep, target)
++            else -> current
++        }.coerceIn(minZoom, maxZoom)
++    }
++
++    private fun decision(
++        status: AutoFramingStatus,
++        zoom: Float,
++        apply: Boolean,
++        message: String,
++    ) = AutoFramingDecision(status, zoom, apply, message)
++
++    private const val MIN_CONFIDENCE = 0.60f
++    private const val OBJECT_MIN_CONFIDENCE = 0.68f
++    private const val MIN_MEASURED_AREA = 0.018f
++    private const val AREA_DEAD_BAND = 0.24f
++    private const val MAX_CENTER_OFFSET_FOR_ZOOM_IN = 0.22f
++    private const val MIN_SAFE_CENTER_Y = 0.12f
++    private const val MAX_SAFE_CENTER_Y = 0.88f
++    private const val COMPLEX_SCENE_EDGE_LIMIT = 0.72f
++    private const val EDGE_ZOOM_OUT_FACTOR = 0.92f
++    private const val BACK_AUTO_MAX_ZOOM = 3.0f
++    private const val FRONT_AUTO_MAX_ZOOM = 2.0f
++    private const val MAX_STEP_RATIO = 0.075f
++    private const val MIN_ZOOM_STEP = 0.06f
++    private const val APPLY_EPSILON = 0.015f
++}
+diff --git a/chalkak_v090_work/ChalkakCoach/app/src/main/java/kr/co/chalkakcoach/subject/ExpertLensAdvisor.kt b/app/src/main/java/kr/co/chalkakcoach/subject/ExpertLensAdvisor.kt
+new file mode 100644
+index 0000000..019168a
+--- /dev/null
++++ b/app/src/main/java/kr/co/chalkakcoach/subject/ExpertLensAdvisor.kt
+@@ -0,0 +1,58 @@
++package kr.co.chalkakcoach.subject
++
++/** 장면에 맞는 권장 줌 범위와 현재 배율 적합 여부입니다. */
++data class ExpertLensRecommendation(
++    val minZoom: Float,
++    val maxZoom: Float,
++    val label: String,
++    val isCurrentInRange: Boolean,
++)
++
++/**
++ * 실제 렌즈 전환을 강제하지 않고, 초보자가 이해하기 쉬운 권장 배율을 제공합니다.
++ * CameraX의 논리 카메라 구성에 따라 물리 렌즈 전환 시점은 기기마다 다를 수 있습니다.
++ */
++object ExpertLensAdvisor {
++    fun recommend(
++        subject: SceneSubject,
++        faceCount: Int,
++        currentZoom: Float,
++        isFrontCamera: Boolean,
++    ): ExpertLensRecommendation {
++        val resolved = when {
++            faceCount >= 2 -> SceneSubject.GROUP
++            faceCount == 1 -> SceneSubject.PERSON
++            else -> subject
++        }
++        val range = when (resolved) {
++            SceneSubject.PERSON -> if (isFrontCamera) 1f to 1.5f else 2f to 3f
++            SceneSubject.GROUP -> 1f to 1.5f
++            SceneSubject.FOOD -> 1f to 2f
++            SceneSubject.PET -> if (isFrontCamera) 1f to 2f else 1.5f to 3f
++            SceneSubject.VEHICLE -> 1f to 2f
++            SceneSubject.LANDSCAPE -> 1f to 1f
++            SceneSubject.PLANT -> 1f to 2f
++            SceneSubject.DOCUMENT -> 1f to 1.5f
++            SceneSubject.OBJECT -> 1f to 2f
++            SceneSubject.UNKNOWN -> 1f to 1f
++        }
++        val inRange = currentZoom >= range.first - RANGE_TOLERANCE && currentZoom <= range.second + RANGE_TOLERANCE
++        return ExpertLensRecommendation(
++            minZoom = range.first,
++            maxZoom = range.second,
++            label = "추천 ${formatRange(range.first, range.second)}",
++            isCurrentInRange = inRange,
++        )
++    }
++
++    private fun formatRange(min: Float, max: Float): String {
++        val minText = formatZoom(min)
++        val maxText = formatZoom(max)
++        return if (minText == maxText) "${minText}배" else "$minText~${maxText}배"
++    }
++
++    private fun formatZoom(value: Float): String =
++        if (value % 1f == 0f) value.toInt().toString() else "%.1f".format(value)
++
++    private const val RANGE_TOLERANCE = 0.12f
++}
+diff --git a/app/src/main/java/kr/co/chalkakcoach/subject/SubjectRecognitionBadge.kt b/app/src/main/java/kr/co/chalkakcoach/subject/SubjectRecognitionBadge.kt
+index 64c154c..ba969e9 100644
+--- a/app/src/main/java/kr/co/chalkakcoach/subject/SubjectRecognitionBadge.kt
++++ b/app/src/main/java/kr/co/chalkakcoach/subject/SubjectRecognitionBadge.kt
+@@ -2,6 +2,7 @@ package kr.co.chalkakcoach.subject
+ 
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
++import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.Spacer
+ import androidx.compose.foundation.layout.padding
+@@ -19,6 +20,7 @@ import kotlin.math.roundToInt
+ @Composable
+ fun SubjectRecognitionBadge(
+     state: SubjectRecognitionState,
++    lensRecommendation: ExpertLensRecommendation? = null,
+     modifier: Modifier = Modifier,
+ ) {
+     val accent = when (state.subject) {
+@@ -31,22 +33,34 @@ fun SubjectRecognitionBadge(
+         SceneSubject.DOCUMENT -> Color(0xFFD1B3FF)
+         SceneSubject.OBJECT -> Color.White
+     }
+-    Row(
++    Column(
+         modifier = modifier
+             .background(Color.Black.copy(alpha = 0.58f), RoundedCornerShape(16.dp))
+             .border(1.dp, accent.copy(alpha = 0.75f), RoundedCornerShape(16.dp))
+             .padding(horizontal = 10.dp, vertical = 6.dp),
+-        verticalAlignment = Alignment.CenterVertically,
++        horizontalAlignment = Alignment.CenterHorizontally,
+     ) {
+-        Text("피사체", color = Color.White.copy(alpha = 0.72f))
+-        Spacer(Modifier.width(6.dp))
+-        Text(
+-            text = if (state.subject == SceneSubject.UNKNOWN) {
+-                state.subject.koreanLabel
+-            } else {
+-                "${state.subject.koreanLabel} ${(state.confidence * 100).roundToInt()}%"
+-            },
+-            color = accent,
+-        )
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            Text("피사체", color = Color.White.copy(alpha = 0.72f))
++            Spacer(Modifier.width(6.dp))
++            Text(
++                text = if (state.subject == SceneSubject.UNKNOWN) {
++                    state.subject.koreanLabel
++                } else {
++                    "${state.subject.koreanLabel} ${(state.confidence * 100).roundToInt()}%"
++                },
++                color = accent,
++            )
++        }
++        lensRecommendation?.let { recommendation ->
++            Text(
++                text = if (recommendation.isCurrentInRange) {
++                    "${recommendation.label} · 적절"
++                } else {
++                    recommendation.label
++                },
++                color = if (recommendation.isCurrentInRange) Color(0xFF35D07F) else Color.White.copy(alpha = 0.78f),
++            )
++        }
+     }
+ }
+diff --git a/chalkak_v090_work/ChalkakCoach/app/src/test/java/kr/co/chalkakcoach/camera/SceneAutoFramingControllerTest.kt b/app/src/test/java/kr/co/chalkakcoach/camera/SceneAutoFramingControllerTest.kt
+new file mode 100644
+index 0000000..2cac5f9
+--- /dev/null
++++ b/app/src/test/java/kr/co/chalkakcoach/camera/SceneAutoFramingControllerTest.kt
+@@ -0,0 +1,121 @@
++package kr.co.chalkakcoach.camera
++
++import kr.co.chalkakcoach.subject.SceneSubject
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class SceneAutoFramingControllerTest {
++    @Test
++    fun smallCenteredFoodZoomsInGradually() {
++        val result = evaluate(SceneSubject.FOOD, area = 0.08f)
++        assertEquals(AutoFramingStatus.ADJUSTING, result.status)
++        assertTrue(result.shouldApplyZoom)
++        assertTrue(result.nextZoomRatio > 1f)
++        assertTrue(result.nextZoomRatio < 1.2f)
++    }
++
++    @Test
++    fun largeFoodZoomsOut() {
++        val result = evaluate(SceneSubject.FOOD, area = 0.75f, current = 2f)
++        assertEquals(AutoFramingStatus.ADJUSTING, result.status)
++        assertTrue(result.nextZoomRatio < 2f)
++    }
++
++    @Test
++    fun centeredFoodAtTargetAreaLocks() {
++        val result = evaluate(SceneSubject.FOOD, area = 0.38f, current = 1.7f)
++        assertEquals(AutoFramingStatus.LOCKED, result.status)
++        assertFalse(result.shouldApplyZoom)
++    }
++
++    @Test
++    fun offCenterObjectDoesNotZoomIn() {
++        val result = evaluate(SceneSubject.OBJECT, area = 0.06f, centerX = 0.83f, current = 1.5f)
++        assertTrue(result.nextZoomRatio <= 1.5f)
++    }
++
++    @Test
++    fun landscapeReturnsTowardWideView() {
++        val result = evaluate(SceneSubject.LANDSCAPE, area = 0.3f, current = 2f)
++        assertEquals(AutoFramingStatus.ADJUSTING, result.status)
++        assertTrue(result.nextZoomRatio < 2f)
++    }
++
++    @Test
++    fun landscapeAtMinimumLocks() {
