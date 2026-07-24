@@ -9,6 +9,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -20,8 +22,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 /**
- * 휴대전화 Ollama·기본 규칙·GPT·Gemini 공급자와 모델, API 키를 설정하는 화면입니다.
- * 저장된 클라우드 API 키는 다시 평문으로 표시하지 않으며 새 값을 입력한 경우에만 교체합니다.
+ * 기본 규칙·GPT·Gemini 공급자와 API 키를 설정하는 화면입니다.
+ * 휴대전화 Ollama는 기본 경로에서 제외하고 사용자가 직접 켜는 고급 실험 기능으로만 제공합니다.
  */
 public class AiSettingsActivity extends Activity {
     private static final String OPENAI_API_KEY_URL = "https://platform.openai.com/api-keys";
@@ -30,16 +32,16 @@ public class AiSettingsActivity extends Activity {
             "https://github.com/sunshine0523/OllamaServer/releases";
 
     private static final String[] PROVIDER_LABELS = {
-            "Ollama (이 휴대전화에서 실행)",
-            "기본 규칙 분석 (비상용·AI 아님)",
+            "기본 규칙 분석 (권장·인터넷 불필요)",
             "GPT (OpenAI API)",
-            "Gemini (Google API)"
+            "Gemini (Google API)",
+            "Ollama (고급 실험 기능)"
     };
     private static final String[] PROVIDER_VALUES = {
-            AiSettings.PROVIDER_OLLAMA,
             AiSettings.PROVIDER_LOCAL,
             AiSettings.PROVIDER_OPENAI,
-            AiSettings.PROVIDER_GEMINI
+            AiSettings.PROVIDER_GEMINI,
+            AiSettings.PROVIDER_OLLAMA
     };
 
     private static final int COLOR_PRIMARY = Color.rgb(35, 92, 190);
@@ -64,6 +66,9 @@ public class AiSettingsActivity extends Activity {
     private Button geminiTestButton;
     private CheckBox confirmCloudCheck;
     private CheckBox fallbackLocalCheck;
+    private CheckBox experimentalOllamaCheck;
+    private LinearLayout ollamaSection;
+    private boolean loadingValues;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,7 +77,7 @@ public class AiSettingsActivity extends Activity {
         loadValues();
     }
 
-    /** 초보자도 한 화면에서 공급자, 모델, 키, 연결 상태를 관리하도록 설정 화면을 구성합니다. */
+    /** 초보자도 안정적인 분석 방식과 클라우드 API 설정을 한 화면에서 관리하도록 구성합니다. */
     private void buildScreen() {
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
@@ -86,46 +91,42 @@ public class AiSettingsActivity extends Activity {
         root.addView(title, fullWrap());
 
         TextView guide = text(
-                "Ollama는 이 휴대전화 안에서 실행되어 입력 내용이 외부로 나가지 않습니다. GPT와 Gemini는 각 회사의 클라우드 API를 사용합니다.",
+                "날짜·요일·시간은 기기 내부 규칙으로 먼저 계산합니다. GPT와 Gemini는 긴 문장의 의미 분리와 제목 정리에 사용합니다. 휴대전화 Ollama는 안정성 문제로 기본 기능에서 제외했습니다.",
                 14, Color.DKGRAY);
         guide.setPadding(0, dp(8), 0, dp(18));
         root.addView(guide, fullWrap());
 
-        root.addView(sectionTitle("사용할 AI"), fullWrap());
+        root.addView(sectionTitle("사용할 분석 방식"), fullWrap());
         providerSpinner = new Spinner(this);
         ArrayAdapter<String> providerAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_spinner_item, PROVIDER_LABELS);
         providerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         providerSpinner.setAdapter(providerAdapter);
+        providerSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (loadingValues) return;
+                if (AiSettings.PROVIDER_OLLAMA.equals(PROVIDER_VALUES[position])
+                        && !experimentalOllamaCheck.isChecked()) {
+                    Toast.makeText(AiSettingsActivity.this,
+                            "Ollama를 사용하려면 아래의 고급 실험 기능을 먼저 켜세요.",
+                            Toast.LENGTH_LONG).show();
+                    providerSpinner.setSelection(providerIndex(AiSettings.PROVIDER_LOCAL));
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                // 선택이 없는 경우 기본 규칙 분석을 사용합니다.
+            }
+        });
         root.addView(providerSpinner, fieldParams());
 
-        root.addView(sectionTitle("Ollama · 휴대전화 로컬 AI"), fullWrap());
-        TextView ollamaGuide = text(
-                "Ollama Server 앱을 같은 휴대전화에서 실행합니다. MyBrain AI는 외부 PC가 아닌 127.0.0.1 주소에만 연결합니다.",
+        TextView routingGuide = text(
+                "권장: 기본 규칙 분석을 평소에 사용하고, 복잡한 문장을 여러 항목으로 나눌 때 GPT 또는 Gemini를 선택하세요. 클라우드 AI를 선택해도 날짜 범위는 앱이 먼저 검증합니다.",
                 13, Color.rgb(50, 92, 145));
-        ollamaGuide.setPadding(dp(10), dp(8), dp(10), dp(10));
-        root.addView(ollamaGuide, fullWrap());
-
-        Button ollamaInstall = secondaryButton("Ollama Server 설치 페이지 열기");
-        ollamaInstall.setOnClickListener(v -> openExternalPage(OLLAMA_ANDROID_URL));
-        root.addView(ollamaInstall, buttonParams());
-
-        ollamaAddressInput = field("Ollama 주소", AiSettings.DEFAULT_OLLAMA_BASE_URL, false);
-        root.addView(ollamaAddressInput, fieldParams());
-        ollamaModelInput = field("Ollama 모델 이름", AiSettings.DEFAULT_OLLAMA_MODEL, false);
-        root.addView(ollamaModelInput, fieldParams());
-
-        TextView modelGuide = text(
-                "권장: qwen3:1.7b · 더 가벼운 모델: gemma3:1b. 먼저 Ollama Server 앱에서 모델을 내려받으세요.",
-                13, COLOR_MUTED);
-        modelGuide.setPadding(dp(8), 0, dp(8), dp(8));
-        root.addView(modelGuide, fullWrap());
-
-        ollamaTestButton = secondaryButton("휴대전화 Ollama 연결 테스트");
-        ollamaTestButton.setOnClickListener(v -> testProvider(AiSettings.PROVIDER_OLLAMA));
-        root.addView(ollamaTestButton, buttonParams());
-        ollamaTestStatus = statusText();
-        root.addView(ollamaTestStatus, statusParams());
+        routingGuide.setPadding(dp(10), dp(6), dp(10), dp(12));
+        root.addView(routingGuide, fullWrap());
 
         root.addView(sectionTitle("GPT 설정"), fullWrap());
         Button openAiKeyPage = secondaryButton("OpenAI API 키 만들기 페이지 열기");
@@ -166,7 +167,7 @@ public class AiSettingsActivity extends Activity {
         root.addView(clearGemini, buttonParams());
 
         TextView testGuide = text(
-                "연결 테스트는 Ollama 모델 목록 또는 클라우드 모델 정보만 조회합니다. 일정·메모 문장은 전송하지 않습니다.",
+                "GPT·Gemini 연결 테스트는 API 키와 모델 접근 가능 여부를 확인합니다. 실제 일정 문장은 보내지 않습니다.",
                 13, Color.rgb(50, 92, 145));
         testGuide.setPadding(dp(12), dp(10), dp(12), dp(10));
         root.addView(testGuide, fullWrap());
@@ -183,10 +184,53 @@ public class AiSettingsActivity extends Activity {
         root.addView(fallbackLocalCheck, fullWrap());
 
         TextView security = text(
-                "GPT·Gemini API 키는 Android Keystore로 암호화해 이 휴대전화에 저장합니다. Ollama는 API 키가 필요하지 않으며 localhost에만 연결합니다.",
+                "GPT·Gemini API 키는 Android Keystore로 암호화해 이 휴대전화에 저장합니다. 학생 개인정보나 민감한 상담 내용은 클라우드로 보내지 않는 것이 안전합니다.",
                 13, Color.rgb(125, 74, 20));
         security.setPadding(dp(12), dp(12), dp(12), dp(16));
         root.addView(security, fullWrap());
+
+        root.addView(sectionTitle("고급 실험 기능"), fullWrap());
+        experimentalOllamaCheck = new CheckBox(this);
+        experimentalOllamaCheck.setText("휴대전화 Ollama 실험 기능 사용");
+        experimentalOllamaCheck.setTextSize(15);
+        experimentalOllamaCheck.setOnCheckedChangeListener((buttonView, checked) -> {
+            updateOllamaSectionVisibility(checked);
+            if (!checked && selectedProvider().equals(AiSettings.PROVIDER_OLLAMA)) {
+                providerSpinner.setSelection(providerIndex(AiSettings.PROVIDER_LOCAL));
+            }
+        });
+        root.addView(experimentalOllamaCheck, fullWrap());
+
+        TextView experimentWarning = text(
+                "Ollama는 별도 커뮤니티 서버 앱, 큰 메모리, 긴 모델 적재 시간이 필요합니다. 발열·배터리 소모·시간 초과가 발생할 수 있습니다.",
+                13, COLOR_ERROR);
+        experimentWarning.setPadding(dp(10), dp(4), dp(10), dp(8));
+        root.addView(experimentWarning, fullWrap());
+
+        ollamaSection = new LinearLayout(this);
+        ollamaSection.setOrientation(LinearLayout.VERTICAL);
+
+        Button ollamaInstall = secondaryButton("Ollama Server 설치 페이지 열기");
+        ollamaInstall.setOnClickListener(v -> openExternalPage(OLLAMA_ANDROID_URL));
+        ollamaSection.addView(ollamaInstall, buttonParams());
+
+        ollamaAddressInput = field("Ollama 주소", AiSettings.DEFAULT_OLLAMA_BASE_URL, false);
+        ollamaSection.addView(ollamaAddressInput, fieldParams());
+        ollamaModelInput = field("Ollama 모델 이름", AiSettings.DEFAULT_OLLAMA_MODEL, false);
+        ollamaSection.addView(ollamaModelInput, fieldParams());
+
+        TextView modelGuide = text(
+                "휴대전화에서는 qwen3:0.6b처럼 작은 모델을 권장합니다. Ollama Server 앱에서 모델을 먼저 내려받아야 합니다.",
+                13, COLOR_MUTED);
+        modelGuide.setPadding(dp(8), 0, dp(8), dp(8));
+        ollamaSection.addView(modelGuide, fullWrap());
+
+        ollamaTestButton = secondaryButton("휴대전화 Ollama 실제 분석 테스트");
+        ollamaTestButton.setOnClickListener(v -> testProvider(AiSettings.PROVIDER_OLLAMA));
+        ollamaSection.addView(ollamaTestButton, buttonParams());
+        ollamaTestStatus = statusText();
+        ollamaSection.addView(ollamaTestStatus, statusParams());
+        root.addView(ollamaSection, fullWrap());
 
         Button save = primaryButton("설정 저장");
         save.setOnClickListener(v -> saveValues());
@@ -200,7 +244,10 @@ public class AiSettingsActivity extends Activity {
     }
 
     private void loadValues() {
+        loadingValues = true;
         AiSettings settings = AiSettings.load(this);
+        experimentalOllamaCheck.setChecked(settings.experimentalOllamaEnabled);
+        updateOllamaSectionVisibility(settings.experimentalOllamaEnabled);
         providerSpinner.setSelection(providerIndex(settings.provider));
         ollamaAddressInput.setText(settings.ollamaBaseUrl);
         ollamaModelInput.setText(settings.ollamaModel);
@@ -209,12 +256,23 @@ public class AiSettingsActivity extends Activity {
         confirmCloudCheck.setChecked(settings.confirmBeforeCloud);
         fallbackLocalCheck.setChecked(settings.fallbackToLocal);
         updateKeyStatuses();
+        loadingValues = false;
+    }
+
+    private void updateOllamaSectionVisibility(boolean visible) {
+        if (ollamaSection != null) ollamaSection.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     /** 새로 입력한 키를 우선 사용하고, 비어 있으면 기기에 저장된 암호화 키로 연결을 검사합니다. */
     private void testProvider(String provider) {
         final boolean ollama = AiSettings.PROVIDER_OLLAMA.equals(provider);
         final boolean openAi = AiSettings.PROVIDER_OPENAI.equals(provider);
+
+        if (ollama && !experimentalOllamaCheck.isChecked()) {
+            Toast.makeText(this, "Ollama 실험 기능을 먼저 켜세요.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
         final EditText modelInput = ollama ? ollamaModelInput
                 : (openAi ? openAiModelInput : geminiModelInput);
         final TextView statusView = ollama ? ollamaTestStatus
@@ -275,7 +333,7 @@ public class AiSettingsActivity extends Activity {
     }
 
     private void setTestButtonsEnabled(boolean enabled) {
-        ollamaTestButton.setEnabled(enabled);
+        if (ollamaTestButton != null) ollamaTestButton.setEnabled(enabled);
         openAiTestButton.setEnabled(enabled);
         geminiTestButton.setEnabled(enabled);
     }
@@ -283,8 +341,14 @@ public class AiSettingsActivity extends Activity {
     /** 일반 설정과 새로 입력된 API 키를 각각 안전한 저장소에 기록합니다. */
     private void saveValues() {
         try {
+            String selected = selectedProvider();
+            boolean experimental = experimentalOllamaCheck.isChecked();
             String ollamaAddress = ollamaAddressInput.getText().toString().trim();
-            if (!AiSettings.isAllowedOllamaBaseUrl(ollamaAddress)) {
+
+            if (AiSettings.PROVIDER_OLLAMA.equals(selected) && !experimental) {
+                selected = AiSettings.PROVIDER_LOCAL;
+            }
+            if (experimental && !AiSettings.isAllowedOllamaBaseUrl(ollamaAddress)) {
                 Toast.makeText(this,
                         "Ollama 주소는 같은 휴대전화의 127.0.0.1 또는 localhost만 사용할 수 있습니다.",
                         Toast.LENGTH_LONG).show();
@@ -292,7 +356,8 @@ public class AiSettingsActivity extends Activity {
             }
 
             AiSettings settings = AiSettings.load(this);
-            settings.provider = PROVIDER_VALUES[providerSpinner.getSelectedItemPosition()];
+            settings.provider = selected;
+            settings.experimentalOllamaEnabled = experimental;
             settings.ollamaBaseUrl = ollamaAddress;
             settings.ollamaModel = ollamaModelInput.getText().toString().trim();
             settings.openAiModel = openAiModelInput.getText().toString().trim();
@@ -303,8 +368,12 @@ public class AiSettingsActivity extends Activity {
 
             String openAiKey = openAiKeyInput.getText().toString().trim();
             String geminiKey = geminiKeyInput.getText().toString().trim();
-            if (!openAiKey.isEmpty()) SecureApiKeyStore.save(this, SecureApiKeyStore.KEY_OPENAI, openAiKey);
-            if (!geminiKey.isEmpty()) SecureApiKeyStore.save(this, SecureApiKeyStore.KEY_GEMINI, geminiKey);
+            if (!openAiKey.isEmpty()) {
+                SecureApiKeyStore.save(this, SecureApiKeyStore.KEY_OPENAI, openAiKey);
+            }
+            if (!geminiKey.isEmpty()) {
+                SecureApiKeyStore.save(this, SecureApiKeyStore.KEY_GEMINI, geminiKey);
+            }
 
             if (AiSettings.PROVIDER_OPENAI.equals(settings.provider)
                     && !SecureApiKeyStore.has(this, SecureApiKeyStore.KEY_OPENAI)) {
@@ -324,6 +393,12 @@ public class AiSettingsActivity extends Activity {
         } catch (Exception e) {
             Toast.makeText(this, "AI 설정 저장 실패: " + safeMessage(e), Toast.LENGTH_LONG).show();
         }
+    }
+
+    private String selectedProvider() {
+        int position = providerSpinner.getSelectedItemPosition();
+        if (position < 0 || position >= PROVIDER_VALUES.length) return AiSettings.PROVIDER_LOCAL;
+        return PROVIDER_VALUES[position];
     }
 
     private void openExternalPage(String url) {
