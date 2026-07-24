@@ -1,0 +1,129 @@
++        val result = evaluate(SceneSubject.LANDSCAPE, area = 0.3f, current = 1f)
++        assertEquals(AutoFramingStatus.LOCKED, result.status)
++        assertFalse(result.shouldApplyZoom)
++    }
++
++    @Test
++    fun lowConfidenceSceneWaits() {
++        val result = evaluate(SceneSubject.FOOD, area = 0.08f, confidence = 0.3f)
++        assertEquals(AutoFramingStatus.WAITING, result.status)
++        assertFalse(result.shouldApplyZoom)
++    }
++
++    @Test
++    fun complexGenericObjectDoesNotAutoZoom() {
++        val result = evaluate(SceneSubject.OBJECT, area = 0.08f, edgeDensity = 0.9f)
++        assertEquals(AutoFramingStatus.WAITING, result.status)
++        assertFalse(result.shouldApplyZoom)
++    }
++
++    @Test
++    fun manualZoomPausesSceneAutomation() {
++        val result = evaluate(SceneSubject.FOOD, area = 0.08f, now = 10_000L, pauseUntil = 12_000L)
++        assertEquals(AutoFramingStatus.PAUSED, result.status)
++        assertFalse(result.shouldApplyZoom)
++    }
++
++    @Test
++    fun frontCameraSceneZoomIsLimitedToTwoTimes() {
++        var zoom = 1.95f
++        repeat(20) {
++            zoom = evaluate(
++                SceneSubject.FOOD,
++                area = 0.02f,
++                current = zoom,
++                front = true,
++                max = 10f,
++            ).nextZoomRatio
++        }
++        assertTrue(zoom <= 2.0001f)
++    }
++
++    private fun evaluate(
++        subject: SceneSubject,
++        area: Float,
++        confidence: Float = 0.9f,
++        centerX: Float = 0.5f,
++        centerY: Float = 0.5f,
++        edgeDensity: Float = 0.3f,
++        current: Float = 1f,
++        min: Float = 1f,
++        max: Float = 10f,
++        front: Boolean = false,
++        now: Long = 10_000L,
++        pauseUntil: Long = 0L,
++        fresh: Boolean = true,
++        reset: Boolean = false,
++    ) = SceneAutoFramingController.evaluate(
++        subject = subject,
++        subjectConfidence = confidence,
++        saliencyX = centerX,
++        saliencyY = centerY,
++        salientAreaRatio = area,
++        edgeDensity = edgeDensity,
++        currentZoomRatio = current,
++        minZoomRatio = min,
++        maxZoomRatio = max,
++        isFrontCamera = front,
++        enabled = true,
++        nowMillis = now,
++        manualPauseUntilMillis = pauseUntil,
++        analysisFresh = fresh,
++        resetWhenUnknown = reset,
++    )
++}
+diff --git a/chalkak_v090_work/ChalkakCoach/app/src/test/java/kr/co/chalkakcoach/subject/ExpertLensAdvisorTest.kt b/app/src/test/java/kr/co/chalkakcoach/subject/ExpertLensAdvisorTest.kt
+new file mode 100644
+index 0000000..5f8a2a6
+--- /dev/null
++++ b/app/src/test/java/kr/co/chalkakcoach/subject/ExpertLensAdvisorTest.kt
+@@ -0,0 +1,49 @@
++package kr.co.chalkakcoach.subject
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ExpertLensAdvisorTest {
++    @Test
++    fun rearPortraitRecommendsTwoToThreeTimes() {
++        val result = ExpertLensAdvisor.recommend(SceneSubject.PERSON, 1, 2.5f, false)
++        assertEquals(2f, result.minZoom, 0.001f)
++        assertEquals(3f, result.maxZoom, 0.001f)
++        assertTrue(result.isCurrentInRange)
++    }
++
++    @Test
++    fun frontPortraitUsesWiderRange() {
++        val result = ExpertLensAdvisor.recommend(SceneSubject.PERSON, 1, 1.2f, true)
++        assertEquals(1f, result.minZoom, 0.001f)
++        assertEquals(1.5f, result.maxZoom, 0.001f)
++    }
++
++    @Test
++    fun multipleFacesOverrideWrongLabelAsGroup() {
++        val result = ExpertLensAdvisor.recommend(SceneSubject.FOOD, 3, 1.2f, false)
++        assertEquals("추천 1~1.5배", result.label)
++    }
++
++    @Test
++    fun landscapeRecommendsOneTimes() {
++        val result = ExpertLensAdvisor.recommend(SceneSubject.LANDSCAPE, 0, 1f, false)
++        assertEquals("추천 1배", result.label)
++        assertTrue(result.isCurrentInRange)
++    }
++
++    @Test
++    fun foodAtThreeTimesIsOutsideRecommendation() {
++        val result = ExpertLensAdvisor.recommend(SceneSubject.FOOD, 0, 3f, false)
++        assertFalse(result.isCurrentInRange)
++    }
++
++    @Test
++    fun documentUsesOneToOnePointFiveTimes() {
++        val result = ExpertLensAdvisor.recommend(SceneSubject.DOCUMENT, 0, 1.3f, false)
++        assertEquals("추천 1~1.5배", result.label)
++        assertTrue(result.isCurrentInRange)
++    }
++}
