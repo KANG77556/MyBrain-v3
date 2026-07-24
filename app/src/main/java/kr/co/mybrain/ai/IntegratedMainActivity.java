@@ -14,7 +14,7 @@ import android.widget.TextView;
 
 /**
  * 기존 일정·할 일·메모 기능에 백업과 AI 공급자 설정을 통합한 실제 메인 화면입니다.
- * 기본 규칙 모드는 MainActivity 분석기를 유지하고, Ollama·GPT·Gemini는 AI 입력 화면으로 연결합니다.
+ * 기본 규칙 모드는 MainActivity 분석기를 유지하고, Ollama·GPT·Gemini는 다중 AI 입력 화면으로 연결합니다.
  */
 public class IntegratedMainActivity extends MainActivity {
     private static final int COLOR_PRIMARY = Color.rgb(35, 92, 190);
@@ -34,7 +34,7 @@ public class IntegratedMainActivity extends MainActivity {
 
         if (mainRoot.getChildCount() > 1 && mainRoot.getChildAt(1) instanceof TextView) {
             TextView versionText = (TextView) mainRoot.getChildAt(1);
-            versionText.setText("v1.6.4 · Ollama 속도·취소 개선");
+            versionText.setText("v1.7.0 · 여러 일정·할 일 자동 분리");
         }
 
         AiSettings settings = AiSettings.load(this);
@@ -50,11 +50,10 @@ public class IntegratedMainActivity extends MainActivity {
 
         if (AiSettings.PROVIDER_LOCAL.equals(settings.provider)) {
             addButton.setText("＋ 기본 규칙 분석 및 추가");
-            // MainActivity가 등록한 기존 규칙 분석 클릭 동작을 그대로 사용합니다.
             return;
         }
 
-        addButton.setText("＋ " + settings.providerLabel() + " AI 분석 및 추가");
+        addButton.setText("＋ " + settings.providerLabel() + " 여러 항목 분석");
         addButton.setOnClickListener(v -> startActivityForResult(
                 new Intent(this, AiInputActivity.class), REQUEST_AI_ANALYSIS));
     }
@@ -77,15 +76,11 @@ public class IntegratedMainActivity extends MainActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(50));
         rowParams.setMargins(0, 0, 0, dp(8));
 
-        // 제목·요약·분석 버튼 다음, 검색창 바로 앞에 배치합니다.
         int insertIndex = Math.min(4, mainRoot.getChildCount());
         mainRoot.addView(row, insertIndex, rowParams);
     }
 
-    /**
-     * 달력과 선택 날짜의 항목 목록을 하나의 ScrollView 안에 넣습니다.
-     * 작은 화면이나 6주가 표시되는 달에도 달력 마지막 행이 잘리지 않습니다.
-     */
+    /** 달력과 선택 날짜의 항목 목록을 하나의 ScrollView 안에 넣습니다. */
     private void makeCalendarAndListScrollable(LinearLayout mainRoot) {
         EventCalendarView calendar = null;
         ScrollView contentScroll = null;
@@ -129,7 +124,6 @@ public class IntegratedMainActivity extends MainActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if ((requestCode == REQUEST_AI_SETTINGS || requestCode == REQUEST_AI_ANALYSIS)
                 && resultCode == RESULT_OK) {
-            // 설정 변경 또는 새 항목 저장 후 메인 화면과 목록을 최신 상태로 다시 구성합니다.
             recreate();
         }
     }

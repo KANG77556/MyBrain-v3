@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,6 +14,7 @@ import android.os.SystemClock;
 import android.view.Gravity;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -21,13 +23,15 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 /**
- * Ollama·GPT·Gemini로 문장을 분석하고 결과를 확인한 뒤 저장하는 화면입니다.
- * Ollama는 같은 휴대전화의 로컬 서버를 사용하며, 기본 규칙 분석은 기존 MainActivity를 재사용합니다.
+ * Ollama·GPT·Gemini로 문장을 분석하고 여러 결과를 확인한 뒤 한꺼번에 저장하는 화면입니다.
+ * Ollama는 같은 휴대전화의 로컬 서버를 사용하며 기본 규칙 분석은 기존 MainActivity를 재사용합니다.
  */
 public class AiInputActivity extends Activity {
     private static final String PREFS = "mybrain_data";
@@ -96,7 +100,7 @@ public class AiInputActivity extends Activity {
         root.addView(providerText, fullWrap());
 
         input = new EditText(this);
-        input.setHint("예: 다음 주 월요일 오후 2시 교무실 회의 준비 자료 확인");
+        input.setHint("예: 내일 오전 9시 교무회의, 금요일까지 보고서 제출, 김 선생님께 전화하기");
         input.setTextSize(16);
         input.setGravity(Gravity.TOP);
         input.setMinLines(8);
@@ -108,7 +112,7 @@ public class AiInputActivity extends Activity {
         noticeText.setPadding(0, dp(12), 0, dp(12));
         root.addView(noticeText, fullWrap());
 
-        analyzeButton = primaryButton("AI로 분석");
+        analyzeButton = primaryButton("AI로 여러 항목 분석");
         analyzeButton.setOnClickListener(v -> requestAnalysis());
         root.addView(analyzeButton, buttonParams());
 
@@ -128,14 +132,14 @@ public class AiInputActivity extends Activity {
         AiSettings settings = AiSettings.load(this);
         providerText.setText("현재 방식: " + settings.providerLabel() + " · " + settings.selectedModel());
         analyzeButton.setText(settings.isModelProvider()
-                ? settings.providerLabel() + "로 분석" : "기본 규칙으로 분석");
+                ? settings.providerLabel() + "로 여러 항목 분석" : "기본 규칙으로 분석");
 
         if (settings.isOllamaProvider()) {
-            noticeText.setText("Ollama는 이 휴대전화의 127.0.0.1 서버에서 실행됩니다. 첫 분석은 모델을 메모리에 올리느라 시간이 더 걸릴 수 있습니다.");
+            noticeText.setText("Ollama는 이 휴대전화에서 실행됩니다. 한 문장에서 최대 8개의 일정·할 일·메모를 분리합니다.");
         } else if (settings.isCloudProvider()) {
-            noticeText.setText("GPT 또는 Gemini를 선택하면 입력 문장이 해당 회사의 클라우드 API로 전송됩니다. 개인정보 포함 여부를 확인하세요.");
+            noticeText.setText("GPT 또는 Gemini를 선택하면 입력 문장이 클라우드 API로 전송됩니다. 분석 결과는 저장 전에 선택하고 수정할 수 있습니다.");
         } else {
-            noticeText.setText("기본 규칙 분석은 AI 서버 없이 기기 내부에서 날짜·시간과 단어 규칙을 사용합니다.");
+            noticeText.setText("기본 규칙 분석은 한 번에 한 항목을 처리합니다. 여러 항목 분리는 Ollama·GPT·Gemini에서 사용할 수 있습니다.");
         }
     }
 
@@ -176,7 +180,7 @@ public class AiInputActivity extends Activity {
                 new AlertDialog.Builder(this)
                         .setTitle(settings.providerLabel() + "로 전송")
                         .setMessage("입력 문장을 " + settings.providerLabel()
-                                + " 클라우드 API로 보내 분석할까요? 개인정보가 포함됐는지 확인하세요.")
+                                + " 클라우드 API로 보내 여러 일정·할 일·메모로 분리할까요? 개인정보가 포함됐는지 확인하세요.")
                         .setNegativeButton("취소", null)
                         .setPositiveButton("전송 및 분석", (dialog, which) -> performAiAnalysis(settings, value))
                         .show();
@@ -184,7 +188,6 @@ public class AiInputActivity extends Activity {
             }
         }
 
-        // Ollama는 같은 휴대전화 안에서 실행되므로 외부 전송 확인 없이 분석합니다.
         performAiAnalysis(settings, value);
     }
 
@@ -205,15 +208,14 @@ public class AiInputActivity extends Activity {
 
         currentTask = executor.submit(() -> {
             try {
-                AiAnalysisResult result = CloudAiAnalyzer.analyze(
+                List<AiAnalysisResult> results = CloudAiAnalyzer.analyzeMultiple(
                         settings, finalApiKey, value, requestControl);
                 runOnUiThread(() -> {
                     if (!isCurrentRequest(requestControl) || isFinishing() || isDestroyed()) return;
                     finishAnalysisUi();
-                    showResultEditor(result);
+                    showResultEditor(results);
                 });
             } catch (CloudAiAnalyzer.AnalysisCancelledException ignored) {
-                // 사용자가 취소한 정상 흐름이므로 오류창을 띄우지 않습니다.
                 runOnUiThread(() -> {
                     if (!isCurrentRequest(requestControl)) return;
                     finishAnalysisUi();
@@ -254,7 +256,7 @@ public class AiInputActivity extends Activity {
         content.addView(progressHintText, fullWrap());
 
         progressDialog = new AlertDialog.Builder(this)
-                .setTitle(currentProviderLabel + " 분석 중")
+                .setTitle(currentProviderLabel + " 다중 분석 중")
                 .setView(content)
                 .setNegativeButton("분석 취소", null)
                 .create();
@@ -280,21 +282,21 @@ public class AiInputActivity extends Activity {
             if (seconds < 4) {
                 progressStatusText.setText("Ollama 연결 중 · " + seconds + "초");
             } else if (seconds < 20) {
-                progressStatusText.setText("모델 준비 및 문장 분석 중 · " + seconds + "초");
+                progressStatusText.setText("문장 분리 및 항목 분석 중 · " + seconds + "초");
             } else {
-                progressStatusText.setText("문장 분석 중 · " + seconds + "초");
+                progressStatusText.setText("여러 결과 정리 중 · " + seconds + "초");
             }
 
             if (seconds < 15) {
                 progressHintText.setText("첫 실행은 모델을 메모리에 올리는 시간이 필요합니다.");
             } else if (seconds < 45) {
-                progressHintText.setText("qwen3 사고 모드는 꺼져 있으며 짧은 JSON 결과만 생성합니다.");
+                progressHintText.setText("최대 8개의 일정·할 일·메모를 짧은 JSON으로 생성합니다.");
             } else {
-                progressHintText.setText("오래 걸리면 취소 후 gemma3:1b 모델을 사용해 보세요.");
+                progressHintText.setText("오래 걸리면 취소 후 더 작은 모델을 사용해 보세요.");
             }
         } else {
             progressStatusText.setText(currentProviderLabel + " 응답 대기 중 · " + seconds + "초");
-            progressHintText.setText("네트워크 상태와 모델 사용량에 따라 시간이 달라질 수 있습니다.");
+            progressHintText.setText("문장을 여러 항목으로 분리하고 있습니다.");
         }
     }
 
@@ -329,71 +331,137 @@ public class AiInputActivity extends Activity {
         if (analyzeButton != null) analyzeButton.setEnabled(true);
     }
 
-    /** 분석 결과를 수정 가능한 확인창으로 보여주고 사용자 승인 후 저장합니다. */
-    private void showResultEditor(AiAnalysisResult result) {
+    /** 여러 분석 결과를 선택·수정할 수 있는 스크롤 확인창으로 표시합니다. */
+    private void showResultEditor(List<AiAnalysisResult> results) {
+        if (results == null || results.isEmpty()) {
+            Toast.makeText(this, "분석 결과가 없습니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(dp(18), 0, dp(18), 0);
+        form.setPadding(dp(14), dp(4), dp(14), dp(16));
 
-        EditText type = field("분류: 일정 / 할 일 / 메모", result.type);
-        EditText title = field("제목", result.title);
-        EditText date = field("날짜: yyyy-MM-dd", result.date);
-        EditText time = field("시간: HH:mm", result.time);
-        TextView repeatTitle = text("반복 설정", 14, Color.DKGRAY);
-        Spinner repeatSpinner = new Spinner(this);
+        TextView guide = text("저장하지 않을 항목은 체크를 해제하고, 잘못된 내용은 직접 수정하세요.",
+                13, Color.DKGRAY);
+        guide.setPadding(dp(4), 0, dp(4), dp(10));
+        form.addView(guide, fullWrap());
+
+        List<ResultEditorFields> editors = new ArrayList<>();
+        for (int i = 0; i < results.size(); i++) {
+            ResultEditorFields fields = createResultSection(i + 1, results.get(i));
+            editors.add(fields);
+            LinearLayout.LayoutParams sectionParams = fullWrap();
+            sectionParams.setMargins(0, 0, 0, dp(10));
+            form.addView(fields.section, sectionParams);
+        }
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(form, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT,
+                ScrollView.LayoutParams.WRAP_CONTENT));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("AI 분석 결과 " + results.size() + "개")
+                .setView(scroll)
+                .setNegativeButton("취소", null)
+                .setPositiveButton("선택 항목 저장", null)
+                .create();
+
+        dialog.setOnShowListener(value -> dialog
+                .getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(v -> {
+                    int saved = saveSelectedItems(editors);
+                    if (saved <= 0) {
+                        Toast.makeText(this, "저장할 항목을 하나 이상 선택하세요.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    dialog.dismiss();
+                    Toast.makeText(this, saved + "개 항목을 저장했습니다.", Toast.LENGTH_SHORT).show();
+                    setResult(RESULT_OK);
+                    finish();
+                }));
+        dialog.show();
+    }
+
+    /** 결과 한 개의 선택 상자와 수정 필드를 만듭니다. */
+    private ResultEditorFields createResultSection(int number, AiAnalysisResult result) {
+        ResultEditorFields fields = new ResultEditorFields();
+        fields.section = new LinearLayout(this);
+        fields.section.setOrientation(LinearLayout.VERTICAL);
+        fields.section.setPadding(dp(12), dp(10), dp(12), dp(12));
+        fields.section.setBackground(sectionBackground());
+
+        fields.selected = new CheckBox(this);
+        fields.selected.setText("항목 " + number + " 저장");
+        fields.selected.setTextSize(15);
+        fields.selected.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        fields.selected.setChecked(true);
+        fields.section.addView(fields.selected, fullWrap());
+
+        fields.type = field("분류: 일정 / 할 일 / 메모", result.type);
+        fields.title = field("제목", result.title);
+        fields.date = field("날짜: yyyy-MM-dd", result.date);
+        fields.time = field("시간: HH:mm", result.time);
+
+        TextView repeatTitle = text("반복 설정", 13, Color.DKGRAY);
+        repeatTitle.setPadding(0, dp(6), 0, 0);
+        fields.repeat = new Spinner(this);
         ArrayAdapter<String> repeatAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_spinner_item, REPEAT_LABELS);
         repeatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        repeatSpinner.setAdapter(repeatAdapter);
-        repeatSpinner.setSelection(repeatIndex(result.repeatType));
-        EditText content = field("메모 내용", result.content);
-        content.setSingleLine(false);
-        content.setMinLines(4);
-        content.setGravity(Gravity.TOP);
+        fields.repeat.setAdapter(repeatAdapter);
+        fields.repeat.setSelection(repeatIndex(result.repeatType));
 
-        form.addView(type);
-        form.addView(title);
-        form.addView(date);
-        form.addView(time);
-        form.addView(repeatTitle);
-        form.addView(repeatSpinner, fullWrap());
-        form.addView(content);
+        fields.content = field("메모 내용", result.content);
+        fields.content.setSingleLine(false);
+        fields.content.setMinLines(3);
+        fields.content.setGravity(Gravity.TOP);
 
-        new AlertDialog.Builder(this)
-                .setTitle("AI 분석 결과 확인")
-                .setView(form)
-                .setNegativeButton("취소", null)
-                .setPositiveButton("저장", (dialog, which) -> saveItem(
-                        normalizeType(type.getText().toString()),
-                        title.getText().toString().trim(),
-                        date.getText().toString().trim(),
-                        time.getText().toString().trim(),
-                        content.getText().toString().trim(),
-                        REPEAT_VALUES[repeatSpinner.getSelectedItemPosition()]))
-                .show();
+        fields.section.addView(fields.type);
+        fields.section.addView(fields.title);
+        fields.section.addView(fields.date);
+        fields.section.addView(fields.time);
+        fields.section.addView(repeatTitle);
+        fields.section.addView(fields.repeat, fullWrap());
+        fields.section.addView(fields.content);
+        return fields;
     }
 
-    /** 기존 10열 저장 형식을 유지하여 이전 버전 데이터와 호환되게 항목을 추가합니다. */
-    private void saveItem(String type, String title, String date, String time,
-                          String content, String repeatType) {
-        String safeTitle = title.isEmpty() ? (content.isEmpty() ? type : content) : title;
-        String line = escape(type) + "\t"
-                + escape(safeTitle) + "\t"
-                + escape(date) + "\t"
-                + escape(time) + "\t"
-                + escape(content) + "\t"
-                + "0\t0\t" + repeatType + "\t\tDEFAULT";
+    /** 체크된 결과만 기존 10열 저장 형식으로 한 번에 추가합니다. */
+    private int saveSelectedItems(List<ResultEditorFields> editors) {
+        StringBuilder newLines = new StringBuilder();
+        int count = 0;
 
+        for (ResultEditorFields fields : editors) {
+            if (!fields.selected.isChecked()) continue;
+            String type = normalizeType(fields.type.getText().toString());
+            String title = fields.title.getText().toString().trim();
+            String date = fields.date.getText().toString().trim();
+            String time = fields.time.getText().toString().trim();
+            String content = fields.content.getText().toString().trim();
+            String repeatType = REPEAT_VALUES[fields.repeat.getSelectedItemPosition()];
+            String safeTitle = title.isEmpty() ? (content.isEmpty() ? type : content) : title;
+
+            if (newLines.length() > 0) newLines.append('\n');
+            newLines.append(escape(type)).append('\t')
+                    .append(escape(safeTitle)).append('\t')
+                    .append(escape(date)).append('\t')
+                    .append(escape(time)).append('\t')
+                    .append(escape(content)).append('\t')
+                    .append("0\t0\t").append(repeatType).append("\t\tDEFAULT");
+            count++;
+        }
+
+        if (count == 0) return 0;
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         String stored = prefs.getString(KEY_ITEMS, "");
-        String updated = stored == null || stored.isEmpty() ? line : line + "\n" + stored;
+        String updated = newLines + (stored == null || stored.isEmpty() ? "" : "\n" + stored);
         prefs.edit().putString(KEY_ITEMS, updated).apply();
 
         AlarmScheduler.rescheduleAll(getApplicationContext());
         TodayWidgetProvider.updateAll(getApplicationContext());
-        Toast.makeText(this, "AI 분석 결과를 저장했습니다.", Toast.LENGTH_SHORT).show();
-        setResult(RESULT_OK);
-        finish();
+        return count;
     }
 
     private void handleAiError(AiSettings settings, String original, String message) {
@@ -414,7 +482,7 @@ public class AiInputActivity extends Activity {
                 .show();
     }
 
-    /** 기존 메인 화면의 검증된 규칙 분석기에 같은 문장을 전달합니다. */
+    /** 기존 메인 화면의 규칙 분석기에 같은 문장을 전달합니다. */
     private void openLocalAnalyzer(String original) {
         Intent intent = new Intent(this, IntegratedMainActivity.class);
         intent.setAction(Intent.ACTION_SEND);
@@ -487,6 +555,14 @@ public class AiInputActivity extends Activity {
         return view;
     }
 
+    private GradientDrawable sectionBackground() {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.WHITE);
+        background.setCornerRadius(dp(12));
+        background.setStroke(dp(1), Color.rgb(214, 224, 238));
+        return background;
+    }
+
     private LinearLayout.LayoutParams fullWrap() {
         return new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -507,5 +583,17 @@ public class AiInputActivity extends Activity {
     private String safeMessage(Throwable error) {
         String message = error == null ? "알 수 없는 오류" : error.getMessage();
         return message == null || message.trim().isEmpty() ? "알 수 없는 오류" : message;
+    }
+
+    /** 확인창에 표시되는 항목별 입력 필드 묶음입니다. */
+    private static final class ResultEditorFields {
+        LinearLayout section;
+        CheckBox selected;
+        EditText type;
+        EditText title;
+        EditText date;
+        EditText time;
+        EditText content;
+        Spinner repeat;
     }
 }
