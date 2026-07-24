@@ -1,0 +1,88 @@
+name: ChalkakCoach Stage5 Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chalkakcoach-stage5-build
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-chalkakcoach-stage5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 17 준비
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 4단계 프로젝트 복원
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p chalkakcoach-stage5/build
+          cat chalkakcoach-stage4/parts/part_*.b64 | base64 --decode > /tmp/ChalkakCoach_Stage4_Project.tar.xz
+          echo "ffcf337ef9d949406d882ac22df7dbbcf2684623d7511b28d19648c651691c0e  /tmp/ChalkakCoach_Stage4_Project.tar.xz" | sha256sum --check
+          tar -xJf /tmp/ChalkakCoach_Stage4_Project.tar.xz -C chalkakcoach-stage5/build
+
+      - name: 5단계 변경 파일 적용 및 검증
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat chalkakcoach-stage5/overlay/part_*.b64 | base64 --decode > /tmp/ChalkakCoach_Stage5_Overlay.tar.xz
+          echo "c85b0c923d72504b4890bab6b2b6080f0aeac38a48b0a9783ba350a71ad9de61  /tmp/ChalkakCoach_Stage5_Overlay.tar.xz" | sha256sum --check
+          tar -xJf /tmp/ChalkakCoach_Stage5_Overlay.tar.xz -C chalkakcoach-stage5/build
+          chmod +x chalkakcoach-stage5/build/ChalkakCoach/gradlew
+          chmod +x chalkakcoach-stage5/build/ChalkakCoach/setup-wrapper.sh
+          grep -q 'versionName = "0.5.0-best-shot"' chalkakcoach-stage5/build/ChalkakCoach/app/build.gradle.kts
+          test -f chalkakcoach-stage5/build/ChalkakCoach/app/src/main/java/kr/co/chalkakcoach/bestshot/BestShotModels.kt
+
+      - name: Gradle Wrapper 준비
+        working-directory: chalkakcoach-stage5/build/ChalkakCoach
+        run: ./setup-wrapper.sh
+
+      - name: 단위 테스트 및 APK 빌드
+        working-directory: chalkakcoach-stage5/build/ChalkakCoach
+        run: ./gradlew clean testDebugUnitTest assembleDebug --stacktrace
+
+      - name: 결과 파일 정리
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p chalkakcoach-stage5/output
+          cp chalkakcoach-stage5/build/ChalkakCoach/app/build/outputs/apk/debug/app-debug.apk chalkakcoach-stage5/output/ChalkakCoach-Stage5-debug.apk
+          sha256sum chalkakcoach-stage5/output/ChalkakCoach-Stage5-debug.apk > chalkakcoach-stage5/output/ChalkakCoach-Stage5-debug.apk.sha256
+          cd chalkakcoach-stage5/build
+          zip -qr ../output/ChalkakCoach-Stage5-Build-Success-Project.zip ChalkakCoach -x 'ChalkakCoach/.gradle/*' 'ChalkakCoach/app/build/*'
+          cd ../output
+          sha256sum ChalkakCoach-Stage5-Build-Success-Project.zip > ChalkakCoach-Stage5-Build-Success-Project.zip.sha256
+
+      - name: APK와 프로젝트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage5-delivery
+          path: chalkakcoach-stage5/output/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 테스트 보고서 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage5-test-reports
+          path: |
+            chalkakcoach-stage5/build/ChalkakCoach/app/build/reports
+            chalkakcoach-stage5/build/ChalkakCoach/app/build/test-results
+          if-no-files-found: ignore
+          retention-days: 7
