@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   build:
@@ -104,3 +105,11 @@ jobs:
           name: ChalkakCoach-Stage9-v0.9.0
           path: chalkakcoach-stage9/build/delivery
           retention-days: 14
+
+      - name: Report workflow run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh issue comment 32 --repo "$GITHUB_REPOSITORY" --body "STAGE9_RUN_ID=${GITHUB_RUN_ID} STATUS=${{ job.status }} SHA=${GITHUB_SHA}"
