@@ -1,6 +1,9 @@
 name: ChalkakCoach Stage9 Build
 
 on:
+  push:
+    branches:
+      - feat/chalkakcoach-stage9-scene-framing
   pull_request:
     paths:
       - "chalkakcoach-stage9/**"
