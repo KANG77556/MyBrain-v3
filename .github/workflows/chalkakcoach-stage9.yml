@@ -24,26 +24,32 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Gradle cache
+      - name: Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
 
-      - name: Restore project
+      - name: Restore stage8 and apply stage9 patch
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p chalkakcoach-stage9/build
-          cat chalkakcoach-stage9/source.tar.xz.b64.part-* > chalkakcoach-stage9/build/source.tar.xz.b64
-          base64 --decode chalkakcoach-stage9/build/source.tar.xz.b64 > chalkakcoach-stage9/build/source.tar.xz
-          echo "85cbd96ce63b961b88ce559372473586a21cb9525062adde9af141bc8c0818f6  chalkakcoach-stage9/build/source.tar.xz" | sha256sum -c -
-          tar -xJf chalkakcoach-stage9/build/source.tar.xz -C chalkakcoach-stage9/build
-          chmod +x chalkakcoach-stage9/build/ChalkakCoach/gradlew
+          cat chalkakcoach-stage8/minimal.tar.xz.b64.part-* > chalkakcoach-stage9/build/stage8.tar.xz.b64
+          base64 --decode chalkakcoach-stage9/build/stage8.tar.xz.b64 > chalkakcoach-stage9/build/stage8.tar.xz
+          tar -xJf chalkakcoach-stage9/build/stage8.tar.xz -C chalkakcoach-stage9/build
+
+          cat chalkakcoach-stage9/stage9.patch.part-* > chalkakcoach-stage9/build/stage9.patch
+          echo "19a606c0bf51e6e5e1055947f72f6bebe2b5f15e23b216693a85616f501c1cc5  chalkakcoach-stage9/build/stage9.patch" | sha256sum -c -
+          cd chalkakcoach-stage9/build/ChalkakCoach
+          git apply --check ../stage9.patch
+          git apply --whitespace=nowarn ../stage9.patch
 
       - name: Unit tests and debug APK
         shell: bash
         run: |
           set -euo pipefail
           cd chalkakcoach-stage9/build/ChalkakCoach
-          ./gradlew clean testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee ../gradle-build.log
+          gradle clean testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee ../gradle-build.log
 
       - name: Verify and package
         shell: bash
