@@ -21,6 +21,9 @@ jobs:
       - name: 하이브리드 분석 코드 적용
         run: python3 scripts/apply_v180_hybrid.py
 
+      - name: Java 문자열 줄바꿈 복구
+        run: python3 scripts/fix_v180_java_string.py
+
       - name: 변경 내용 커밋
         run: |
           if git diff --quiet; then
