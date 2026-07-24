@@ -14,7 +14,7 @@ import android.widget.TextView;
 
 /**
  * 기존 일정·할 일·메모 기능에 백업과 AI 공급자 설정을 통합한 실제 메인 화면입니다.
- * 기본 규칙 모드는 MainActivity 분석기를 유지하고, Ollama·GPT·Gemini는 다중 AI 입력 화면으로 연결합니다.
+ * 기본 규칙을 안정적인 기본값으로 사용하고 GPT·Gemini는 복잡한 문장 분리에 선택적으로 사용합니다.
  */
 public class IntegratedMainActivity extends MainActivity {
     private static final int COLOR_PRIMARY = Color.rgb(35, 92, 190);
@@ -34,7 +34,7 @@ public class IntegratedMainActivity extends MainActivity {
 
         if (mainRoot.getChildCount() > 1 && mainRoot.getChildAt(1) instanceof TextView) {
             TextView versionText = (TextView) mainRoot.getChildAt(1);
-            versionText.setText("v1.7.2 · 날짜·시간 범위 자동 분리");
+            versionText.setText("v1.7.3 · 안정형 규칙 + 클라우드 AI");
         }
 
         AiSettings settings = AiSettings.load(this);
@@ -43,12 +43,12 @@ public class IntegratedMainActivity extends MainActivity {
         makeCalendarAndListScrollable(mainRoot);
     }
 
-    /** 기본 규칙 모드에서는 원래 클릭 동작을 유지하고 실제 AI 모드에서만 연결 대상을 교체합니다. */
+    /** 기본 규칙 모드에서는 원래 클릭 동작을 유지하고 선택한 AI 모드에서만 다중 분석 화면을 엽니다. */
     private void configureAnalyzeButton(LinearLayout mainRoot, AiSettings settings) {
         if (mainRoot.getChildCount() <= 3 || !(mainRoot.getChildAt(3) instanceof Button)) return;
         Button addButton = (Button) mainRoot.getChildAt(3);
 
-        if (AiSettings.PROVIDER_LOCAL.equals(settings.provider)) {
+        if (!settings.isModelProvider()) {
             addButton.setText("＋ 기본 규칙 분석 및 추가");
             return;
         }
