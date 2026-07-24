@@ -80,7 +80,6 @@ jobs:
               f'xml_files={len(files)}\ntests={tests}\nfailures={failures}\nerrors={errors}\nskipped={skipped}\nclasses=' + '|'.join(classes) + '\n',
               encoding='utf-8',
           )
-          print(out.read_text(encoding='utf-8'))
           if not files or failures or errors or tests < 1:
               raise SystemExit(f'Unexpected test result: files={len(files)}, tests={tests}, failures={failures}, errors={errors}')
           target = out_dir / 'test-results-xml'
@@ -89,7 +88,7 @@ jobs:
           shutil.copytree(result_dir, target)
           PY
 
-      - name: Package APK and source
+      - name: Collect APK and reports
         shell: bash
         run: |
           set -euo pipefail
@@ -104,12 +103,8 @@ jobs:
           cp "$PROJECT/CHANGELOG_STAGE9.md" "$OUT/CHANGELOG_STAGE9.md"
           cp "$PROJECT/TEST_CHECKLIST_STAGE9.md" "$OUT/TEST_CHECKLIST_STAGE9.md"
           cp "$PROJECT/BUILD_REPORT_STAGE9.md" "$OUT/BUILD_REPORT_STAGE9.md"
-          cd "$ROOT"
-          zip -qr "$OUT/ChalkakCoach-v0.9.0-Source.zip" ChalkakCoach \
-            -x 'ChalkakCoach/.gradle/*' 'ChalkakCoach/app/build/*' 'ChalkakCoach/build/*'
-          test -s "$OUT/ChalkakCoach-v0.9.0-Source.zip"
 
-      - name: Verify APK signature and checksums
+      - name: Verify APK signature and checksum
         shell: bash
         run: |
           set -euo pipefail
@@ -119,7 +114,7 @@ jobs:
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$APKSIGNER"
           "$APKSIGNER" verify --verbose "$APK" > "$OUT/APK-SIGNATURE-TEST.txt"
-          sha256sum "$OUT"/*.apk "$OUT"/*.zip > "$OUT/SHA256SUMS.txt"
+          sha256sum "$APK" > "$OUT/SHA256SUMS.txt"
 
       - name: Upload delivery artifact
         uses: actions/upload-artifact@v4
