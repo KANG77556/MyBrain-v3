@@ -118,6 +118,15 @@ jobs:
                   overlay_text = overlay.read_text(encoding="utf-8")
                   overlay_text = overlay_text.replace("import androidx.compose.foundation.layout.weight\n", "")
                   overlay.write_text(overlay_text, encoding="utf-8")
+
+          uri_image = root / "app/src/main/java/kr/co/chalkakcoach/ui/components/UriImage.kt"
+          uri_text = uri_image.read_text(encoding="utf-8")
+          if "import androidx.compose.runtime.getValue" not in uri_text:
+              uri_text = uri_text.replace(
+                  "import androidx.compose.runtime.produceState\n",
+                  "import androidx.compose.runtime.produceState\nimport androidx.compose.runtime.getValue\n",
+              )
+              uri_image.write_text(uri_text, encoding="utf-8")
           PY
 
       - name: Gradle Wrapper 준비
