@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
@@ -26,19 +27,20 @@ public class IntegratedMainActivity extends MainActivity {
         configureIntegratedScreen();
     }
 
-    /** 기존 화면을 유지하면서 버전 문구, 분석 버튼, 관리 버튼만 안전하게 보강합니다. */
+    /** 기존 화면을 유지하면서 버전 문구, 분석 버튼, 관리 버튼과 달력 스크롤을 보강합니다. */
     private void configureIntegratedScreen() {
         LinearLayout mainRoot = findMainRoot();
         if (mainRoot == null) return;
 
         if (mainRoot.getChildCount() > 1 && mainRoot.getChildAt(1) instanceof TextView) {
             TextView versionText = (TextView) mainRoot.getChildAt(1);
-            versionText.setText("v1.6.2 · 휴대전화 Ollama·GPT·Gemini");
+            versionText.setText("v1.6.3 · 달력 화면 잘림 수정");
         }
 
         AiSettings settings = AiSettings.load(this);
         configureAnalyzeButton(mainRoot, settings);
         addManagementButtons(mainRoot, settings);
+        makeCalendarAndListScrollable(mainRoot);
     }
 
     /** 기본 규칙 모드에서는 원래 클릭 동작을 유지하고 실제 AI 모드에서만 연결 대상을 교체합니다. */
@@ -78,6 +80,48 @@ public class IntegratedMainActivity extends MainActivity {
         // 제목·요약·분석 버튼 다음, 검색창 바로 앞에 배치합니다.
         int insertIndex = Math.min(4, mainRoot.getChildCount());
         mainRoot.addView(row, insertIndex, rowParams);
+    }
+
+    /**
+     * 달력과 선택 날짜의 항목 목록을 하나의 ScrollView 안에 넣습니다.
+     * 작은 화면이나 6주가 표시되는 달에도 달력 마지막 행이 잘리지 않습니다.
+     */
+    private void makeCalendarAndListScrollable(LinearLayout mainRoot) {
+        EventCalendarView calendar = null;
+        ScrollView contentScroll = null;
+
+        for (int i = 0; i < mainRoot.getChildCount(); i++) {
+            View child = mainRoot.getChildAt(i);
+            if (child instanceof EventCalendarView) calendar = (EventCalendarView) child;
+            if (child instanceof ScrollView) contentScroll = (ScrollView) child;
+        }
+
+        if (calendar == null || contentScroll == null || contentScroll.getChildCount() == 0) return;
+
+        View listContent = contentScroll.getChildAt(0);
+        contentScroll.removeView(listContent);
+        mainRoot.removeView(calendar);
+
+        LinearLayout scrollContent = new LinearLayout(this);
+        scrollContent.setOrientation(LinearLayout.VERTICAL);
+        scrollContent.setPadding(0, 0, 0, dp(8));
+
+        LinearLayout.LayoutParams calendarParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        calendarParams.setMargins(0, dp(8), 0, dp(8));
+        scrollContent.addView(calendar, calendarParams);
+
+        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        scrollContent.addView(listContent, listParams);
+
+        contentScroll.setFillViewport(false);
+        contentScroll.setClipToPadding(false);
+        contentScroll.addView(scrollContent, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT,
+                ScrollView.LayoutParams.WRAP_CONTENT));
     }
 
     @Override
