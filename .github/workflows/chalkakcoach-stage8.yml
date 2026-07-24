@@ -1,0 +1,110 @@
+name: ChalkakCoach Stage8 Build
+
+on:
+  push:
+    branches:
+      - feat/chalkakcoach-stage8-auto-framing
+  pull_request:
+    paths:
+      - "chalkakcoach-stage8/**"
+      - ".github/workflows/chalkakcoach-stage8.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p chalkakcoach-stage8/build
+          cat chalkakcoach-stage8/project.zip.b64.part-* > chalkakcoach-stage8/build/project.zip.b64
+          base64 --decode chalkakcoach-stage8/build/project.zip.b64 > chalkakcoach-stage8/build/project.zip
+          unzip -q chalkakcoach-stage8/build/project.zip -d chalkakcoach-stage8/build
+          chmod +x chalkakcoach-stage8/build/ChalkakCoach/gradlew
+
+      - name: Unit tests and debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd chalkakcoach-stage8/build/ChalkakCoach
+          ./gradlew clean testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee ../gradle-build.log
+
+      - name: Verify and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/chalkakcoach-stage8/build"
+          PROJECT="$ROOT/ChalkakCoach"
+          APK="$PROJECT/app/build/outputs/apk/debug/app-debug.apk"
+          OUT="$ROOT/delivery"
+          mkdir -p "$OUT"
+
+          test -f "$APK"
+          unzip -t "$APK" > "$OUT/APK-ZIP-TEST.txt"
+          cp "$APK" "$OUT/ChalkakCoach-v0.8.0-AI-AutoFraming-debug.apk"
+          cp "$ROOT/project.zip" "$OUT/ChalkakCoach-v0.8.0-Source.zip"
+          cp "$ROOT/gradle-build.log" "$OUT/GRADLE-BUILD-LOG.txt"
+          cp "$PROJECT/CHANGELOG_STAGE8.md" "$OUT/CHANGELOG_STAGE8.md"
+          cp "$PROJECT/TEST_CHECKLIST_STAGE8.md" "$OUT/TEST_CHECKLIST_STAGE8.md"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          result_dir = Path('chalkakcoach-stage8/build/ChalkakCoach/app/build/test-results/testDebugUnitTest')
+          tests = failures = errors = skipped = 0
+          for path in result_dir.glob('TEST-*.xml'):
+              root = ET.parse(path).getroot()
+              tests += int(root.attrib.get('tests', 0))
+              failures += int(root.attrib.get('failures', 0))
+              errors += int(root.attrib.get('errors', 0))
+              skipped += int(root.attrib.get('skipped', 0))
+          out = Path('chalkakcoach-stage8/build/delivery/TEST-SUMMARY.txt')
+          out.write_text(
+              f'tests={tests}\nfailures={failures}\nerrors={errors}\nskipped={skipped}\n',
+              encoding='utf-8',
+          )
+          if failures or errors or tests < 55:
+              raise SystemExit(f'Unexpected test result: tests={tests}, failures={failures}, errors={errors}')
+          PY
+
+          cp -r "$PROJECT/app/build/reports/tests/testDebugUnitTest" "$OUT/test-report-html"
+          cp -r "$PROJECT/app/build/test-results/testDebugUnitTest" "$OUT/test-results-xml"
+
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK" > "$OUT/APK-SIGNATURE-TEST.txt"
+
+          sha256sum "$OUT"/*.apk "$OUT"/*.zip > "$OUT/SHA256SUMS.txt"
+          (cd "$ROOT" && zip -qr ChalkakCoach-v0.8.0-Delivery.zip delivery)
+          sha256sum "$ROOT/ChalkakCoach-v0.8.0-Delivery.zip" > "$ROOT/ChalkakCoach-v0.8.0-Delivery.zip.sha256"
+
+      - name: Upload delivery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage8-v0.8.0
+          path: |
+            chalkakcoach-stage8/build/ChalkakCoach-v0.8.0-Delivery.zip
+            chalkakcoach-stage8/build/ChalkakCoach-v0.8.0-Delivery.zip.sha256
+            chalkakcoach-stage8/build/delivery/ChalkakCoach-v0.8.0-AI-AutoFraming-debug.apk
+            chalkakcoach-stage8/build/delivery/ChalkakCoach-v0.8.0-Source.zip
+            chalkakcoach-stage8/build/delivery/TEST-SUMMARY.txt
+            chalkakcoach-stage8/build/delivery/SHA256SUMS.txt
+          retention-days: 14
