@@ -1,9 +1,6 @@
 name: ChalkakCoach Stage8 Build
 
 on:
-  push:
-    branches:
-      - feat/chalkakcoach-stage8-auto-framing
   pull_request:
     paths:
       - "chalkakcoach-stage8/**"
