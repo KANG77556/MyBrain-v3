@@ -96,7 +96,20 @@ public final class CloudAiAnalyzer {
         }
     }
 
-    /** 같은 휴대전화에서 실행 중인 Ollama의 구조화 JSON 출력을 사용합니다. */
+    /** 연결 테스트에서 모델 목록뿐 아니라 실제 추론과 JSON 해석까지 확인합니다. */
+    public static void verifyOllamaInference(String baseUrl, String model) throws Exception {
+        RequestControl control = new RequestControl();
+        String output = requestOllama(baseUrl, model,
+                "오늘 메모로 연결 테스트를 저장해줘", control);
+        List<AiAnalysisResult> results = parseAnalyses(output, "연결 테스트");
+        if (results.isEmpty()) {
+            throw new AiServiceException("Ollama가 실제 분석 결과를 만들지 못했습니다.");
+        }
+    }
+
+    /**
+     * 최신 Ollama 형식으로 먼저 요청하고 실패하면 구형 Android Ollama 서버 형식으로 한 번 재시도합니다.
+     */
     private static String requestOllama(String baseUrl, String model, String input,
                                         RequestControl control) throws Exception {
         validateModel(model);
@@ -104,14 +117,48 @@ public final class CloudAiAnalyzer {
             throw new IllegalArgumentException("Ollama 주소는 같은 휴대전화의 localhost만 사용할 수 있습니다.");
         }
 
+        try {
+            return requestOllamaAttempt(baseUrl, model, input, control, true);
+        } catch (ConnectException e) {
+            throw new AiServiceException(
+                    "Ollama Server가 실행되지 않았습니다. Ollama Server 앱에서 서비스를 먼저 시작하세요.");
+        } catch (java.net.SocketTimeoutException e) {
+            throw new AiServiceException(
+                    "Ollama 분석 시간이 초과됐습니다. gemma3:1b처럼 더 작은 모델을 사용해 보세요.");
+        } catch (AiServiceException firstError) {
+            if (!shouldRetryLegacy(firstError.getMessage())) throw firstError;
+            control.throwIfCancelled();
+
+            try {
+                return requestOllamaAttempt(baseUrl, model, input, control, false);
+            } catch (ConnectException e) {
+                throw new AiServiceException(
+                        "Ollama Server 연결이 중간에 종료됐습니다. 서비스를 다시 시작하세요.");
+            } catch (java.net.SocketTimeoutException e) {
+                throw new AiServiceException(
+                        "Ollama 호환 분석도 시간이 초과됐습니다. gemma3:1b 모델을 사용해 보세요.");
+            } catch (AiServiceException secondError) {
+                if (isMemoryFailure(secondError.getMessage())) throw secondError;
+                throw new AiServiceException(
+                        "Ollama 모델은 연결됐지만 분석 응답을 만들지 못했습니다.\n"
+                                + "Qwen3 모델을 다시 내려받거나 gemma3:1b로 변경해 보세요.\n"
+                                + limit(secondError.getMessage(), 180));
+            }
+        }
+    }
+
+    /** 최신 형식 또는 구형 호환 형식으로 Ollama 채팅 요청을 한 번 수행합니다. */
+    private static String requestOllamaAttempt(String baseUrl, String model, String input,
+                                               RequestControl control,
+                                               boolean modernRequest) throws Exception {
+        // 이전 Qwen3 템플릿에서도 사고 출력을 끄도록 /nothink를 함께 전달합니다.
         JSONObject systemMessage = new JSONObject()
                 .put("role", "system")
-                .put("content", systemInstruction());
+                .put("content", "/nothink\n" + systemInstruction());
         JSONObject userMessage = new JSONObject()
                 .put("role", "user")
-                .put("content", input);
+                .put("content", "/nothink\n" + input);
 
-        // 여러 항목을 생성할 수 있도록 출력량은 늘리되 휴대전화 발열을 고려해 상한을 둡니다.
         JSONObject options = new JSONObject()
                 .put("temperature", 0)
                 .put("num_ctx", 2048)
@@ -121,30 +168,97 @@ public final class CloudAiAnalyzer {
                 .put("model", model)
                 .put("messages", new JSONArray().put(systemMessage).put(userMessage))
                 .put("stream", false)
-                .put("think", false)
-                .put("format", "json")
+                .put("format", modernRequest ? ollamaOutputSchema() : "json")
                 .put("options", options)
                 .put("keep_alive", "5m");
 
+        // 최신 서버에서는 공식 think 필드로 사고 출력을 확실하게 끕니다.
+        if (modernRequest) body.put("think", false);
+
         String endpoint = AiSettings.normalizeOllamaBaseUrl(baseUrl) + "/api/chat";
+        String response = postJson(
+                openConnection(endpoint, OLLAMA_READ_TIMEOUT_MS),
+                body.toString(), "Ollama", control);
+        JSONObject root = new JSONObject(response);
+        JSONObject message = root.optJSONObject("message");
+        String content = message == null ? "" : message.optString("content", "").trim();
+        String thinking = message == null ? "" : message.optString("thinking", "").trim();
+
+        if (!content.isEmpty()) return content;
+
+        // 일부 구형 Qwen3 서버는 최종 JSON을 thinking 필드에 넣으므로 JSON이 있을 때만 복구합니다.
+        String recovered = recoverJsonFromThinking(thinking);
+        if (!recovered.isEmpty()) return recovered;
+
+        throw new AiServiceException(modernRequest
+                ? "Ollama 최신 요청이 빈 응답을 반환했습니다. 구형 Qwen3 호환 방식으로 다시 시도합니다."
+                : "Ollama가 빈 응답을 반환했습니다. 모델이 응답 생성을 완료하지 못했습니다.");
+    }
+
+    /** Ollama 구조화 출력용 JSON 스키마입니다. */
+    private static JSONObject ollamaOutputSchema() throws JSONException {
+        JSONObject itemProperties = new JSONObject()
+                .put("type", stringSchema())
+                .put("title", stringSchema())
+                .put("content", stringSchema())
+                .put("date", stringSchema())
+                .put("time", stringSchema())
+                .put("repeatType", stringSchema());
+
+        JSONObject itemSchema = new JSONObject()
+                .put("type", "object")
+                .put("properties", itemProperties)
+                .put("required", new JSONArray()
+                        .put("type").put("title").put("content")
+                        .put("date").put("time").put("repeatType"));
+
+        JSONObject itemsArray = new JSONObject()
+                .put("type", "array")
+                .put("minItems", 1)
+                .put("maxItems", MAX_ANALYSIS_ITEMS)
+                .put("items", itemSchema);
+
+        return new JSONObject()
+                .put("type", "object")
+                .put("properties", new JSONObject().put("items", itemsArray))
+                .put("required", new JSONArray().put("items"));
+    }
+
+    private static JSONObject stringSchema() throws JSONException {
+        return new JSONObject().put("type", "string");
+    }
+
+    /** thinking 필드에 완전한 JSON 객체가 들어 있을 때만 안전하게 복구합니다. */
+    private static String recoverJsonFromThinking(String thinking) {
+        if (thinking == null || thinking.trim().isEmpty()) return "";
+        int start = thinking.indexOf('{');
+        int end = thinking.lastIndexOf('}');
+        if (start < 0 || end <= start) return "";
+        String candidate = thinking.substring(start, end + 1);
         try {
-            String response = postJson(
-                    openConnection(endpoint, OLLAMA_READ_TIMEOUT_MS),
-                    body.toString(), "Ollama", control);
-            JSONObject root = new JSONObject(response);
-            JSONObject message = root.optJSONObject("message");
-            String content = message == null ? "" : message.optString("content", "").trim();
-            if (content.isEmpty()) {
-                throw new AiServiceException("Ollama 응답에서 분석 결과를 찾지 못했습니다.");
-            }
-            return content;
-        } catch (ConnectException e) {
-            throw new AiServiceException(
-                    "Ollama Server가 실행되지 않았습니다. Ollama Server 앱에서 서비스를 먼저 시작하세요.");
-        } catch (java.net.SocketTimeoutException e) {
-            throw new AiServiceException(
-                    "Ollama 분석 시간이 초과됐습니다. gemma3:1b처럼 더 작은 모델을 사용해 보세요.");
+            new JSONObject(candidate);
+            return candidate;
+        } catch (JSONException ignored) {
+            return "";
         }
+    }
+
+    /** 메모리 부족이나 모델 파일 문제는 같은 요청을 반복해도 해결되지 않으므로 재시도하지 않습니다. */
+    private static boolean shouldRetryLegacy(String message) {
+        String value = message == null ? "" : message.toLowerCase(Locale.US);
+        return !isMemoryFailure(value)
+                && !value.contains("model not found")
+                && !value.contains("모델을 찾")
+                && !value.contains("파일이 손상");
+    }
+
+    private static boolean isMemoryFailure(String message) {
+        String value = message == null ? "" : message.toLowerCase(Locale.US);
+        return value.contains("memory")
+                || value.contains("메모리")
+                || value.contains("requires more system")
+                || value.contains("out of memory")
+                || value.contains("failed to load model");
     }
 
     private static String requestOpenAi(String model, String apiKey, String input,
@@ -291,21 +405,33 @@ public final class CloudAiAnalyzer {
     }
 
     private static String buildHttpError(String providerLabel, int status, String response) {
+        String detail = extractErrorDetail(response);
+        String lower = detail.toLowerCase(Locale.US);
+
+        if ("Ollama".equals(providerLabel) && status >= 500
+                && (lower.contains("memory") || lower.contains("requires more system")
+                || lower.contains("failed to load model"))) {
+            return "Ollama가 모델을 휴대전화 메모리에 올리지 못했습니다. "
+                    + "실행 중인 앱을 정리하거나 gemma3:1b처럼 더 작은 모델로 변경하세요."
+                    + (detail.isEmpty() ? "" : "\n" + limit(detail, 200));
+        }
+
         String message = providerLabel + " AI 요청 실패 (HTTP " + status + ")";
+        if (!detail.isEmpty()) message += "\n" + limit(detail, 240);
+        return message;
+    }
+
+    private static String extractErrorDetail(String response) {
         try {
             JSONObject root = new JSONObject(response == null ? "" : response);
             Object error = root.opt("error");
-            String detail = "";
             if (error instanceof JSONObject) {
-                detail = ((JSONObject) error).optString("message", "").trim();
-            } else if (error instanceof String) {
-                detail = ((String) error).trim();
+                return ((JSONObject) error).optString("message", "").trim();
             }
-            if (!detail.isEmpty()) message += "\n" + limit(detail, 240);
+            return error instanceof String ? ((String) error).trim() : "";
         } catch (JSONException ignored) {
-            // 공급자가 JSON이 아닌 오류 페이지를 반환하면 상태 코드만 안내합니다.
+            return "";
         }
-        return message;
     }
 
     /** AI가 반환한 배열을 검증하고 앱 공통 결과 목록으로 변환합니다. */
