@@ -192,9 +192,7 @@ public class AiInputActivity extends Activity {
         if (settings.confirmBeforeCloud) {
             new AlertDialog.Builder(this)
                     .setTitle(settings.providerLabel() + "로 전송")
-                    .setMessage(decision.reason + "
-
-입력 문장을 " + settings.providerLabel()
+                    .setMessage(decision.reason + "\n\n입력 문장을 " + settings.providerLabel()
                             + " 클라우드 API로 보내 여러 일정·할 일·메모로 분리할까요? 개인정보가 포함됐는지 확인하세요.")
                     .setNegativeButton("취소", null)
                     .setPositiveButton("전송 및 분석", (dialog, which) -> performAiAnalysis(settings, value))
