@@ -34,7 +34,7 @@ public class IntegratedMainActivity extends MainActivity {
 
         if (mainRoot.getChildCount() > 1 && mainRoot.getChildAt(1) instanceof TextView) {
             TextView versionText = (TextView) mainRoot.getChildAt(1);
-            versionText.setText("v1.7.2 · 날짜·시간 범위 자동 분리");
+            versionText.setText("v1.8.0 · 규칙 우선 하이브리드 AI");
         }
 
         AiSettings settings = AiSettings.load(this);

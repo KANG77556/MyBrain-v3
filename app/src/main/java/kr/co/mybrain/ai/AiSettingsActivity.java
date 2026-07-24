@@ -20,26 +20,28 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 /**
- * 휴대전화 Ollama·기본 규칙·GPT·Gemini 공급자와 모델, API 키를 설정하는 화면입니다.
- * 저장된 클라우드 API 키는 다시 평문으로 표시하지 않으며 새 값을 입력한 경우에만 교체합니다.
+ * 자동 추천·기본 규칙·GPT·Gemini 분석 방식과 API 키를 설정하는 화면입니다.
+ * 휴대전화 Ollama는 기본 경로에서 제외하고 기존 데이터 호환 코드만 유지합니다.
  */
 public class AiSettingsActivity extends Activity {
     private static final String OPENAI_API_KEY_URL = "https://platform.openai.com/api-keys";
     private static final String GEMINI_API_KEY_URL = "https://aistudio.google.com/app/apikey";
-    private static final String OLLAMA_ANDROID_URL =
-            "https://github.com/sunshine0523/OllamaServer/releases";
 
     private static final String[] PROVIDER_LABELS = {
-            "Ollama (이 휴대전화에서 실행)",
-            "기본 규칙 분석 (비상용·AI 아님)",
-            "GPT (OpenAI API)",
-            "Gemini (Google API)"
+            "자동 추천 (규칙 우선·필요 시 AI)",
+            "기본 규칙만 사용 (인터넷 불필요)",
+            "GPT만 사용 (OpenAI API)",
+            "Gemini만 사용 (Google API)"
     };
     private static final String[] PROVIDER_VALUES = {
-            AiSettings.PROVIDER_OLLAMA,
+            AiSettings.PROVIDER_AUTO,
             AiSettings.PROVIDER_LOCAL,
             AiSettings.PROVIDER_OPENAI,
             AiSettings.PROVIDER_GEMINI
+    };
+    private static final String[] CLOUD_LABELS = {"GPT 우선", "Gemini 우선"};
+    private static final String[] CLOUD_VALUES = {
+            AiSettings.PROVIDER_OPENAI, AiSettings.PROVIDER_GEMINI
     };
 
     private static final int COLOR_PRIMARY = Color.rgb(35, 92, 190);
@@ -48,18 +50,15 @@ public class AiSettingsActivity extends Activity {
     private static final int COLOR_MUTED = Color.rgb(84, 96, 112);
 
     private Spinner providerSpinner;
-    private EditText ollamaAddressInput;
-    private EditText ollamaModelInput;
+    private Spinner preferredCloudSpinner;
     private EditText openAiModelInput;
     private EditText geminiModelInput;
     private EditText openAiKeyInput;
     private EditText geminiKeyInput;
     private TextView openAiKeyStatus;
     private TextView geminiKeyStatus;
-    private TextView ollamaTestStatus;
     private TextView openAiTestStatus;
     private TextView geminiTestStatus;
-    private Button ollamaTestButton;
     private Button openAiTestButton;
     private Button geminiTestButton;
     private CheckBox confirmCloudCheck;
@@ -72,7 +71,7 @@ public class AiSettingsActivity extends Activity {
         loadValues();
     }
 
-    /** 초보자도 한 화면에서 공급자, 모델, 키, 연결 상태를 관리하도록 설정 화면을 구성합니다. */
+    /** 초보자도 분석 방식과 클라우드 키를 한 화면에서 관리하도록 구성합니다. */
     private void buildScreen() {
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
@@ -86,12 +85,12 @@ public class AiSettingsActivity extends Activity {
         root.addView(title, fullWrap());
 
         TextView guide = text(
-                "Ollama는 이 휴대전화 안에서 실행되어 입력 내용이 외부로 나가지 않습니다. GPT와 Gemini는 각 회사의 클라우드 API를 사용합니다.",
+                "자동 추천은 날짜·시간 문장을 휴대전화에서 먼저 처리하고, 여러 행동이 섞인 복잡한 문장만 등록된 GPT 또는 Gemini로 분석합니다.",
                 14, Color.DKGRAY);
         guide.setPadding(0, dp(8), 0, dp(18));
         root.addView(guide, fullWrap());
 
-        root.addView(sectionTitle("사용할 AI"), fullWrap());
+        root.addView(sectionTitle("분석 방식"), fullWrap());
         providerSpinner = new Spinner(this);
         ArrayAdapter<String> providerAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_spinner_item, PROVIDER_LABELS);
@@ -99,33 +98,19 @@ public class AiSettingsActivity extends Activity {
         providerSpinner.setAdapter(providerAdapter);
         root.addView(providerSpinner, fieldParams());
 
-        root.addView(sectionTitle("Ollama · 휴대전화 로컬 AI"), fullWrap());
-        TextView ollamaGuide = text(
-                "Ollama Server 앱을 같은 휴대전화에서 실행합니다. MyBrain AI는 외부 PC가 아닌 127.0.0.1 주소에만 연결합니다.",
+        TextView autoGuide = text(
+                "권장: 자동 추천. API 키가 없어도 기본 규칙 분석은 계속 작동합니다. 클라우드 AI는 의미가 복잡한 문장을 여러 항목으로 나눌 때만 사용합니다.",
                 13, Color.rgb(50, 92, 145));
-        ollamaGuide.setPadding(dp(10), dp(8), dp(10), dp(10));
-        root.addView(ollamaGuide, fullWrap());
+        autoGuide.setPadding(dp(10), dp(8), dp(10), dp(10));
+        root.addView(autoGuide, fullWrap());
 
-        Button ollamaInstall = secondaryButton("Ollama Server 설치 페이지 열기");
-        ollamaInstall.setOnClickListener(v -> openExternalPage(OLLAMA_ANDROID_URL));
-        root.addView(ollamaInstall, buttonParams());
-
-        ollamaAddressInput = field("Ollama 주소", AiSettings.DEFAULT_OLLAMA_BASE_URL, false);
-        root.addView(ollamaAddressInput, fieldParams());
-        ollamaModelInput = field("Ollama 모델 이름", AiSettings.DEFAULT_OLLAMA_MODEL, false);
-        root.addView(ollamaModelInput, fieldParams());
-
-        TextView modelGuide = text(
-                "권장: qwen3:1.7b · 더 가벼운 모델: gemma3:1b. 먼저 Ollama Server 앱에서 모델을 내려받으세요.",
-                13, COLOR_MUTED);
-        modelGuide.setPadding(dp(8), 0, dp(8), dp(8));
-        root.addView(modelGuide, fullWrap());
-
-        ollamaTestButton = secondaryButton("휴대전화 Ollama 연결 테스트");
-        ollamaTestButton.setOnClickListener(v -> testProvider(AiSettings.PROVIDER_OLLAMA));
-        root.addView(ollamaTestButton, buttonParams());
-        ollamaTestStatus = statusText();
-        root.addView(ollamaTestStatus, statusParams());
+        root.addView(sectionTitle("자동 추천에서 우선 사용할 AI"), fullWrap());
+        preferredCloudSpinner = new Spinner(this);
+        ArrayAdapter<String> cloudAdapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_item, CLOUD_LABELS);
+        cloudAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        preferredCloudSpinner.setAdapter(cloudAdapter);
+        root.addView(preferredCloudSpinner, fieldParams());
 
         root.addView(sectionTitle("GPT 설정"), fullWrap());
         Button openAiKeyPage = secondaryButton("OpenAI API 키 만들기 페이지 열기");
@@ -166,24 +151,24 @@ public class AiSettingsActivity extends Activity {
         root.addView(clearGemini, buttonParams());
 
         TextView testGuide = text(
-                "연결 테스트는 Ollama 모델 목록 또는 클라우드 모델 정보만 조회합니다. 일정·메모 문장은 전송하지 않습니다.",
+                "연결 테스트는 저장할 일정 문장을 전송하지 않고 API 키와 선택한 모델의 사용 가능 여부만 확인합니다.",
                 13, Color.rgb(50, 92, 145));
         testGuide.setPadding(dp(12), dp(10), dp(12), dp(10));
         root.addView(testGuide, fullWrap());
 
         root.addView(sectionTitle("보호 설정"), fullWrap());
         confirmCloudCheck = new CheckBox(this);
-        confirmCloudCheck.setText("GPT·Gemini 클라우드로 보내기 전에 매번 확인");
+        confirmCloudCheck.setText("GPT·Gemini로 보내기 전에 매번 확인");
         confirmCloudCheck.setTextSize(15);
         root.addView(confirmCloudCheck, fullWrap());
 
         fallbackLocalCheck = new CheckBox(this);
-        fallbackLocalCheck.setText("선택한 AI 오류 시 기본 규칙 분석으로 자동 전환");
+        fallbackLocalCheck.setText("클라우드 AI 오류 시 기본 규칙 분석으로 자동 전환");
         fallbackLocalCheck.setTextSize(15);
         root.addView(fallbackLocalCheck, fullWrap());
 
         TextView security = text(
-                "GPT·Gemini API 키는 Android Keystore로 암호화해 이 휴대전화에 저장합니다. Ollama는 API 키가 필요하지 않으며 localhost에만 연결합니다.",
+                "API 키는 Android Keystore로 암호화해 이 휴대전화에 저장합니다. 자동 추천은 API 키가 없거나 인터넷 연결이 없을 때 기본 규칙으로 계속 작동합니다.",
                 13, Color.rgb(125, 74, 20));
         security.setPadding(dp(12), dp(12), dp(12), dp(16));
         root.addView(security, fullWrap());
@@ -202,8 +187,7 @@ public class AiSettingsActivity extends Activity {
     private void loadValues() {
         AiSettings settings = AiSettings.load(this);
         providerSpinner.setSelection(providerIndex(settings.provider));
-        ollamaAddressInput.setText(settings.ollamaBaseUrl);
-        ollamaModelInput.setText(settings.ollamaModel);
+        preferredCloudSpinner.setSelection(cloudIndex(settings.preferredCloudProvider));
         openAiModelInput.setText(settings.openAiModel);
         geminiModelInput.setText(settings.geminiModel);
         confirmCloudCheck.setChecked(settings.confirmBeforeCloud);
@@ -211,33 +195,20 @@ public class AiSettingsActivity extends Activity {
         updateKeyStatuses();
     }
 
-    /** 새로 입력한 키를 우선 사용하고, 비어 있으면 기기에 저장된 암호화 키로 연결을 검사합니다. */
+    /** 새로 입력한 키를 우선 사용하고, 비어 있으면 기기에 저장된 암호화 키로 검사합니다. */
     private void testProvider(String provider) {
-        final boolean ollama = AiSettings.PROVIDER_OLLAMA.equals(provider);
-        final boolean openAi = AiSettings.PROVIDER_OPENAI.equals(provider);
-        final EditText modelInput = ollama ? ollamaModelInput
-                : (openAi ? openAiModelInput : geminiModelInput);
-        final TextView statusView = ollama ? ollamaTestStatus
-                : (openAi ? openAiTestStatus : geminiTestStatus);
-        final String providerLabel = ollama ? "Ollama" : (openAi ? "GPT" : "Gemini");
+        boolean openAi = AiSettings.PROVIDER_OPENAI.equals(provider);
+        EditText modelInput = openAi ? openAiModelInput : geminiModelInput;
+        EditText keyInput = openAi ? openAiKeyInput : geminiKeyInput;
+        TextView statusView = openAi ? openAiTestStatus : geminiTestStatus;
+        String keyName = openAi ? SecureApiKeyStore.KEY_OPENAI : SecureApiKeyStore.KEY_GEMINI;
+        String providerLabel = openAi ? "GPT" : "Gemini";
 
         String model = modelInput.getText().toString().trim();
-        String apiKey = "";
-        if (!ollama) {
-            EditText keyInput = openAi ? openAiKeyInput : geminiKeyInput;
-            String keyName = openAi ? SecureApiKeyStore.KEY_OPENAI : SecureApiKeyStore.KEY_GEMINI;
-            String typedKey = keyInput.getText().toString().trim();
-            apiKey = typedKey.isEmpty() ? SecureApiKeyStore.read(this, keyName) : typedKey;
-            if (apiKey.isEmpty()) {
-                setStatus(statusView, providerLabel + " API 키를 먼저 입력하세요.", false);
-                return;
-            }
-        }
-
-        String ollamaBaseUrl = ollamaAddressInput.getText().toString().trim();
-        if (ollama && !AiSettings.isAllowedOllamaBaseUrl(ollamaBaseUrl)) {
-            setStatus(statusView,
-                    "Ollama 주소는 http://127.0.0.1:11434 또는 localhost 형식만 사용할 수 있습니다.", false);
+        String typedKey = keyInput.getText().toString().trim();
+        String apiKey = typedKey.isEmpty() ? SecureApiKeyStore.read(this, keyName) : typedKey;
+        if (apiKey.isEmpty()) {
+            setStatus(statusView, providerLabel + " API 키를 먼저 입력하세요.", false);
             return;
         }
 
@@ -245,12 +216,9 @@ public class AiSettingsActivity extends Activity {
         statusView.setTextColor(COLOR_PRIMARY);
         statusView.setText(providerLabel + " 연결을 확인하고 있습니다…");
 
-        final String finalApiKey = apiKey;
-        final String finalBaseUrl = ollamaBaseUrl;
         new Thread(() -> {
             try {
-                String message = AiConnectionTester.test(
-                        provider, model, finalApiKey, finalBaseUrl);
+                String message = AiConnectionTester.test(provider, model, apiKey);
                 runOnUiThread(() -> {
                     if (isFinishing()) return;
                     setStatus(statusView, message, true);
@@ -266,7 +234,7 @@ public class AiSettingsActivity extends Activity {
                     Toast.makeText(this, message, Toast.LENGTH_LONG).show();
                 });
             }
-        }, "mybrain-ai-connection-test").start();
+        }, "mybrain-cloud-connection-test").start();
     }
 
     private void setStatus(TextView view, String message, boolean success) {
@@ -275,7 +243,6 @@ public class AiSettingsActivity extends Activity {
     }
 
     private void setTestButtonsEnabled(boolean enabled) {
-        ollamaTestButton.setEnabled(enabled);
         openAiTestButton.setEnabled(enabled);
         geminiTestButton.setEnabled(enabled);
     }
@@ -283,28 +250,24 @@ public class AiSettingsActivity extends Activity {
     /** 일반 설정과 새로 입력된 API 키를 각각 안전한 저장소에 기록합니다. */
     private void saveValues() {
         try {
-            String ollamaAddress = ollamaAddressInput.getText().toString().trim();
-            if (!AiSettings.isAllowedOllamaBaseUrl(ollamaAddress)) {
-                Toast.makeText(this,
-                        "Ollama 주소는 같은 휴대전화의 127.0.0.1 또는 localhost만 사용할 수 있습니다.",
-                        Toast.LENGTH_LONG).show();
-                return;
+            String openAiKey = openAiKeyInput.getText().toString().trim();
+            String geminiKey = geminiKeyInput.getText().toString().trim();
+            if (!openAiKey.isEmpty()) {
+                SecureApiKeyStore.save(this, SecureApiKeyStore.KEY_OPENAI, openAiKey);
+            }
+            if (!geminiKey.isEmpty()) {
+                SecureApiKeyStore.save(this, SecureApiKeyStore.KEY_GEMINI, geminiKey);
             }
 
             AiSettings settings = AiSettings.load(this);
             settings.provider = PROVIDER_VALUES[providerSpinner.getSelectedItemPosition()];
-            settings.ollamaBaseUrl = ollamaAddress;
-            settings.ollamaModel = ollamaModelInput.getText().toString().trim();
+            settings.preferredCloudProvider = CLOUD_VALUES[
+                    preferredCloudSpinner.getSelectedItemPosition()];
             settings.openAiModel = openAiModelInput.getText().toString().trim();
             settings.geminiModel = geminiModelInput.getText().toString().trim();
             settings.confirmBeforeCloud = confirmCloudCheck.isChecked();
             settings.fallbackToLocal = fallbackLocalCheck.isChecked();
             settings.save(this);
-
-            String openAiKey = openAiKeyInput.getText().toString().trim();
-            String geminiKey = geminiKeyInput.getText().toString().trim();
-            if (!openAiKey.isEmpty()) SecureApiKeyStore.save(this, SecureApiKeyStore.KEY_OPENAI, openAiKey);
-            if (!geminiKey.isEmpty()) SecureApiKeyStore.save(this, SecureApiKeyStore.KEY_GEMINI, geminiKey);
 
             if (AiSettings.PROVIDER_OPENAI.equals(settings.provider)
                     && !SecureApiKeyStore.has(this, SecureApiKeyStore.KEY_OPENAI)) {
@@ -312,6 +275,12 @@ public class AiSettingsActivity extends Activity {
             } else if (AiSettings.PROVIDER_GEMINI.equals(settings.provider)
                     && !SecureApiKeyStore.has(this, SecureApiKeyStore.KEY_GEMINI)) {
                 Toast.makeText(this, "Gemini가 선택됐지만 Gemini API 키가 없습니다.", Toast.LENGTH_LONG).show();
+            } else if (settings.isAutoProvider()
+                    && !SecureApiKeyStore.has(this, SecureApiKeyStore.KEY_OPENAI)
+                    && !SecureApiKeyStore.has(this, SecureApiKeyStore.KEY_GEMINI)) {
+                Toast.makeText(this,
+                        "자동 추천을 저장했습니다. API 키가 없어 기본 규칙으로만 작동합니다.",
+                        Toast.LENGTH_LONG).show();
             } else {
                 Toast.makeText(this, "AI 설정을 저장했습니다.", Toast.LENGTH_SHORT).show();
             }
@@ -359,6 +328,13 @@ public class AiSettingsActivity extends Activity {
     private int providerIndex(String provider) {
         for (int i = 0; i < PROVIDER_VALUES.length; i++) {
             if (PROVIDER_VALUES[i].equals(provider)) return i;
+        }
+        return 0;
+    }
+
+    private int cloudIndex(String provider) {
+        for (int i = 0; i < CLOUD_VALUES.length; i++) {
+            if (CLOUD_VALUES[i].equals(provider)) return i;
         }
         return 0;
     }
