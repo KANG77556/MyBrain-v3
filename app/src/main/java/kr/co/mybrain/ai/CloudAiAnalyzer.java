@@ -71,6 +71,12 @@ public final class CloudAiAnalyzer {
             String key = apiKey == null ? "" : apiKey.trim();
             String input = userText == null ? "" : userText.trim();
             if (input.isEmpty()) throw new IllegalArgumentException("분석할 내용이 없습니다.");
+
+            // 날짜·요일·시간 범위는 작은 AI 모델보다 기기 내부 규칙으로 먼저 정확하게 처리합니다.
+            // 예: 다음 주 월요일부터 금요일까지 9시부터 12시까지 방과후수업
+            List<AiAnalysisResult> rangeResults = KoreanScheduleRangeParser.parse(input, new Date());
+            if (!rangeResults.isEmpty()) return rangeResults;
+
             if (settings.isCloudProvider() && key.isEmpty()) {
                 throw new IllegalArgumentException("API 키가 등록되지 않았습니다.");
             }

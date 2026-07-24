@@ -156,6 +156,13 @@ public class AiInputActivity extends Activity {
             return;
         }
 
+        // 날짜·요일·시간 범위는 Ollama나 클라우드 호출 전에 기기 안에서 즉시 분석합니다.
+        List<AiAnalysisResult> rangeResults = KoreanScheduleRangeParser.parse(value, new java.util.Date());
+        if (!rangeResults.isEmpty()) {
+            showResultEditor(rangeResults);
+            return;
+        }
+
         AiSettings settings = AiSettings.load(this);
         if (!settings.isModelProvider()) {
             openLocalAnalyzer(value);
