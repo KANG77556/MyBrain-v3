@@ -32,9 +32,9 @@ replace_once(
 replace_once(
     "app/build.gradle",
     '''        versionCode 21
-        versionName '1.7.0' ''',
+        versionName '1.7.0' ''`.replace(" `", ""),
     '''        versionCode 22
-        versionName '1.7.2' '''
+        versionName '1.7.2' ''`.replace(" `", "")
 )
 
 replace_once(
