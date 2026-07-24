@@ -34,7 +34,7 @@ public class IntegratedMainActivity extends MainActivity {
 
         if (mainRoot.getChildCount() > 1 && mainRoot.getChildAt(1) instanceof TextView) {
             TextView versionText = (TextView) mainRoot.getChildAt(1);
-            versionText.setText("v1.6.3 · 달력 화면 잘림 수정");
+            versionText.setText("v1.6.4 · Ollama 속도·취소 개선");
         }
 
         AiSettings settings = AiSettings.load(this);
