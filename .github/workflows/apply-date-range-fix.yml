@@ -4,12 +4,16 @@ on:
   push:
     branches:
       - mybrain-v1.7.2-date-range
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: github.head_ref == 'mybrain-v1.7.2-date-range' || github.ref_name == 'mybrain-v1.7.2-date-range'
     runs-on: ubuntu-latest
     steps:
       - name: 소스 내려받기
