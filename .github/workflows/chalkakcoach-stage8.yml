@@ -24,25 +24,26 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Gradle cache
+      - name: Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
 
       - name: Restore project
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p chalkakcoach-stage8/build
-          cat chalkakcoach-stage8/project.zip.b64.part-* > chalkakcoach-stage8/build/project.zip.b64
-          base64 --decode chalkakcoach-stage8/build/project.zip.b64 > chalkakcoach-stage8/build/project.zip
-          unzip -q chalkakcoach-stage8/build/project.zip -d chalkakcoach-stage8/build
-          chmod +x chalkakcoach-stage8/build/ChalkakCoach/gradlew
+          cat chalkakcoach-stage8/minimal.tar.xz.b64.part-* > chalkakcoach-stage8/build/project.tar.xz.b64
+          base64 --decode chalkakcoach-stage8/build/project.tar.xz.b64 > chalkakcoach-stage8/build/project.tar.xz
+          tar -xJf chalkakcoach-stage8/build/project.tar.xz -C chalkakcoach-stage8/build
 
       - name: Unit tests and debug APK
         shell: bash
         run: |
           set -euo pipefail
           cd chalkakcoach-stage8/build/ChalkakCoach
-          ./gradlew clean testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee ../gradle-build.log
+          gradle clean testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee ../gradle-build.log
 
       - name: Verify and package
         shell: bash
@@ -57,7 +58,7 @@ jobs:
           test -f "$APK"
           unzip -t "$APK" > "$OUT/APK-ZIP-TEST.txt"
           cp "$APK" "$OUT/ChalkakCoach-v0.8.0-AI-AutoFraming-debug.apk"
-          cp "$ROOT/project.zip" "$OUT/ChalkakCoach-v0.8.0-Source.zip"
+          (cd "$ROOT" && zip -qr "$OUT/ChalkakCoach-v0.8.0-Source.zip" ChalkakCoach)
           cp "$ROOT/gradle-build.log" "$OUT/GRADLE-BUILD-LOG.txt"
           cp "$PROJECT/CHANGELOG_STAGE8.md" "$OUT/CHANGELOG_STAGE8.md"
           cp "$PROJECT/TEST_CHECKLIST_STAGE8.md" "$OUT/TEST_CHECKLIST_STAGE8.md"
