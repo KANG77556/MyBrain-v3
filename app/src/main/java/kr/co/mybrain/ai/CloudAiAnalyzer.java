@@ -25,38 +25,63 @@ import java.util.regex.Pattern;
  */
 public final class CloudAiAnalyzer {
     private static final int CONNECT_TIMEOUT_MS = 20_000;
-    private static final int READ_TIMEOUT_MS = 90_000;
+    private static final int CLOUD_READ_TIMEOUT_MS = 90_000;
+    private static final int OLLAMA_READ_TIMEOUT_MS = 120_000;
     private static final Pattern MODEL_PATTERN = Pattern.compile("[A-Za-z0-9._:-]{2,100}");
 
     private CloudAiAnalyzer() {
     }
 
-    /** 선택된 실제 AI 공급자로 문장을 분석하고 앱 공통 결과로 변환합니다. */
-    public static AiAnalysisResult analyze(AiSettings settings, String apiKey, String userText) throws Exception {
-        if (settings == null || !settings.isModelProvider()) {
-            throw new IllegalArgumentException("사용할 AI 모델이 선택되지 않았습니다.");
-        }
-
-        String key = apiKey == null ? "" : apiKey.trim();
-        String input = userText == null ? "" : userText.trim();
-        if (input.isEmpty()) throw new IllegalArgumentException("분석할 내용이 없습니다.");
-        if (settings.isCloudProvider() && key.isEmpty()) {
-            throw new IllegalArgumentException("API 키가 등록되지 않았습니다.");
-        }
-
-        String output;
-        if (AiSettings.PROVIDER_OLLAMA.equals(settings.provider)) {
-            output = requestOllama(settings.ollamaBaseUrl, settings.ollamaModel, input);
-        } else if (AiSettings.PROVIDER_OPENAI.equals(settings.provider)) {
-            output = requestOpenAi(settings.openAiModel, key, input);
-        } else {
-            output = requestGemini(settings.geminiModel, key, input);
-        }
-        return parseAnalysis(output, input);
+    /** 기존 호출 코드와의 호환성을 유지하는 기본 분석 함수입니다. */
+    public static AiAnalysisResult analyze(AiSettings settings, String apiKey,
+                                           String userText) throws Exception {
+        return analyze(settings, apiKey, userText, new RequestControl());
     }
 
-    /** 같은 휴대전화에서 실행 중인 Ollama의 구조화 JSON 출력을 사용합니다. */
-    private static String requestOllama(String baseUrl, String model, String input) throws Exception {
+    /**
+     * 선택된 AI 공급자로 문장을 분석합니다.
+     * RequestControl을 전달하면 화면의 취소 버튼이 실제 HTTP 연결까지 중단할 수 있습니다.
+     */
+    public static AiAnalysisResult analyze(AiSettings settings, String apiKey,
+                                           String userText, RequestControl control) throws Exception {
+        RequestControl activeControl = control == null ? new RequestControl() : control;
+        try {
+            activeControl.throwIfCancelled();
+            if (settings == null || !settings.isModelProvider()) {
+                throw new IllegalArgumentException("사용할 AI 모델이 선택되지 않았습니다.");
+            }
+
+            String key = apiKey == null ? "" : apiKey.trim();
+            String input = userText == null ? "" : userText.trim();
+            if (input.isEmpty()) throw new IllegalArgumentException("분석할 내용이 없습니다.");
+            if (settings.isCloudProvider() && key.isEmpty()) {
+                throw new IllegalArgumentException("API 키가 등록되지 않았습니다.");
+            }
+
+            String output;
+            if (AiSettings.PROVIDER_OLLAMA.equals(settings.provider)) {
+                output = requestOllama(settings.ollamaBaseUrl, settings.ollamaModel,
+                        input, activeControl);
+            } else if (AiSettings.PROVIDER_OPENAI.equals(settings.provider)) {
+                output = requestOpenAi(settings.openAiModel, key, input, activeControl);
+            } else {
+                output = requestGemini(settings.geminiModel, key, input, activeControl);
+            }
+            activeControl.throwIfCancelled();
+            return parseAnalysis(output, input);
+        } catch (AnalysisCancelledException e) {
+            throw e;
+        } catch (Exception e) {
+            if (activeControl.isCancelled() || Thread.currentThread().isInterrupted()) {
+                throw new AnalysisCancelledException();
+            }
+            throw e;
+        }
+    }
+
+    /** 같은 휴대전화에서 실행 중인 Ollama의 짧은 구조화 JSON 출력을 사용합니다. */
+    private static String requestOllama(String baseUrl, String model, String input,
+                                        RequestControl control) throws Exception {
         validateModel(model);
         if (!AiSettings.isAllowedOllamaBaseUrl(baseUrl)) {
             throw new IllegalArgumentException("Ollama 주소는 같은 휴대전화의 localhost만 사용할 수 있습니다.");
@@ -68,20 +93,28 @@ public final class CloudAiAnalyzer {
         JSONObject userMessage = new JSONObject()
                 .put("role", "user")
                 .put("content", input);
+
+        // 휴대전화 발열과 대기 시간을 줄이기 위해 문맥과 최대 출력 길이를 제한합니다.
         JSONObject options = new JSONObject()
                 .put("temperature", 0)
-                .put("num_ctx", 4096);
+                .put("num_ctx", 2048)
+                .put("num_predict", 180);
+
         JSONObject body = new JSONObject()
                 .put("model", model)
                 .put("messages", new JSONArray().put(systemMessage).put(userMessage))
                 .put("stream", false)
+                .put("think", false)
                 .put("format", "json")
                 .put("options", options)
-                .put("keep_alive", "2m");
+                // 연속 입력 시 모델을 다시 적재하지 않도록 잠시 메모리에 유지합니다.
+                .put("keep_alive", "5m");
 
         String endpoint = AiSettings.normalizeOllamaBaseUrl(baseUrl) + "/api/chat";
         try {
-            String response = postJson(openConnection(endpoint), body.toString(), "Ollama");
+            String response = postJson(
+                    openConnection(endpoint, OLLAMA_READ_TIMEOUT_MS),
+                    body.toString(), "Ollama", control);
             JSONObject root = new JSONObject(response);
             JSONObject message = root.optJSONObject("message");
             String content = message == null ? "" : message.optString("content", "").trim();
@@ -94,11 +127,12 @@ public final class CloudAiAnalyzer {
                     "Ollama Server가 실행되지 않았습니다. Ollama Server 앱에서 서비스를 먼저 시작하세요.");
         } catch (java.net.SocketTimeoutException e) {
             throw new AiServiceException(
-                    "Ollama 분석 시간이 초과됐습니다. 더 작은 모델을 사용하거나 실행 중인 앱을 정리하세요.");
+                    "Ollama 분석 시간이 초과됐습니다. gemma3:1b처럼 더 작은 모델을 사용해 보세요.");
         }
     }
 
-    private static String requestOpenAi(String model, String apiKey, String input) throws Exception {
+    private static String requestOpenAi(String model, String apiKey, String input,
+                                        RequestControl control) throws Exception {
         validateModel(model);
         JSONObject body = new JSONObject();
         body.put("model", model);
@@ -106,9 +140,10 @@ public final class CloudAiAnalyzer {
         body.put("instructions", systemInstruction());
         body.put("input", input);
 
-        HttpURLConnection connection = openConnection("https://api.openai.com/v1/responses");
+        HttpURLConnection connection = openConnection(
+                "https://api.openai.com/v1/responses", CLOUD_READ_TIMEOUT_MS);
         connection.setRequestProperty("Authorization", "Bearer " + apiKey);
-        String response = postJson(connection, body.toString(), "GPT");
+        String response = postJson(connection, body.toString(), "GPT", control);
         JSONObject root = new JSONObject(response);
 
         String direct = root.optString("output_text", "").trim();
@@ -136,7 +171,8 @@ public final class CloudAiAnalyzer {
         return outputText.toString();
     }
 
-    private static String requestGemini(String model, String apiKey, String input) throws Exception {
+    private static String requestGemini(String model, String apiKey, String input,
+                                        RequestControl control) throws Exception {
         validateModel(model);
         String encodedModel = URLEncoder.encode(model, StandardCharsets.UTF_8.name());
         String endpoint = "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -157,9 +193,9 @@ public final class CloudAiAnalyzer {
                 .put("contents", new JSONArray().put(userContent))
                 .put("generationConfig", generationConfig);
 
-        HttpURLConnection connection = openConnection(endpoint);
+        HttpURLConnection connection = openConnection(endpoint, CLOUD_READ_TIMEOUT_MS);
         connection.setRequestProperty("x-goog-api-key", apiKey);
-        String response = postJson(connection, body.toString(), "Gemini");
+        String response = postJson(connection, body.toString(), "Gemini", control);
         JSONObject root = new JSONObject(response);
         JSONArray candidates = root.optJSONArray("candidates");
         if (candidates == null || candidates.length() == 0) {
@@ -182,11 +218,11 @@ public final class CloudAiAnalyzer {
         return text.toString();
     }
 
-    private static HttpURLConnection openConnection(String endpoint) throws Exception {
+    private static HttpURLConnection openConnection(String endpoint, int readTimeoutMs) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
         connection.setRequestMethod("POST");
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(READ_TIMEOUT_MS);
+        connection.setReadTimeout(readTimeoutMs);
         connection.setDoOutput(true);
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
         connection.setRequestProperty("Accept", "application/json");
@@ -194,33 +230,46 @@ public final class CloudAiAnalyzer {
     }
 
     private static String postJson(HttpURLConnection connection, String json,
-                                   String providerLabel) throws Exception {
+                                   String providerLabel, RequestControl control) throws Exception {
+        control.attach(connection);
         try {
+            control.throwIfCancelled();
             try (OutputStream output = connection.getOutputStream()) {
                 output.write(json.getBytes(StandardCharsets.UTF_8));
                 output.flush();
             }
 
+            control.throwIfCancelled();
             int status = connection.getResponseCode();
             InputStream stream = status >= 200 && status < 300
                     ? connection.getInputStream() : connection.getErrorStream();
-            String response = readAll(stream);
+            String response = readAll(stream, control);
+            control.throwIfCancelled();
             if (status < 200 || status >= 300) {
                 throw new AiServiceException(buildHttpError(providerLabel, status, response));
             }
             return response;
+        } catch (Exception e) {
+            if (control.isCancelled() || Thread.currentThread().isInterrupted()) {
+                throw new AnalysisCancelledException();
+            }
+            throw e;
         } finally {
+            control.detach(connection);
             connection.disconnect();
         }
     }
 
-    private static String readAll(InputStream stream) throws Exception {
+    private static String readAll(InputStream stream, RequestControl control) throws Exception {
         if (stream == null) return "";
         StringBuilder result = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             String line;
-            while ((line = reader.readLine()) != null) result.append(line);
+            while ((line = reader.readLine()) != null) {
+                control.throwIfCancelled();
+                result.append(line);
+            }
         }
         return result.toString();
     }
@@ -334,6 +383,53 @@ public final class CloudAiAnalyzer {
     private static String limit(String value, int maxLength) {
         String text = value == null ? "" : value;
         return text.length() <= maxLength ? text : text.substring(0, maxLength) + "…";
+    }
+
+    /** 현재 실행 중인 HTTP 연결과 사용자 취소 상태를 관리합니다. */
+    public static final class RequestControl {
+        private volatile HttpURLConnection connection;
+        private volatile boolean cancelled;
+
+        /** 실행 중인 요청을 중단하고 연결을 즉시 닫습니다. */
+        public void cancel() {
+            cancelled = true;
+            HttpURLConnection active = connection;
+            if (active != null) active.disconnect();
+        }
+
+        public boolean isCancelled() {
+            return cancelled;
+        }
+
+        private void attach(HttpURLConnection value) throws AnalysisCancelledException {
+            if (cancelled) {
+                value.disconnect();
+                throw new AnalysisCancelledException();
+            }
+            connection = value;
+            if (cancelled) {
+                value.disconnect();
+                throw new AnalysisCancelledException();
+            }
+        }
+
+        private void detach(HttpURLConnection value) {
+            if (connection == value) connection = null;
+        }
+
+        private void throwIfCancelled() throws AnalysisCancelledException {
+            if (cancelled || Thread.currentThread().isInterrupted()) {
+                cancelled = true;
+                throw new AnalysisCancelledException();
+            }
+        }
+    }
+
+    /** 사용자가 취소 버튼을 눌렀을 때만 사용하는 정상적인 종료 예외입니다. */
+    public static final class AnalysisCancelledException extends Exception {
+        public AnalysisCancelledException() {
+            super("AI 분석을 취소했습니다.");
+        }
     }
 
     /** 화면에 보여도 되는 안전한 오류만 전달하는 예외입니다. */
