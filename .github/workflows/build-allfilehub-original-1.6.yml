@@ -1,0 +1,103 @@
+name: Build AllFileHub 1.6 Original Preview APK
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-allfilehub-original-1.6.yml'
+      - '.github/workflows/build-allfilehub-apk.yml'
+      - 'allfilehub-apk/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 소스 받기
+        uses: actions/checkout@v4
+
+      - name: 1.5 내부 실행 엔진 복원
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          import gzip
+
+          workflow = Path('.github/workflows/build-allfilehub-apk.yml').read_text(encoding='utf-8')
+          marker = "cat <<'B64' | base64 -d | gzip -d > allfilehub-apk/app/src/main/java/com/seongho/allfilehub/MainActivity.java"
+          marker_pos = workflow.index(marker)
+          payload_start = workflow.index('\n', marker_pos) + 1
+          payload_end = workflow.index('\n          B64', payload_start)
+          payload = workflow[payload_start:payload_end]
+          source = gzip.decompress(base64.b64decode(payload)).decode('utf-8')
+          Path('allfilehub-apk/app/src/main/java/com/seongho/allfilehub/MainActivity.java').write_text(source, encoding='utf-8')
+          PY
+
+      - name: 1.5.1 강제 종료 수정 반영
+        run: python3 allfilehub-apk/apply_crashfix_1_5_1.py
+
+      - name: 1.6.0 원본 보기 코드 반영
+        shell: bash
+        run: |
+          cat allfilehub-apk/patches/main_patch.part01.b64 \
+              allfilehub-apk/patches/main_patch.part02.b64 \
+              allfilehub-apk/patches/main_patch.part03.b64 \
+              | base64 -d | gzip -d > /tmp/allfilehub-1.6.patch
+          cd allfilehub-apk
+          patch -p1 < /tmp/allfilehub-1.6.patch
+          base64 -d patches/zoom_image_view.b64 | gzip -d \
+              > app/src/main/java/com/seongho/allfilehub/ZoomImageView.java
+
+      - name: 앱 버전 수정
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('allfilehub-apk/app/build.gradle')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('versionCode 5', 'versionCode 7')
+          text = text.replace("versionName '1.4.0-apk'", "versionName '1.6.0-original-preview'")
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: JDK 17 설정
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK 설정
+        uses: android-actions/setup-android@v3
+
+      - name: Android SDK 35 설치
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Gradle 8.9 설정
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: 디버그 APK 빌드
+        working-directory: allfilehub-apk
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: 결과 파일 정리
+        run: |
+          mkdir -p output
+          cp allfilehub-apk/app/build/outputs/apk/debug/app-debug.apk output/AllFileHub-1.6.0-original-preview-debug.apk
+          sha256sum output/AllFileHub-1.6.0-original-preview-debug.apk > output/SHA256.txt
+          cp allfilehub-apk/README_1.6.0_KO.md output/README_1.6.0_KO.md 2>/dev/null || true
+
+      - name: APK 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: AllFileHub-1.6.0-Original-APK
+          path: output/
+          if-no-files-found: error
+          retention-days: 30
