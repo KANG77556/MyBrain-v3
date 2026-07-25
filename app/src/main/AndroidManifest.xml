@@ -30,11 +30,17 @@
             </intent-filter>
         </activity>
 
-        <!-- 1.8.3 달력 중심 새 디자인 작업 화면입니다. -->
+        <!-- 1.8.4 실기기 반응형 보정이 적용된 기본 작업 화면입니다. -->
+        <activity
+            android:name=".WorkspaceActivityV3"
+            android:exported="false"
+            android:label="MyBrain AI" />
+
+        <!-- 1.8.3 달력 중심 새 디자인 작업 화면은 복구용으로 유지합니다. -->
         <activity
             android:name=".WorkspaceActivityV2"
             android:exported="false"
-            android:label="MyBrain AI" />
+            android:label="MyBrain AI 1.8.3 화면" />
 
         <!-- 1.8.2 작업 화면은 복구용으로 유지합니다. -->
         <activity
