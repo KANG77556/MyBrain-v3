@@ -21,6 +21,7 @@ jobs:
           unzip -q brain-assistant-source.zip
           rm -rf app build.gradle build.gradle.kts settings.gradle settings.gradle.kts gradle.properties README.md
           cp -a brain-assistant-android/. .
+          sed -i 's/toast("$type을 저장했습니다.")/toast("${type}을 저장했습니다.")/' app/src/main/java/com/brainassistant/app/MainActivity.kt
 
       - name: Java 17 설치
         uses: actions/setup-java@v4
