@@ -32,6 +32,9 @@ public class MyBrainApplication extends Application {
         // AI 분석 버튼 재배치, 버튼 크기, 입력 화면 여백을 공통 보정합니다.
         UiUxEnhancer.install(this);
 
+        // 제스처 내비게이션 안전영역, 큰 글씨, 키보드 대응을 공통 보정합니다.
+        UiSafeAreaEnhancer.install(this);
+
         // 앱 실행 시 기존 알림과 홈 화면 위젯을 다시 복구합니다.
         AlarmScheduler.rescheduleAll(this);
         TodayWidgetProvider.updateAll(this);
