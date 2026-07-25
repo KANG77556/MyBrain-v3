@@ -9,7 +9,7 @@ import android.view.Window;
 /**
  * 앱 전체 생명주기를 관리합니다.
  * 일정 데이터가 변경되면 알림과 홈 화면 위젯을 자동으로 갱신하고,
- * 모든 Activity에 입력칸 밖 터치 시 키보드를 닫는 공통 동작을 설치합니다.
+ * 모든 Activity에 키보드 닫기와 입력 화면 UI 보정을 공통 적용합니다.
  */
 public class MyBrainApplication extends Application {
     private static final String PREFS = "mybrain_data";
@@ -29,11 +29,14 @@ public class MyBrainApplication extends Application {
         SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
         preferences.registerOnSharedPreferenceChangeListener(listener);
 
+        // AI 분석 버튼 재배치, 버튼 크기, 입력 화면 여백을 공통 보정합니다.
+        UiUxEnhancer.install(this);
+
         // 앱 실행 시 기존 알림과 홈 화면 위젯을 다시 복구합니다.
         AlarmScheduler.rescheduleAll(this);
         TodayWidgetProvider.updateAll(this);
 
-        // 모든 화면에서 입력칸 밖을 누르면 키보드를 닫습니다.
+        // 모든 화면에서 현재 입력칸 바깥을 누르면 키보드를 닫습니다.
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override public void onActivityCreated(Activity activity, Bundle savedInstanceState) { }
             @Override public void onActivityStarted(Activity activity) { }
