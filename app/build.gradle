@@ -18,8 +18,8 @@ android {
         applicationId 'kr.co.mybrain.ai'
         minSdk 26
         targetSdk 35
-        versionCode 42
-        versionName '1.9.9'
+        versionCode 43
+        versionName '1.10.0'
     }
 
     signingConfigs {
@@ -53,8 +53,6 @@ android {
     }
 }
 
-// ML Kit 내부 의존성이 가져오는 구형 jdk7·jdk8 Kotlin 모듈을 제외하고
-// 통합된 kotlin-stdlib 한 버전만 사용해 중복 클래스를 방지합니다.
 configurations.configureEach {
     exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
     exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
@@ -62,9 +60,6 @@ configurations.configureEach {
 }
 
 dependencies {
-    // 시스템 카메라와 앱 캐시 파일을 안전하게 연결하는 FileProvider입니다.
     implementation 'androidx.core:core:1.15.0'
-
-    // 한국어 모델을 APK에 포함하여 첫 OCR 실행 전 별도 다운로드를 줄입니다.
     implementation 'com.google.mlkit:text-recognition-korean:16.0.1'
 }
