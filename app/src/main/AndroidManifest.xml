@@ -30,11 +30,17 @@
             </intent-filter>
         </activity>
 
-        <!-- 홈·할 일·일정·메모·달력이 분리된 기본 작업 화면입니다. -->
+        <!-- 1.8.3 달력 중심 새 디자인 작업 화면입니다. -->
+        <activity
+            android:name=".WorkspaceActivityV2"
+            android:exported="false"
+            android:label="MyBrain AI" />
+
+        <!-- 1.8.2 작업 화면은 복구용으로 유지합니다. -->
         <activity
             android:name=".WorkspaceActivity"
             android:exported="false"
-            android:label="MyBrain AI" />
+            android:label="MyBrain AI 이전 화면" />
 
         <!-- 기존 핵심 기능과 비상용 규칙 분석기를 보관하는 내부 메인 화면입니다. -->
         <activity
