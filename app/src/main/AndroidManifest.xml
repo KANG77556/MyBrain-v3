@@ -6,7 +6,6 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- 음성 인식기와 시스템 카메라 앱을 안전하게 확인합니다. -->
     <queries>
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
@@ -25,7 +24,6 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
-        <!-- 앱 시작 시 알림 권한을 확인한 뒤 기본 작업 화면을 엽니다. -->
         <activity
             android:name=".NotificationPermissionActivity"
             android:exported="true"
@@ -36,152 +34,42 @@
             </intent-filter>
         </activity>
 
-        <!-- 1.9.5부터 지연 UI 패치 없이 직접 구성하는 통합 메인 화면입니다. -->
+        <activity
+            android:name=".MainWorkspaceActivityV2"
+            android:exported="false"
+            android:label="MyBrain AI" />
+
         <activity
             android:name=".MainWorkspaceActivity"
             android:exported="false"
             android:label="MyBrain AI" />
 
-        <!-- 1.9.1 UI 구조 정리가 적용된 이전 기본 화면은 복구용으로 유지합니다. -->
-        <activity
-            android:name=".WorkspaceActivityV9"
-            android:exported="false"
-            android:label="MyBrain AI 이전 화면" />
+        <activity android:name=".WorkspaceActivityV9" android:exported="false" android:label="MyBrain AI 이전 화면" />
+        <activity android:name=".UnifiedQuickInputActivityV4" android:exported="false" android:label="빠른 입력" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".DocumentCaptureActivityV2" android:exported="false" android:label="문서 품질 확인" />
+        <activity android:name=".VoiceCaptureActivityV3" android:exported="false" android:label="음성으로 입력" />
+        <activity android:name=".WorkspaceActivityV8" android:exported="false" android:label="MyBrain AI 1.9.0 화면" />
+        <activity android:name=".UnifiedQuickInputActivityV3" android:exported="false" android:label="안전한 빠른 입력 1.9.0" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".DocumentCaptureActivity" android:exported="false" android:label="문서 품질 확인 1.9.0" />
+        <activity android:name=".PrivacyReviewActivity" android:exported="false" android:label="개인정보 확인" />
+        <activity android:name=".VoiceCaptureActivityV2" android:exported="false" android:label="음성 이어 말하기 1.9.0" />
+        <activity android:name=".WorkspaceActivityV7" android:exported="false" android:label="MyBrain AI 1.8.9 화면" />
+        <activity android:name=".UnifiedQuickInputActivityV2" android:exported="false" android:label="안전한 빠른 입력 1.8.9" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".VoiceCaptureActivity" android:exported="false" android:label="음성으로 입력" />
+        <activity android:name=".WorkspaceActivityV6" android:exported="false" android:label="MyBrain AI 1.8.8 화면" />
+        <activity android:name=".UnifiedQuickInputActivity" android:exported="false" android:label="빠른 입력 1.8.8" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".WorkspaceActivityV5" android:exported="false" android:label="MyBrain AI 1.8.7 화면" />
+        <activity android:name=".QuickInputActivity" android:exported="false" android:label="새 기록" />
+        <activity android:name=".QuickCaptureReviewActivity" android:exported="false" android:label="추출 내용 확인" />
+        <activity android:name=".WorkspaceActivityV4" android:exported="false" android:label="MyBrain AI 1.8.5 화면" />
+        <activity android:name=".WorkItemEditorActivity" android:exported="false" android:label="항목 입력" />
+        <activity android:name=".WorkItemDetailActivity" android:exported="false" android:label="항목 상세" />
+        <activity android:name=".WorkItemManagerActivity" android:exported="false" android:label="항목 관리" />
+        <activity android:name=".WorkspaceActivityV3" android:exported="false" android:label="MyBrain AI 1.8.4 화면" />
+        <activity android:name=".WorkspaceActivityV2" android:exported="false" android:label="MyBrain AI 1.8.3 화면" />
+        <activity android:name=".WorkspaceActivity" android:exported="false" android:label="MyBrain AI 이전 화면" />
+        <activity android:name=".MainActivity" android:exported="false" />
 
-        <!-- 저장 버튼 고정과 분석 항목 재배치가 적용된 통합 입력 화면입니다. -->
-        <activity
-            android:name=".UnifiedQuickInputActivityV4"
-            android:exported="false"
-            android:label="빠른 입력"
-            android:windowSoftInputMode="adjustResize" />
-
-        <!-- 미리보기 반응형 높이와 하단 고정 실행 버튼이 적용된 문서 화면입니다. -->
-        <activity
-            android:name=".DocumentCaptureActivityV2"
-            android:exported="false"
-            android:label="문서 품질 확인" />
-
-        <!-- 상단 이동 영역과 단순한 보조 버튼이 적용된 음성 화면입니다. -->
-        <activity
-            android:name=".VoiceCaptureActivityV3"
-            android:exported="false"
-            android:label="음성으로 입력" />
-
-        <!-- 1.9.0 문서 품질 검토와 음성 이어 말하기 화면은 복구용으로 유지합니다. -->
-        <activity
-            android:name=".WorkspaceActivityV8"
-            android:exported="false"
-            android:label="MyBrain AI 1.9.0 화면" />
-
-        <activity
-            android:name=".UnifiedQuickInputActivityV3"
-            android:exported="false"
-            android:label="안전한 빠른 입력 1.9.0"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".DocumentCaptureActivity"
-            android:exported="false"
-            android:label="문서 품질 확인 1.9.0" />
-
-        <!-- 개인정보 마스킹 전·후를 비교합니다. -->
-        <activity
-            android:name=".PrivacyReviewActivity"
-            android:exported="false"
-            android:label="개인정보 확인" />
-
-        <activity
-            android:name=".VoiceCaptureActivityV2"
-            android:exported="false"
-            android:label="음성 이어 말하기 1.9.0" />
-
-        <!-- 1.8.9 화면과 입력기는 복구용으로 유지합니다. -->
-        <activity
-            android:name=".WorkspaceActivityV7"
-            android:exported="false"
-            android:label="MyBrain AI 1.8.9 화면" />
-
-        <activity
-            android:name=".UnifiedQuickInputActivityV2"
-            android:exported="false"
-            android:label="안전한 빠른 입력 1.8.9"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".VoiceCaptureActivity"
-            android:exported="false"
-            android:label="음성으로 입력" />
-
-        <!-- 1.8.8 통합 빠른 입력 화면은 복구용으로 유지합니다. -->
-        <activity
-            android:name=".WorkspaceActivityV6"
-            android:exported="false"
-            android:label="MyBrain AI 1.8.8 화면" />
-
-        <activity
-            android:name=".UnifiedQuickInputActivity"
-            android:exported="false"
-            android:label="빠른 입력 1.8.8"
-            android:windowSoftInputMode="adjustResize" />
-
-        <!-- 1.8.7 빠른 입력 선택 화면과 OCR 실행기는 호환용으로 유지합니다. -->
-        <activity
-            android:name=".WorkspaceActivityV5"
-            android:exported="false"
-            android:label="MyBrain AI 1.8.7 화면" />
-
-        <activity
-            android:name=".QuickInputActivity"
-            android:exported="false"
-            android:label="새 기록" />
-
-        <activity
-            android:name=".QuickCaptureReviewActivity"
-            android:exported="false"
-            android:label="추출 내용 확인" />
-
-        <!-- 전체 화면 입력과 목록 조작 화면입니다. -->
-        <activity
-            android:name=".WorkspaceActivityV4"
-            android:exported="false"
-            android:label="MyBrain AI 1.8.5 화면" />
-
-        <activity
-            android:name=".WorkItemEditorActivity"
-            android:exported="false"
-            android:label="항목 입력" />
-
-        <activity
-            android:name=".WorkItemDetailActivity"
-            android:exported="false"
-            android:label="항목 상세" />
-
-        <activity
-            android:name=".WorkItemManagerActivity"
-            android:exported="false"
-            android:label="항목 관리" />
-
-        <!-- 이전 작업 화면은 복구용으로 유지합니다. -->
-        <activity
-            android:name=".WorkspaceActivityV3"
-            android:exported="false"
-            android:label="MyBrain AI 1.8.4 화면" />
-
-        <activity
-            android:name=".WorkspaceActivityV2"
-            android:exported="false"
-            android:label="MyBrain AI 1.8.3 화면" />
-
-        <activity
-            android:name=".WorkspaceActivity"
-            android:exported="false"
-            android:label="MyBrain AI 이전 화면" />
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="false" />
-
-        <!-- 다른 앱에서 공유한 텍스트를 받는 기존 화면입니다. -->
         <activity
             android:name=".IntegratedMainActivity"
             android:exported="true">
@@ -192,28 +80,11 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".AiSettingsActivity"
-            android:exported="false"
-            android:label="MyBrain AI 설정" />
+        <activity android:name=".AiSettingsActivity" android:exported="false" android:label="MyBrain AI 설정" />
+        <activity android:name=".AiInputActivityV2" android:exported="false" android:label="AI 메시지 분석" />
+        <activity-alias android:name=".AiInputActivity" android:exported="false" android:label="AI 메시지 분석" android:targetActivity=".AiInputActivityV2" />
+        <activity android:name=".BackupActivity" android:exported="false" android:label="MyBrain 백업" />
 
-        <activity
-            android:name=".AiInputActivityV2"
-            android:exported="false"
-            android:label="AI 메시지 분석" />
-
-        <activity-alias
-            android:name=".AiInputActivity"
-            android:exported="false"
-            android:label="AI 메시지 분석"
-            android:targetActivity=".AiInputActivityV2" />
-
-        <activity
-            android:name=".BackupActivity"
-            android:exported="false"
-            android:label="MyBrain 백업" />
-
-        <!-- 시스템 카메라에는 앱 캐시의 촬영 파일만 임시 공유합니다. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -224,9 +95,7 @@
                 android:resource="@xml/quick_capture_paths" />
         </provider>
 
-        <receiver
-            android:name=".AlarmReceiver"
-            android:exported="false" />
+        <receiver android:name=".AlarmReceiver" android:exported="false" />
 
         <receiver
             android:name=".BootReceiver"
