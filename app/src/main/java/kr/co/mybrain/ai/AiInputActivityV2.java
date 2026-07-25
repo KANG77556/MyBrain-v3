@@ -8,19 +8,31 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 
 /**
- * MyBrain AI 1.8.6 AI 메시지 분석 화면입니다.
- *
- * 기존 분석 기능은 그대로 사용하고 화면이 만들어진 뒤 입력창 높이와 버튼 순서만
- * 정리합니다. 가장 자주 사용하는 자동 추천 분석 버튼을 입력창 바로 아래에
- * 배치해 스크롤 없이 실행할 수 있게 합니다.
+ * MyBrain AI AI 메시지 분석 화면입니다.
+ * 기존 분석 기능을 유지하면서 실행 버튼을 입력창 바로 아래에 배치하고,
+ * 음성·OCR 화면에서 전달한 문장을 입력창에 자동으로 채웁니다.
  */
 public class AiInputActivityV2 extends AiInputActivity {
+    public static final String EXTRA_INPUT_TEXT = "prefill_analysis_text";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         View content = findViewById(android.R.id.content);
-        if (content != null) content.post(this::rearrangePrimaryAction);
+        if (content != null) content.post(() -> {
+            prefillInputText();
+            rearrangePrimaryAction();
+        });
+    }
+
+    private void prefillInputText() {
+        String value = getIntent().getStringExtra(EXTRA_INPUT_TEXT);
+        if (value == null || value.trim().isEmpty()) return;
+        EditText input = findFirstEditText(findViewById(android.R.id.content));
+        if (input == null) return;
+        input.setText(value.trim());
+        input.setSelection(input.getText().length());
+        input.clearFocus();
     }
 
     /** 입력창과 분석 버튼을 찾아 첫 화면의 행동 순서를 재배치합니다. */

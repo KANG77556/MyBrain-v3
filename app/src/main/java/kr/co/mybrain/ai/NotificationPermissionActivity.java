@@ -9,7 +9,7 @@ import android.os.Bundle;
 
 /**
  * 앱 시작 시 알림 권한을 확인하는 전용 화면입니다.
- * 권한 확인이 끝나면 입력·목록 조작 UX가 적용된 작업 화면으로 이동합니다.
+ * 권한 확인이 끝나면 음성·OCR 빠른 입력이 적용된 작업 화면으로 이동합니다.
  */
 public class NotificationPermissionActivity extends Activity {
     private static final int REQUEST_NOTIFICATIONS = 1201;
@@ -39,9 +39,9 @@ public class NotificationPermissionActivity extends Activity {
         }
     }
 
-    /** 새 1.8.5 작업 홈을 열고 권한 확인 화면을 종료합니다. */
+    /** 새 1.8.7 작업 홈을 열고 권한 확인 화면을 종료합니다. */
     private void openMainScreen() {
-        Intent intent = new Intent(this, WorkspaceActivityV4.class);
+        Intent intent = new Intent(this, WorkspaceActivityV5.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
         finish();

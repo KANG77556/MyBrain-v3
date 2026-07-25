@@ -1,4 +1,4 @@
-name: MyBrain Stage 15 APK
+name: MyBrain Stage 16 APK
 
 on:
   workflow_dispatch:
@@ -43,20 +43,32 @@ jobs:
           gradle-version: '8.9'
 
       - name: Run Android build
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace :app:assembleDebug 2>&1 | tee build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrain-AI-1.8.7-build-log
+          path: build.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Prepare APK
         shell: bash
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk MyBrain-AI-1.8.6-debug.apk
-          sha256sum MyBrain-AI-1.8.6-debug.apk > MyBrain-AI-1.8.6-debug.apk.sha256
+          cp app/build/outputs/apk/debug/app-debug.apk MyBrain-AI-1.8.7-debug.apk
+          sha256sum MyBrain-AI-1.8.7-debug.apk > MyBrain-AI-1.8.7-debug.apk.sha256
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MyBrain-AI-1.8.6-APK
+          name: MyBrain-AI-1.8.7-APK
           path: |
-            MyBrain-AI-1.8.6-debug.apk
-            MyBrain-AI-1.8.6-debug.apk.sha256
+            MyBrain-AI-1.8.7-debug.apk
+            MyBrain-AI-1.8.7-debug.apk.sha256
           if-no-files-found: error
           retention-days: 30
