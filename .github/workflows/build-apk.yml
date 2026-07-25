@@ -17,7 +17,7 @@ jobs:
       - name: 브레인 비서 v0.2 프로젝트 복원
         shell: bash
         run: |
-          base64 --decode brain-assistant-android-source-v0.2.b64 > brain-assistant-source.zip
+          base64 --decode brain-assistant-android-source-v0.2.1.b64 > brain-assistant-source.zip
           unzip -q brain-assistant-source.zip
           rm -rf app build.gradle.kts settings.gradle.kts gradle.properties README.md
           cp -a brain-assistant-android/. .
