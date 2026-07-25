@@ -7,6 +7,12 @@ on:
     paths:
       - 'fridge-apk/**'
       - '.github/workflows/ourfridge-apk-build.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'fridge-apk/**'
+      - '.github/workflows/ourfridge-apk-build.yml'
   workflow_dispatch:
 
 permissions:
