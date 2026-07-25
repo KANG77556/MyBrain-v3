@@ -19,7 +19,7 @@ jobs:
         run: |
           base64 --decode brain-assistant-android-source-v0.2.1.b64 > brain-assistant-source.zip
           unzip -q brain-assistant-source.zip
-          rm -rf app build.gradle.kts settings.gradle.kts gradle.properties README.md
+          rm -rf app build.gradle build.gradle.kts settings.gradle settings.gradle.kts gradle.properties README.md
           cp -a brain-assistant-android/. .
 
       - name: Java 17 설치
