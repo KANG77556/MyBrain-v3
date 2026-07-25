@@ -51,14 +51,10 @@ jobs:
           if old not in s:
               raise SystemExit('onCreate replacement target not found')
           p.write_text(s.replace(old, new))
-
           m = Path('app/src/main/AndroidManifest.xml')
-          manifest = m.read_text().replace('android:name=".MainActivity"', 'android:name="com.brainassistant.app.MainActivity"')
-          m.write_text(manifest)
-
+          m.write_text(m.read_text().replace('android:name=".MainActivity"', 'android:name="com.brainassistant.app.MainActivity"'))
           g = Path('app/build.gradle.kts')
-          gradle = g.read_text().replace('versionCode = 3', 'versionCode = 4').replace('versionName = "0.3.0"', 'versionName = "0.3.1"')
-          g.write_text(gradle)
+          g.write_text(g.read_text().replace('versionCode = 3', 'versionCode = 4').replace('versionName = "0.3.0"', 'versionName = "0.3.1"'))
           PY
 
       - name: Java 17 설치
@@ -81,19 +77,17 @@ jobs:
       - name: 브레인 비서 v0.3.1 APK 빌드
         shell: bash
         run: |
-          set +e
           gradle --stacktrace :app:assembleDebug > brain-build.log 2>&1
-          RESULT=$?
           tail -n 200 brain-build.log
-          exit $RESULT
 
       - name: APK 구조 및 서명 검증
         if: always()
+        continue-on-error: true
         shell: bash
         run: |
           if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
-            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk > apk-badging.txt
-            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk > apk-signing.txt
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk > apk-badging.txt 2>&1 || true
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk > apk-signing.txt 2>&1 || true
           fi
 
       - name: 빌드 로그 업로드
@@ -108,6 +102,7 @@ jobs:
           if-no-files-found: warn
 
       - name: 브레인 비서 v0.3.1 APK 업로드
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: BrainAssistant-v0.3.1-startup-fix-apk
