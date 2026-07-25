@@ -13,10 +13,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * MyBrain AI 1.9.0 통합 빠른 입력 화면입니다.
- * 1.8.9의 개인정보 보호 기능을 유지하면서 문서 품질 검토와 음성 이어 말하기를 연결합니다.
+ * MyBrain AI 통합 빠른 입력 화면입니다.
+ * 개인정보 보호와 문서 품질 검토, 연속 음성 입력, 종료 시간 기능을 함께 사용합니다.
  */
-public class UnifiedQuickInputActivityV3 extends UnifiedQuickInputActivityV2 {
+public class UnifiedQuickInputActivityV3 extends UnifiedQuickInputActivityV5 {
 
     private static final int REQUEST_VOICE_V2 = 9601;
     private static final int REQUEST_DOCUMENT = 9602;
@@ -40,7 +40,6 @@ public class UnifiedQuickInputActivityV3 extends UnifiedQuickInputActivityV2 {
         if (root != null) root.postDelayed(this::patchInputButtons, 360L);
     }
 
-    /** 기존 음성·촬영·사진 버튼을 1.9.0 흐름으로 다시 연결합니다. */
     private void patchInputButtons() {
         List<View> views = new ArrayList<>();
         collect(findViewById(android.R.id.content), views);
@@ -78,7 +77,6 @@ public class UnifiedQuickInputActivityV3 extends UnifiedQuickInputActivityV2 {
             }
             return;
         }
-
         if (requestCode == REQUEST_DOCUMENT) {
             if (resultCode == RESULT_OK && data != null) {
                 String value = safe(data.getStringExtra(DocumentCaptureActivity.EXTRA_RESULT_TEXT)).trim();
@@ -94,7 +92,6 @@ public class UnifiedQuickInputActivityV3 extends UnifiedQuickInputActivityV2 {
             }
             return;
         }
-
         if (requestCode == REQUEST_PRIVACY_REVIEW) {
             if (resultCode == RESULT_OK && data != null) {
                 String value = safe(data.getStringExtra(PrivacyReviewActivity.EXTRA_RESULT_TEXT)).trim();
@@ -104,11 +101,9 @@ public class UnifiedQuickInputActivityV3 extends UnifiedQuickInputActivityV2 {
             pendingSource = "";
             return;
         }
-
         super.onActivityResult(requestCode, resultCode, data);
     }
 
-    /** 개인정보가 발견되면 비교 화면을 열고, 없으면 안전하게 정리한 결과를 바로 추가합니다. */
     private void reviewOrAppend(String raw, String source) {
         OcrPrivacyProcessor.ProcessedText processed = OcrPrivacyProcessor.process(raw, source);
         if (processed.maskedCount > 0) {
@@ -123,7 +118,6 @@ public class UnifiedQuickInputActivityV3 extends UnifiedQuickInputActivityV2 {
         }
     }
 
-    /** 기존 초안과 현재 입력을 유지하면서 새 문장을 아래에 이어 붙입니다. */
     private void appendText(String addition) {
         if (inputFieldV3 == null) inputFieldV3 = findInput(findViewById(android.R.id.content));
         if (inputFieldV3 == null) return;
