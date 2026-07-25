@@ -43,13 +43,32 @@
             </intent-filter>
         </activity>
 
-        <!-- 1.8.8 통합 빠른 입력이 적용된 기본 화면입니다. -->
+        <!-- 1.8.9 개인정보 보호 음성·OCR 입력이 적용된 기본 화면입니다. -->
         <activity
-            android:name=".WorkspaceActivityV6"
+            android:name=".WorkspaceActivityV7"
             android:exported="false"
             android:label="MyBrain AI" />
 
-        <!-- 텍스트·음성·문서·사진을 한곳에서 입력하고 바로 저장하는 화면입니다. -->
+        <!-- 개인정보 자동 마스킹과 긴 OCR 핵심 정리가 적용된 통합 입력 화면입니다. -->
+        <activity
+            android:name=".UnifiedQuickInputActivityV2"
+            android:exported="false"
+            android:label="안전한 빠른 입력"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- 중간 음성 인식 결과와 재시도 상태를 앱 안에서 표시합니다. -->
+        <activity
+            android:name=".VoiceCaptureActivity"
+            android:exported="false"
+            android:label="음성으로 입력" />
+
+        <!-- 1.8.8 통합 빠른 입력 화면은 복구용으로 유지합니다. -->
+        <activity
+            android:name=".WorkspaceActivityV6"
+            android:exported="false"
+            android:label="MyBrain AI 1.8.8 화면" />
+
+        <!-- 기존 통합 입력 화면은 복구용으로 유지합니다. -->
         <activity
             android:name=".UnifiedQuickInputActivity"
             android:exported="false"
