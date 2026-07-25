@@ -33,6 +33,9 @@ import java.util.Locale;
  */
 public class MainWorkspaceActivity extends android.app.Activity {
 
+    private static final String UI_PREFS = "mybrain_ui_settings";
+    private static final String KEY_CALENDAR_MODE = "calendar_view_mode";
+
     private static final int PRIMARY = Color.rgb(34, 96, 214);
     private static final int PRIMARY_LIGHT = Color.rgb(235, 242, 255);
     private static final int TEXT = Color.rgb(28, 38, 52);
@@ -51,10 +54,13 @@ public class MainWorkspaceActivity extends android.app.Activity {
     private TextView headerTitle;
     private String menu = "홈";
     private String selectedDate = LocalDate.now().toString();
+    private String calendarMode = "WEEK";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        calendarMode = getSharedPreferences(UI_PREFS, MODE_PRIVATE)
+                .getString(KEY_CALENDAR_MODE, "WEEK");
         loadItems();
         buildShell();
         render();
@@ -266,55 +272,179 @@ public class MainWorkspaceActivity extends android.app.Activity {
         if (shown == 0) list.addView(emptyCard("조건에 맞는 " + type + "이 없습니다."));
     }
 
-    /** 선택 날짜의 일정과 할 일을 보여주는 간단 달력 화면입니다. */
+    /** 월간·주간·일간 보기와 선택 날짜의 일정을 표시합니다. */
     private View buildCalendar() {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(dp(16), dp(10), dp(16), 0);
 
-        LinearLayout nav = new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setGravity(Gravity.CENTER_VERTICAL);
-
-        Button previous = button("‹", Color.WHITE, PRIMARY, 24);
-        previous.setOnClickListener(v -> moveDate(-1));
-        nav.addView(previous, new LinearLayout.LayoutParams(dp(48), dp(48)));
-
-        TextView title = text(koreanDate(parseDate(selectedDate)), 18, TEXT);
-        title.setGravity(Gravity.CENTER);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        nav.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
-
-        Button today = button("오늘", PRIMARY_LIGHT, PRIMARY, 14);
-        today.setOnClickListener(v -> {
-            selectedDate = LocalDate.now().toString();
-            render();
-        });
-        nav.addView(today, new LinearLayout.LayoutParams(dp(66), dp(44)));
-
-        Button next = button("›", Color.WHITE, PRIMARY, 24);
-        next.setOnClickListener(v -> moveDate(1));
-        nav.addView(next, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        page.addView(nav, matchWithBottom(10));
+        LinearLayout modes = new LinearLayout(this);
+        modes.setOrientation(LinearLayout.HORIZONTAL);
+        modes.setPadding(dp(4), dp(4), dp(4), dp(4));
+        modes.setBackground(shape(Color.WHITE, 24, BORDER, 1));
+        addCalendarMode(modes, "월간", "MONTH");
+        addCalendarMode(modes, "주간", "WEEK");
+        addCalendarMode(modes, "일간", "DAY");
+        page.addView(modes, matchHeightWithBottom(58, 10));
 
         ScrollView scroll = new ScrollView(this);
+        scroll.setClipToPadding(false);
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(0, 0, 0, dp(96));
         scroll.addView(body);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        int shown = 0;
-        LocalDate date = parseDate(selectedDate);
+        if ("MONTH".equals(calendarMode)) {
+            body.addView(calendarNavigator("MONTH"));
+            EventCalendarView calendar = new EventCalendarView(this);
+            calendar.setSelectedDate(selectedDate);
+            calendar.setEventMarkerProvider(this::calendarMarker);
+            calendar.setOnDateSelectedListener(value -> {
+                selectedDate = value;
+                render();
+            });
+            body.addView(calendar, matchWithBottom(6));
+        } else {
+            body.addView(calendarNavigator(calendarMode));
+            if ("WEEK".equals(calendarMode)) addWeekChips(body);
+        }
+
+        TextView selectedTitle = text(koreanDate(parseDate(selectedDate)), 20, TEXT);
+        selectedTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        selectedTitle.setPadding(dp(1), dp(14), 0, dp(10));
+        body.addView(selectedTitle);
+        addAgenda(body, parseDate(selectedDate));
+        return page;
+    }
+
+    private void addCalendarMode(LinearLayout row, String label, String mode) {
+        boolean selected = mode.equals(calendarMode);
+        Button tab = button(label, selected ? PRIMARY : Color.TRANSPARENT,
+                selected ? Color.WHITE : TEXT, 15);
+        tab.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
+        tab.setOnClickListener(v -> {
+            calendarMode = mode;
+            getSharedPreferences(UI_PREFS, MODE_PRIVATE).edit()
+                    .putString(KEY_CALENDAR_MODE, mode).apply();
+            render();
+        });
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        params.setMargins(dp(2), 0, dp(2), 0);
+        row.addView(tab, params);
+    }
+
+    private View calendarNavigator(String mode) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, 0, 0, dp(8));
+
+        Button previous = button("‹", Color.WHITE, PRIMARY, 24);
+        previous.setOnClickListener(v -> moveSelected(-1, mode));
+        row.addView(previous, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+        LocalDate selected = parseDate(selectedDate);
+        String label;
+        if ("MONTH".equals(mode)) label = monthLabel(selected);
+        else if ("WEEK".equals(mode)) label = weekLabel(selected);
+        else label = koreanDate(selected);
+
+        TextView title = text(label, 18, TEXT);
+        title.setGravity(Gravity.CENTER);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        row.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+
+        Button today = button("오늘", PRIMARY_LIGHT, PRIMARY, 14);
+        today.setOnClickListener(v -> {
+            selectedDate = LocalDate.now().toString();
+            render();
+        });
+        row.addView(today, new LinearLayout.LayoutParams(dp(66), dp(44)));
+
+        Button next = button("›", Color.WHITE, PRIMARY, 24);
+        next.setOnClickListener(v -> moveSelected(1, mode));
+        row.addView(next, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        return row;
+    }
+
+    /** 주간 보기에서 월요일부터 일요일까지 선택 버튼을 표시합니다. */
+    private void addWeekChips(LinearLayout body) {
+        LocalDate selected = parseDate(selectedDate);
+        if (selected == null) selected = LocalDate.now();
+        LocalDate monday = selected.minusDays(selected.getDayOfWeek().getValue() - 1L);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(2), 0, dp(4));
+
+        for (int i = 0; i < 7; i++) {
+            LocalDate date = monday.plusDays(i);
+            int count = countOnDate(date);
+            boolean isSelected = date.toString().equals(selectedDate);
+            String weekday = koreanWeekday(date.getDayOfWeek());
+            String label = weekday + "\n" + date.getMonthValue() + "/" + date.getDayOfMonth()
+                    + "\n" + (count > 0 ? count : "");
+
+            TextView chip = text(label, 12, isSelected ? Color.WHITE : TEXT);
+            chip.setGravity(Gravity.CENTER);
+            chip.setTypeface(Typeface.DEFAULT, isSelected ? Typeface.BOLD : Typeface.NORMAL);
+            chip.setBackground(shape(isSelected ? PRIMARY : Color.WHITE, 15,
+                    isSelected ? PRIMARY : BORDER, 1));
+            chip.setOnClickListener(v -> {
+                selectedDate = date.toString();
+                render();
+            });
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(88), 1f);
+            params.setMargins(dp(2), dp(3), dp(2), dp(3));
+            row.addView(chip, params);
+        }
+        body.addView(row);
+    }
+
+    private void addAgenda(LinearLayout body, LocalDate date) {
+        List<WorkItemRecord> values = new ArrayList<>();
         for (WorkItemRecord item : items) {
             if (item.completed) continue;
             if (!("일정".equals(item.type) || "할 일".equals(item.type))) continue;
-            if (!occurs(item, date)) continue;
-            body.addView(compactCard(item, "할 일".equals(item.type)), matchWithBottom(8));
-            shown++;
+            if (occurs(item, date)) values.add(item);
         }
-        if (shown == 0) body.addView(emptyCard("이 날짜에는 일정과 할 일이 없습니다."));
-        return page;
+        values.sort(Comparator.comparing(value -> parseTime(value.time),
+                Comparator.nullsLast(Comparator.naturalOrder())));
+
+        if (values.isEmpty()) {
+            body.addView(emptyCard("이 날짜에는 일정과 할 일이 없습니다."));
+            return;
+        }
+        for (WorkItemRecord item : values) {
+            body.addView(compactCard(item, "할 일".equals(item.type)), matchWithBottom(8));
+        }
+    }
+
+    private EventCalendarView.EventMarker calendarMarker(String dateText) {
+        LocalDate date = parseDate(dateText);
+        int count = countOnDate(date);
+        int color = PRIMARY;
+        if (count > 0) {
+            for (WorkItemRecord item : items) {
+                if (!item.completed && occurs(item, date)) {
+                    color = "할 일".equals(item.type) ? TASK : PRIMARY;
+                    break;
+                }
+            }
+        }
+        return new EventCalendarView.EventMarker(count, color);
+    }
+
+    private int countOnDate(LocalDate date) {
+        if (date == null) return 0;
+        int count = 0;
+        for (WorkItemRecord item : items) {
+            if (item.completed) continue;
+            if (!("일정".equals(item.type) || "할 일".equals(item.type))) continue;
+            if (occurs(item, date)) count++;
+        }
+        return count;
     }
 
     /** 카드 터치 시 읽기 화면으로 이동하고 할 일 완료 버튼을 제공합니다. */
@@ -403,15 +533,17 @@ public class MainWorkspaceActivity extends android.app.Activity {
     private void showManagementMenu() {
         new AlertDialog.Builder(this)
                 .setTitle("설정 및 관리")
-                .setItems(new String[]{"AI 설정", "백업·복원", "여러 항목 관리", "오늘로 이동"},
+                .setItems(new String[]{"AI 설정", "백업·복원", "여러 항목 관리", "오늘로 이동", "이전 화면(복구)"},
                         (dialog, which) -> {
                             if (which == 0) startActivity(new Intent(this, AiSettingsActivity.class));
                             else if (which == 1) startActivity(new Intent(this, BackupActivity.class));
                             else if (which == 2) startActivity(new Intent(this, WorkItemManagerActivity.class));
-                            else {
+                            else if (which == 3) {
                                 selectedDate = LocalDate.now().toString();
                                 menu = "달력";
                                 render();
+                            } else {
+                                startActivity(new Intent(this, WorkspaceActivityV9.class));
                             }
                         }).show();
     }
@@ -465,9 +597,13 @@ public class MainWorkspaceActivity extends android.app.Activity {
         }
     }
 
-    private void moveDate(int days) {
+    private void moveSelected(int amount, String mode) {
         LocalDate value = parseDate(selectedDate);
-        selectedDate = (value == null ? LocalDate.now() : value).plusDays(days).toString();
+        if (value == null) value = LocalDate.now();
+        if ("MONTH".equals(mode)) value = value.plusMonths(amount);
+        else if ("WEEK".equals(mode)) value = value.plusWeeks(amount);
+        else value = value.plusDays(amount);
+        selectedDate = value.toString();
         render();
     }
 
@@ -546,6 +682,12 @@ public class MainWorkspaceActivity extends android.app.Activity {
         return params;
     }
 
+    private LinearLayout.LayoutParams matchHeightWithBottom(int height, int bottom) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(height));
+        params.setMargins(0, 0, 0, dp(bottom));
+        return params;
+    }
+
     private LinearLayout.LayoutParams weightedHeight(int height) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(height), 1f);
         params.setMargins(dp(3), 0, dp(3), 0);
@@ -561,6 +703,31 @@ public class MainWorkspaceActivity extends android.app.Activity {
     private String koreanDate(LocalDate date) {
         if (date == null) date = LocalDate.now();
         return date.getYear() + "년 " + date.getMonthValue() + "월 " + date.getDayOfMonth() + "일";
+    }
+
+    private String monthLabel(LocalDate date) {
+        if (date == null) date = LocalDate.now();
+        return date.getYear() + "년 " + date.getMonthValue() + "월";
+    }
+
+    private String weekLabel(LocalDate date) {
+        if (date == null) date = LocalDate.now();
+        LocalDate monday = date.minusDays(date.getDayOfWeek().getValue() - 1L);
+        LocalDate sunday = monday.plusDays(6);
+        return monday.getMonthValue() + "/" + monday.getDayOfMonth()
+                + " - " + sunday.getMonthValue() + "/" + sunday.getDayOfMonth();
+    }
+
+    private String koreanWeekday(DayOfWeek day) {
+        switch (day) {
+            case MONDAY: return "월";
+            case TUESDAY: return "화";
+            case WEDNESDAY: return "수";
+            case THURSDAY: return "목";
+            case FRIDAY: return "금";
+            case SATURDAY: return "토";
+            default: return "일";
+        }
     }
 
     private String displayDate(String date) {
