@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.Button;
@@ -80,17 +81,14 @@ public class WorkspaceActivityV9 extends WorkspaceActivityV8 {
     private void patchButton(Button button, List<View> views) {
         String value = textOf(button);
         if ("＋".equals(value)) {
-            Runnable action = () -> openUnifiedInput(views, null, null);
-            connectTouch(button, action);
-            button.setOnLongClickListener(v -> {
-                startActivity(new Intent(this, WorkItemManagerActivity.class));
-                return true;
-            });
+            Runnable clickAction = () -> openUnifiedInput(views, null, null);
+            Runnable longAction = () -> startActivity(new Intent(this, WorkItemManagerActivity.class));
+            connectTouch(button, clickAction, longAction);
             button.setContentDescription("빠른 입력, 길게 누르면 여러 항목 관리");
         } else if ("🎤".equals(value)) {
             Runnable action = () -> startActivityForResult(
                     new Intent(this, VoiceCaptureActivityV3.class), REQUEST_HOME_VOICE_UI);
-            connectTouch(button, action);
+            connectTouch(button, action, null);
             button.setContentDescription("여러 문장을 이어서 음성 입력");
         }
     }
@@ -113,18 +111,54 @@ public class WorkspaceActivityV9 extends WorkspaceActivityV8 {
         text.setContentDescription("통합 빠른 입력 열기");
     }
 
-    private void connectTouch(Button button, Runnable action) {
-        button.setOnClickListener(v -> action.run());
+    /**
+     * 짧게 누르면 기본 기능을 실행하고, 길게 누르면 별도 기능을 실행합니다.
+     * 이전 버전이 클릭 리스너를 늦게 교체해도 이 터치 처리가 우선됩니다.
+     */
+    private void connectTouch(Button button, Runnable clickAction, Runnable longAction) {
+        button.setOnClickListener(v -> clickAction.run());
+        if (longAction != null) {
+            button.setOnLongClickListener(v -> {
+                longAction.run();
+                return true;
+            });
+        } else {
+            button.setOnLongClickListener(null);
+        }
+
+        final boolean[] longTriggered = {false};
+        final Runnable longPressRunnable = () -> {
+            if (longAction == null) return;
+            longTriggered[0] = true;
+            button.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            longAction.run();
+        };
+
         button.setOnTouchListener((view, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_UP) {
-                action.run();
-                view.setPressed(false);
-            } else if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                view.setPressed(true);
-            } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
-                view.setPressed(false);
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    longTriggered[0] = false;
+                    view.setPressed(true);
+                    if (longAction != null) {
+                        view.postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout());
+                    }
+                    return true;
+
+                case MotionEvent.ACTION_UP:
+                    view.removeCallbacks(longPressRunnable);
+                    view.setPressed(false);
+                    if (!longTriggered[0]) clickAction.run();
+                    return true;
+
+                case MotionEvent.ACTION_CANCEL:
+                    view.removeCallbacks(longPressRunnable);
+                    view.setPressed(false);
+                    longTriggered[0] = false;
+                    return true;
+
+                default:
+                    return true;
             }
-            return true;
         });
     }
 
