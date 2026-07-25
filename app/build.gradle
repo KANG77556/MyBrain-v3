@@ -18,8 +18,8 @@ android {
         applicationId 'kr.co.mybrain.ai'
         minSdk 26
         targetSdk 35
-        versionCode 29
-        versionName '1.8.6'
+        versionCode 30
+        versionName '1.8.7'
     }
 
     signingConfigs {
@@ -51,4 +51,12 @@ android {
             }
         }
     }
+}
+
+dependencies {
+    // 시스템 카메라와 앱 캐시 파일을 안전하게 연결하는 FileProvider입니다.
+    implementation 'androidx.core:core:1.15.0'
+
+    // 한국어 모델을 APK에 포함하여 첫 OCR 실행 전 별도 다운로드를 줄입니다.
+    implementation 'com.google.mlkit:text-recognition-korean:16.0.1'
 }
