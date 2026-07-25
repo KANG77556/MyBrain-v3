@@ -1,0 +1,3 @@
+MyBrain AI APK build trigger
+Date: 2026-07-25
+Purpose: generate downloadable debug APK artifact.
