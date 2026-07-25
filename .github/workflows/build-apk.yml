@@ -14,7 +14,7 @@ jobs:
       - name: 소스 내려받기
         uses: actions/checkout@v4
 
-      - name: 브레인 비서 v0.3 프로젝트 복원
+      - name: 브레인 비서 v0.3.1 프로젝트 복원 및 시작 오류 수정
         shell: bash
         run: |
           cat v03.part00 v03.part01 v03.part02 v03.part03 | base64 --decode > brain-assistant-source.zip
@@ -22,16 +22,44 @@ jobs:
           rm -rf app build.gradle build.gradle.kts settings.gradle settings.gradle.kts gradle.properties README.md
           cp -a brain-assistant-android/. .
           sed -i 's/toast("$type을 저장했습니다.")/toast("${type}을 저장했습니다.")/' app/src/main/java/com/brainassistant/app/MainActivity.kt
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/brainassistant/app/MainActivity.kt')
+          s = p.read_text()
+          old = '''        val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+                  encryptedPrefs = EncryptedSharedPreferences.create(
+                      "secure_settings", masterKeyAlias, this,
+                      EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                      EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                  )
+                  dataPrefs = getSharedPreferences("brain_data", MODE_PRIVATE)
+                  buildShell()
+                  showHome()'''
+          new = '''        encryptedPrefs = try {
+                      val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+                      EncryptedSharedPreferences.create(
+                          "secure_settings", masterKeyAlias, this,
+                          EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                          EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                      )
+                  } catch (error: Exception) {
+                      getSharedPreferences("secure_settings_fallback", MODE_PRIVATE)
+                  }
+                  dataPrefs = getSharedPreferences("brain_data", MODE_PRIVATE)
+                  buildShell()
+                  showHome()'''
+          if old not in s:
+              raise SystemExit('onCreate replacement target not found')
+          p.write_text(s.replace(old, new))
 
-      - name: 진단용 원본 업로드
-        uses: actions/upload-artifact@v4
-        with:
-          name: BrainAssistant-v0.3-source-diagnostics
-          path: |
-            app/src/main/AndroidManifest.xml
-            app/src/main/java/com/brainassistant/app/MainActivity.kt
-            app/build.gradle.kts
-          if-no-files-found: error
+          m = Path('app/src/main/AndroidManifest.xml')
+          manifest = m.read_text().replace('android:name=".MainActivity"', 'android:name="com.brainassistant.app.MainActivity"')
+          m.write_text(manifest)
+
+          g = Path('app/build.gradle.kts')
+          gradle = g.read_text().replace('versionCode = 3', 'versionCode = 4').replace('versionName = "0.3.0"', 'versionName = "0.3.1"')
+          g.write_text(gradle)
+          PY
 
       - name: Java 17 설치
         uses: actions/setup-java@v4
@@ -50,7 +78,7 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: 브레인 비서 v0.3 APK 빌드
+      - name: 브레인 비서 v0.3.1 APK 빌드
         shell: bash
         run: |
           set +e
@@ -59,7 +87,7 @@ jobs:
           tail -n 200 brain-build.log
           exit $RESULT
 
-      - name: 최종 매니페스트 덤프
+      - name: APK 구조 및 서명 검증
         if: always()
         shell: bash
         run: |
@@ -72,16 +100,16 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: BrainAssistant-v0.3-build-log
+          name: BrainAssistant-v0.3.1-build-log
           path: |
             brain-build.log
             apk-badging.txt
             apk-signing.txt
           if-no-files-found: warn
 
-      - name: 브레인 비서 v0.3 APK 업로드
+      - name: 브레인 비서 v0.3.1 APK 업로드
         uses: actions/upload-artifact@v4
         with:
-          name: BrainAssistant-v0.3.0-debug-apk
+          name: BrainAssistant-v0.3.1-startup-fix-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
