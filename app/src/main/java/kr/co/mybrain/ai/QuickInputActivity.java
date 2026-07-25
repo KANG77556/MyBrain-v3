@@ -36,10 +36,14 @@ import java.util.ArrayList;
 
 /**
  * 모든 빠른 입력 수단을 한곳에 모은 화면입니다.
- * 직접 입력은 기존 편집기로, 음성과 OCR은 원문 확인 화면으로 연결합니다.
+ * 일반 실행에서는 기존 확인 화면을 사용하고, 통합 입력창에서 호출한 경우에는
+ * 음성·OCR 문자열만 호출 화면으로 반환합니다.
  */
 public class QuickInputActivity extends Activity {
     public static final String EXTRA_MODE = "quick_input_mode";
+    public static final String EXTRA_RETURN_RESULT = "quick_input_return_result";
+    public static final String EXTRA_RESULT_TEXT = "quick_input_result_text";
+    public static final String EXTRA_RESULT_SOURCE = "quick_input_result_source";
     public static final String MODE_DIRECT = "DIRECT";
     public static final String MODE_VOICE = "VOICE";
     public static final String MODE_CAMERA = "CAMERA";
@@ -311,6 +315,14 @@ public class QuickInputActivity extends Activity {
     }
 
     private void openReview(String text, String source) {
+        if (getIntent().getBooleanExtra(EXTRA_RETURN_RESULT, false)) {
+            Intent result = new Intent();
+            result.putExtra(EXTRA_RESULT_TEXT, text);
+            result.putExtra(EXTRA_RESULT_SOURCE, source);
+            setResult(RESULT_OK, result);
+            finish();
+            return;
+        }
         Intent intent = new Intent(this, QuickCaptureReviewActivity.class);
         intent.putExtra(QuickCaptureReviewActivity.EXTRA_TEXT, text);
         intent.putExtra(QuickCaptureReviewActivity.EXTRA_SOURCE, source);
