@@ -18,11 +18,10 @@ android {
         applicationId 'kr.co.mybrain.ai'
         minSdk 26
         targetSdk 35
-        versionCode 27
-        versionName '1.8.4'
+        versionCode 28
+        versionName '1.8.5'
     }
 
-    // 고정 서명 정보가 준비된 경우에만 릴리스 서명 설정을 활성화합니다.
     signingConfigs {
         if (hasReleaseSigning) {
             release {
@@ -40,12 +39,10 @@ android {
 
     buildTypes {
         debug {
-            // 기존 개발·검증용 APK입니다.
             debuggable true
         }
 
         release {
-            // 현재 프로젝트에는 난독화 규칙이 없으므로 기능 안정성을 우선합니다.
             minifyEnabled false
             shrinkResources false
 

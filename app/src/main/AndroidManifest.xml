@@ -30,11 +30,35 @@
             </intent-filter>
         </activity>
 
-        <!-- 1.8.4 실기기 반응형 보정이 적용된 기본 작업 화면입니다. -->
+        <!-- 1.8.5 전체 화면 입력과 목록 조작 기능이 적용된 기본 화면입니다. -->
+        <activity
+            android:name=".WorkspaceActivityV4"
+            android:exported="false"
+            android:label="MyBrain AI" />
+
+        <!-- 새 항목 작성과 기존 항목 수정을 담당하는 전체 화면입니다. -->
+        <activity
+            android:name=".WorkItemEditorActivity"
+            android:exported="false"
+            android:label="항목 입력" />
+
+        <!-- 읽기 전용 상세 화면입니다. -->
+        <activity
+            android:name=".WorkItemDetailActivity"
+            android:exported="false"
+            android:label="항목 상세" />
+
+        <!-- 여러 항목 선택과 일괄 처리를 담당합니다. -->
+        <activity
+            android:name=".WorkItemManagerActivity"
+            android:exported="false"
+            android:label="항목 관리" />
+
+        <!-- 1.8.4 실기기 반응형 화면은 복구용으로 유지합니다. -->
         <activity
             android:name=".WorkspaceActivityV3"
             android:exported="false"
-            android:label="MyBrain AI" />
+            android:label="MyBrain AI 1.8.4 화면" />
 
         <!-- 1.8.3 달력 중심 새 디자인 작업 화면은 복구용으로 유지합니다. -->
         <activity
@@ -48,12 +72,10 @@
             android:exported="false"
             android:label="MyBrain AI 이전 화면" />
 
-        <!-- 기존 핵심 기능과 비상용 규칙 분석기를 보관하는 내부 메인 화면입니다. -->
         <activity
             android:name=".MainActivity"
             android:exported="false" />
 
-        <!-- 기존 통합 입력과 공유 텍스트 수신을 유지하는 보조 화면입니다. -->
         <activity
             android:name=".IntegratedMainActivity"
             android:exported="true">
@@ -64,30 +86,25 @@
             </intent-filter>
         </activity>
 
-        <!-- 클라우드 AI 공급자와 암호화 API 키를 설정하는 내부 화면입니다. -->
         <activity
             android:name=".AiSettingsActivity"
             android:exported="false"
             android:label="MyBrain AI 설정" />
 
-        <!-- 선택한 AI로 문장을 분석하고 결과를 확인하는 내부 화면입니다. -->
         <activity
             android:name=".AiInputActivity"
             android:exported="false"
             android:label="AI 메시지 분석" />
 
-        <!-- 메인 화면의 백업·복원 메뉴로만 여는 내부 화면입니다. -->
         <activity
             android:name=".BackupActivity"
             android:exported="false"
             android:label="MyBrain 백업" />
 
-        <!-- 예약된 시각에 실제 알림을 표시합니다. -->
         <receiver
             android:name=".AlarmReceiver"
             android:exported="false" />
 
-        <!-- 재부팅 또는 앱 업데이트 후 저장된 알림을 자동 복구합니다. -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
@@ -98,7 +115,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- 홈 화면에 오늘 일정과 할 일을 표시하는 위젯입니다. -->
         <receiver
             android:name=".TodayWidgetProvider"
             android:exported="false">
