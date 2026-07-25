@@ -41,6 +41,9 @@ public class MyBrainApplication extends Application {
         // 1.9.6부터 통합 입력 화면에 명시적인 분석 버튼과 개선된 음성 입력을 연결합니다.
         AnalysisButtonEnhancer.install(this);
 
+        // 1.9.7부터 홈 음성 입력으로 들어온 문장은 입력 화면에서 자동으로 한 번 분석합니다.
+        VoiceAnalysisFlowEnhancer.install(this);
+
         // 1.9.5 통합 메인 화면은 처음부터 간단 홈으로 생성되므로
         // 이전 홈 화면을 다시 탐색하고 재배치하는 HomeSimpleEnhancer는 실행하지 않습니다.
 
