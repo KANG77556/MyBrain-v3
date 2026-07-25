@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 시스템 카메라에 앱 캐시의 촬영 파일 한 개만 임시 공유합니다. -->
+    <cache-path
+        name="quick_capture"
+        path="quick_capture/" />
+</paths>
