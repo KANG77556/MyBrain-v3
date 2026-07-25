@@ -1,24 +1,27 @@
 name: Apply Stage 15 AI Layout
 
 on:
-  push:
+  pull_request:
     branches:
-      - stage15-ai-analysis-layout
+      - main
     paths:
       - 'tools/patch_stage15_ai_layout.py'
       - '.github/workflows/apply-stage15-ai-layout.yml'
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   apply-layout:
+    if: github.head_ref == 'stage15-ai-analysis-layout'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
           ref: stage15-ai-analysis-layout
+          persist-credentials: true
 
       - name: Apply AI screen layout patch
         run: python3 tools/patch_stage15_ai_layout.py
