@@ -36,11 +36,17 @@
             </intent-filter>
         </activity>
 
-        <!-- 1.9.1 UI 구조 정리가 적용된 기본 화면입니다. -->
+        <!-- 1.9.5부터 지연 UI 패치 없이 직접 구성하는 통합 메인 화면입니다. -->
+        <activity
+            android:name=".MainWorkspaceActivity"
+            android:exported="false"
+            android:label="MyBrain AI" />
+
+        <!-- 1.9.1 UI 구조 정리가 적용된 이전 기본 화면은 복구용으로 유지합니다. -->
         <activity
             android:name=".WorkspaceActivityV9"
             android:exported="false"
-            android:label="MyBrain AI" />
+            android:label="MyBrain AI 이전 화면" />
 
         <!-- 저장 버튼 고정과 분석 항목 재배치가 적용된 통합 입력 화면입니다. -->
         <activity
