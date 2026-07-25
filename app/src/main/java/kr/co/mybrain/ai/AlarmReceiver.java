@@ -24,15 +24,11 @@ public class AlarmReceiver extends BroadcastReceiver {
         if (manager == null) return;
         createChannel(manager);
 
-        // 알림을 누르면 구형 화면이 아니라 현재 사용 중인 통합 메인 화면을 엽니다.
-        Intent openIntent = new Intent(context, MainWorkspaceActivity.class);
+        Intent openIntent = new Intent(context, MainWorkspaceActivityV2.class);
         openIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
-                context,
-                notificationId,
-                openIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
+                context, notificationId, openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         android.app.Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? new android.app.Notification.Builder(context, CHANNEL_ID)
@@ -49,13 +45,9 @@ public class AlarmReceiver extends BroadcastReceiver {
                 .setContentIntent(pendingIntent);
 
         manager.notify(notificationId, builder.build());
-
-        // 이번 알림이 끝난 직후 전체 저장 자료를 다시 계산하여
-        // 매일·매주·매월·평일 반복 일정의 다음 회차를 예약합니다.
         AlarmScheduler.rescheduleAll(context.getApplicationContext());
     }
 
-    /** 알림이 일정 시각보다 얼마나 먼저 울렸는지 표시합니다. */
     private String reminderText(int minutes) {
         if (minutes == 5) return "5분 전";
         if (minutes == 10) return "10분 전";
@@ -64,14 +56,10 @@ public class AlarmReceiver extends BroadcastReceiver {
         return "";
     }
 
-    /** Android 8 이상에서 필요한 알림 채널을 만듭니다. */
     private void createChannel(NotificationManager manager) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "일정 및 할 일 알림",
-                    NotificationManager.IMPORTANCE_HIGH
-            );
+                    CHANNEL_ID, "일정 및 할 일 알림", NotificationManager.IMPORTANCE_HIGH);
             channel.setDescription("MyBrain AI에 저장된 일정과 할 일을 알려줍니다.");
             manager.createNotificationChannel(channel);
         }
