@@ -27,7 +27,7 @@ jobs:
       - name: Checkout source branch
         uses: actions/checkout@v4
 
-      - name: Reconstruct project archive
+      - name: Reconstruct and patch project
         shell: bash
         run: |
           set -euo pipefail
@@ -37,6 +37,17 @@ jobs:
           unzip -q OurFridge-source.zip
           test -f OurFridge/settings.gradle.kts
           test -f OurFridge/app/src/main/AndroidManifest.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('OurFridge/app/build.gradle.kts')
+          s = p.read_text()
+          if 'import org.jetbrains.kotlin.gradle.dsl.JvmTarget' not in s:
+              s = 'import org.jetbrains.kotlin.gradle.dsl.JvmTarget\n\n' + s
+          s = s.replace('\n    kotlinOptions {\n        jvmTarget = "17"\n    }\n', '\n')
+          if '\nkotlin {\n    compilerOptions {' not in s:
+              s += '\n\nkotlin {\n    compilerOptions {\n        jvmTarget.set(JvmTarget.JVM_17)\n    }\n}\n'
+          p.write_text(s)
+          PY
           mkdir -p artifacts
 
       - name: Set up JDK 17
