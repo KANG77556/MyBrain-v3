@@ -35,11 +35,11 @@ public class MyBrainApplication extends Application {
         // 제스처 내비게이션 안전영역, 큰 글씨, 키보드 대응을 공통 보정합니다.
         UiSafeAreaEnhancer.install(this);
 
-        // 기본 입력 화면에는 핵심 기능만 보이고 세부 설정은 필요할 때 펼치도록 합니다.
+        // 빠른 입력 화면의 세부 설정은 필요할 때만 펼치도록 유지합니다.
         SimpleUxEnhancer.install(this);
 
-        // 홈에서는 오늘의 핵심 일정과 미완료 할 일만 우선 표시합니다.
-        HomeSimpleEnhancer.install(this);
+        // 1.9.5 통합 메인 화면은 처음부터 간단 홈으로 생성되므로
+        // 이전 홈 화면을 다시 탐색하고 재배치하는 HomeSimpleEnhancer는 실행하지 않습니다.
 
         // 앱 실행 시 기존 알림과 홈 화면 위젯을 다시 복구합니다.
         AlarmScheduler.rescheduleAll(this);
