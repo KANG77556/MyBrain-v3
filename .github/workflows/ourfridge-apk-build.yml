@@ -47,6 +47,12 @@ jobs:
           if '\nkotlin {\n    compilerOptions {' not in s:
               s += '\n\nkotlin {\n    compilerOptions {\n        jvmTarget.set(JvmTarget.JVM_17)\n    }\n}\n'
           p.write_text(s)
+
+          p = Path('OurFridge/app/src/main/java/kr/co/seongho/ourfridge/ui/App.kt')
+          s = p.read_text()
+          s = s.replace('import androidx.compose.foundation.layout.weight\n', '')
+          s = s.replace('"음성 입력 $count건을 저장했습니다."', '"음성 입력 ${count}건을 저장했습니다."')
+          p.write_text(s)
           PY
           mkdir -p artifacts
 
