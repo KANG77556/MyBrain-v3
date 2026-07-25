@@ -38,6 +38,9 @@ public class MyBrainApplication extends Application {
         // 빠른 입력 화면의 세부 설정은 필요할 때만 펼치도록 유지합니다.
         SimpleUxEnhancer.install(this);
 
+        // 1.9.6부터 통합 입력 화면에 명시적인 분석 버튼과 개선된 음성 입력을 연결합니다.
+        AnalysisButtonEnhancer.install(this);
+
         // 1.9.5 통합 메인 화면은 처음부터 간단 홈으로 생성되므로
         // 이전 홈 화면을 다시 탐색하고 재배치하는 HomeSimpleEnhancer는 실행하지 않습니다.
 
