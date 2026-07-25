@@ -36,24 +36,47 @@
             </intent-filter>
         </activity>
 
-        <!-- 1.9.0 문서 품질 검토와 음성 이어 말하기가 적용된 기본 화면입니다. -->
+        <!-- 1.9.1 UI 구조 정리가 적용된 기본 화면입니다. -->
         <activity
-            android:name=".WorkspaceActivityV8"
+            android:name=".WorkspaceActivityV9"
             android:exported="false"
             android:label="MyBrain AI" />
 
-        <!-- 1.9.0 통합 빠른 입력 화면입니다. -->
+        <!-- 저장 버튼 고정과 분석 항목 재배치가 적용된 통합 입력 화면입니다. -->
+        <activity
+            android:name=".UnifiedQuickInputActivityV4"
+            android:exported="false"
+            android:label="빠른 입력"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- 미리보기 반응형 높이와 하단 고정 실행 버튼이 적용된 문서 화면입니다. -->
+        <activity
+            android:name=".DocumentCaptureActivityV2"
+            android:exported="false"
+            android:label="문서 품질 확인" />
+
+        <!-- 상단 이동 영역과 단순한 보조 버튼이 적용된 음성 화면입니다. -->
+        <activity
+            android:name=".VoiceCaptureActivityV3"
+            android:exported="false"
+            android:label="음성으로 입력" />
+
+        <!-- 1.9.0 문서 품질 검토와 음성 이어 말하기 화면은 복구용으로 유지합니다. -->
+        <activity
+            android:name=".WorkspaceActivityV8"
+            android:exported="false"
+            android:label="MyBrain AI 1.9.0 화면" />
+
         <activity
             android:name=".UnifiedQuickInputActivityV3"
             android:exported="false"
-            android:label="안전한 빠른 입력"
+            android:label="안전한 빠른 입력 1.9.0"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- 촬영·사진 선택 후 OCR 품질을 검토합니다. -->
         <activity
             android:name=".DocumentCaptureActivity"
             android:exported="false"
-            android:label="문서 품질 확인" />
+            android:label="문서 품질 확인 1.9.0" />
 
         <!-- 개인정보 마스킹 전·후를 비교합니다. -->
         <activity
@@ -61,11 +84,10 @@
             android:exported="false"
             android:label="개인정보 확인" />
 
-        <!-- 여러 음성 문장을 이어서 입력합니다. -->
         <activity
             android:name=".VoiceCaptureActivityV2"
             android:exported="false"
-            android:label="음성 이어 말하기" />
+            android:label="음성 이어 말하기 1.9.0" />
 
         <!-- 1.8.9 화면과 입력기는 복구용으로 유지합니다. -->
         <activity
@@ -93,7 +115,7 @@
         <activity
             android:name=".UnifiedQuickInputActivity"
             android:exported="false"
-            android:label="빠른 입력"
+            android:label="빠른 입력 1.8.8"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- 1.8.7 빠른 입력 선택 화면과 OCR 실행기는 호환용으로 유지합니다. -->
