@@ -8,7 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 
-/** 예약된 시각에 일정·할 일 알림을 표시합니다. */
+/** 예약된 시각에 일정·할 일 알림을 표시하고 다음 반복 알림을 다시 예약합니다. */
 public class AlarmReceiver extends BroadcastReceiver {
     public static final String CHANNEL_ID = "mybrain_schedule_channel";
 
@@ -24,7 +24,8 @@ public class AlarmReceiver extends BroadcastReceiver {
         if (manager == null) return;
         createChannel(manager);
 
-        Intent openIntent = new Intent(context, MainActivity.class);
+        // 알림을 누르면 구형 화면이 아니라 현재 사용 중인 통합 메인 화면을 엽니다.
+        Intent openIntent = new Intent(context, MainWorkspaceActivity.class);
         openIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 context,
@@ -48,6 +49,10 @@ public class AlarmReceiver extends BroadcastReceiver {
                 .setContentIntent(pendingIntent);
 
         manager.notify(notificationId, builder.build());
+
+        // 이번 알림이 끝난 직후 전체 저장 자료를 다시 계산하여
+        // 매일·매주·매월·평일 반복 일정의 다음 회차를 예약합니다.
+        AlarmScheduler.rescheduleAll(context.getApplicationContext());
     }
 
     /** 알림이 일정 시각보다 얼마나 먼저 울렸는지 표시합니다. */
