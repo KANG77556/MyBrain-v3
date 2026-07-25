@@ -40,7 +40,21 @@ jobs:
           gradle-version: "8.9"
 
       - name: 브레인 비서 v0.2 APK 빌드
-        run: gradle --stacktrace :app:assembleDebug
+        shell: bash
+        run: |
+          set +e
+          gradle --stacktrace :app:assembleDebug > brain-build.log 2>&1
+          RESULT=$?
+          tail -n 200 brain-build.log
+          exit $RESULT
+
+      - name: 빌드 로그 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BrainAssistant-v0.2-build-log
+          path: brain-build.log
+          if-no-files-found: warn
 
       - name: 브레인 비서 v0.2 APK 업로드
         uses: actions/upload-artifact@v4
