@@ -1,6 +1,7 @@
 package kr.co.mybrain.ai;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -25,6 +26,7 @@ import java.util.regex.Pattern;
 public class WorkspaceActivityV6 extends WorkspaceActivityV5 {
     private static final String HOME_QUICK_TAG = "mybrain_home_quick_actions";
     private static final String HOME_UNIFIED_MARKER = "mybrain_unified_home_entry";
+    private static final String UNIFIED_DRAFT_PREFS = "mybrain_unified_input_draft";
     private static final Pattern KOREAN_DATE = Pattern.compile("(\\d{4})년\\s*(\\d{1,2})월\\s*(\\d{1,2})일");
 
     private View rootView;
@@ -155,6 +157,7 @@ public class WorkspaceActivityV6 extends WorkspaceActivityV5 {
     }
 
     private void openUnifiedInput(String startMode) {
+        sanitizeUnifiedDraft();
         List<View> views = new ArrayList<>();
         collect(rootView, views);
 
@@ -165,6 +168,15 @@ public class WorkspaceActivityV6 extends WorkspaceActivityV5 {
         if (!defaultDate.isEmpty()) intent.putExtra(UnifiedQuickInputActivity.EXTRA_DEFAULT_DATE, defaultDate);
         if (startMode != null) intent.putExtra(UnifiedQuickInputActivity.EXTRA_START_MODE, startMode);
         startActivity(intent);
+    }
+
+    /** 수동 알림을 선택하지 않은 초안에 내부 센티널 값이 남지 않도록 정리합니다. */
+    private void sanitizeUnifiedDraft() {
+        SharedPreferences draft = getSharedPreferences(UNIFIED_DRAFT_PREFS, MODE_PRIVATE);
+        if (draft.contains("reminder")
+                && draft.getInt("reminder", Integer.MIN_VALUE) == Integer.MIN_VALUE) {
+            draft.edit().remove("reminder").apply();
+        }
     }
 
     /** 현재 메뉴의 성격을 기본 종류로 전달합니다. */
