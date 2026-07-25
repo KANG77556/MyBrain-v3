@@ -14,10 +14,10 @@ jobs:
       - name: 소스 내려받기
         uses: actions/checkout@v4
 
-      - name: 브레인 비서 v0.2 프로젝트 복원
+      - name: 브레인 비서 v0.3 프로젝트 복원
         shell: bash
         run: |
-          base64 --decode brain-assistant-android-source-v0.2.1.b64 > brain-assistant-source.zip
+          base64 --decode brain-assistant-android-source-v0.3.b64 > brain-assistant-source.zip
           unzip -q brain-assistant-source.zip
           rm -rf app build.gradle build.gradle.kts settings.gradle settings.gradle.kts gradle.properties README.md
           cp -a brain-assistant-android/. .
@@ -39,7 +39,7 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: 브레인 비서 v0.2 APK 빌드
+      - name: 브레인 비서 v0.3 APK 빌드
         shell: bash
         run: |
           set +e
@@ -52,13 +52,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: BrainAssistant-v0.2-build-log
+          name: BrainAssistant-v0.3-build-log
           path: brain-build.log
           if-no-files-found: warn
 
-      - name: 브레인 비서 v0.2 APK 업로드
+      - name: 브레인 비서 v0.3 APK 업로드
         uses: actions/upload-artifact@v4
         with:
-          name: BrainAssistant-v0.2.0-debug-apk
+          name: BrainAssistant-v0.3.0-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
