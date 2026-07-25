@@ -91,10 +91,18 @@
             android:exported="false"
             android:label="MyBrain AI 설정" />
 
+        <!-- 1.8.6에서 실행 버튼을 입력창 바로 아래로 옮긴 실제 AI 분석 화면입니다. -->
         <activity
-            android:name=".AiInputActivity"
+            android:name=".AiInputActivityV2"
             android:exported="false"
             android:label="AI 메시지 분석" />
+
+        <!-- 기존 코드의 AiInputActivity 명시적 호출을 새 화면으로 연결합니다. -->
+        <activity-alias
+            android:name=".AiInputActivity"
+            android:exported="false"
+            android:label="AI 메시지 분석"
+            android:targetActivity=".AiInputActivityV2" />
 
         <activity
             android:name=".BackupActivity"
