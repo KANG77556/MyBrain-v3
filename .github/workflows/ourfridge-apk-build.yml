@@ -1,0 +1,80 @@
+name: Build OurFridge APK
+
+on:
+  push:
+    branches:
+      - fridge-apk-build
+    paths:
+      - 'fridge-apk/**'
+      - '.github/workflows/ourfridge-apk-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+
+      - name: Reconstruct project archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat fridge-apk/source.part* > OurFridge-source.zip.b64
+          base64 --decode OurFridge-source.zip.b64 > OurFridge-source.zip
+          echo '8a5c8842965539f3d177cef2387e5ef795da9ffe535b271e5f76faa98598f11d  OurFridge-source.zip' | sha256sum --check
+          unzip -q OurFridge-source.zip
+          test -f OurFridge/settings.gradle.kts
+          test -f OurFridge/app/src/main/AndroidManifest.xml
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Run tests and build debug APK
+        working-directory: OurFridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace testDebugUnitTest :app:assembleDebug
+
+      - name: Verify and package APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='OurFridge/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          mkdir -p artifacts
+          cp "$APK" artifacts/OurFridge-v0.1.0-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs artifacts/OurFridge-v0.1.0-debug.apk | tee artifacts/apk-signature.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging artifacts/OurFridge-v0.1.0-debug.apk | tee artifacts/apk-badging.txt
+          sha256sum artifacts/OurFridge-v0.1.0-debug.apk | tee artifacts/sha256.txt
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: OurFridge-v0.1.0-debug
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
