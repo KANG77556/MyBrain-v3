@@ -14,12 +14,12 @@ jobs:
       - name: 소스 내려받기
         uses: actions/checkout@v4
 
-      - name: 브레인 비서 프로젝트 복원
+      - name: 브레인 비서 v0.2 프로젝트 복원
         shell: bash
         run: |
-          base64 --decode brain-assistant-source.b64 > brain-assistant-source.zip
+          base64 --decode brain-assistant-android-source-v0.2.b64 > brain-assistant-source.zip
           unzip -q brain-assistant-source.zip
-          rm -rf app build.gradle settings.gradle gradle.properties README.md
+          rm -rf app build.gradle.kts settings.gradle.kts gradle.properties README.md
           cp -a brain-assistant-android/. .
 
       - name: Java 17 설치
@@ -39,12 +39,12 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: 브레인 비서 디버그 APK 빌드
+      - name: 브레인 비서 v0.2 APK 빌드
         run: gradle --stacktrace :app:assembleDebug
 
-      - name: 브레인 비서 APK 업로드
+      - name: 브레인 비서 v0.2 APK 업로드
         uses: actions/upload-artifact@v4
         with:
-          name: BrainAssistant-debug-apk
+          name: BrainAssistant-v0.2.0-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
