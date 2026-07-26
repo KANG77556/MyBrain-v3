@@ -1,15 +1,18 @@
 package kr.co.mybrain.v2;
 
-import android.content.res.Configuration;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
+
+import kr.co.mybrain.v2.settings.AiSettingsActivity;
 
 /**
  * 스마트폰에서는 기존 한 열 UI를 유지하고, 태블릿에서는 입력과 분석 결과를
@@ -22,7 +25,10 @@ public class AdaptiveMainActivity extends MainActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().getDecorView().post(this::applyAdaptiveLayout);
+        getWindow().getDecorView().post(() -> {
+            applyAdaptiveLayout();
+            addAiSettingsEntry();
+        });
     }
 
     private void applyAdaptiveLayout() {
@@ -43,6 +49,31 @@ public class AdaptiveMainActivity extends MainActivity {
             return;
         }
         applyTabletLayout(root, widthDp);
+    }
+
+    private void addAiSettingsEntry() {
+        View content = findViewById(android.R.id.content);
+        ScrollView scroll = findScrollView(content);
+        if (scroll == null || scroll.getChildCount() == 0) return;
+        View child = scroll.getChildAt(0);
+        if (!(child instanceof LinearLayout)) return;
+        LinearLayout root = (LinearLayout) child;
+        if (root.findViewWithTag("alpha22-ai-settings") != null) return;
+
+        Button settingsButton = new Button(this);
+        settingsButton.setTag("alpha22-ai-settings");
+        settingsButton.setText("⚙  AI 설정");
+        settingsButton.setTextSize(15);
+        settingsButton.setAllCaps(false);
+        settingsButton.setGravity(Gravity.CENTER);
+        settingsButton.setOnClickListener(v ->
+                startActivity(new Intent(this, AiSettingsActivity.class)));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        params.setMargins(0, dp(8), 0, dp(2));
+        int position = Math.min(2, root.getChildCount());
+        root.addView(settingsButton, position, params);
     }
 
     private void applyPhoneLayout(LinearLayout root) {
