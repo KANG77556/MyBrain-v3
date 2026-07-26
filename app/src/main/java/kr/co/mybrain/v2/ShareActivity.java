@@ -2,7 +2,9 @@ package kr.co.mybrain.v2;
 
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Parcelable;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
@@ -35,7 +37,7 @@ public final class ShareActivity extends AppCompatActivity {
         String action = intent.getAction();
         if (Intent.ACTION_SEND.equals(action)) {
             CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
-            Uri stream = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            Uri stream = readSingleStream(intent);
             if (text != null && !text.toString().trim().isEmpty()) {
                 openSharedText(text.toString().trim());
             } else if (stream != null) {
@@ -45,9 +47,33 @@ public final class ShareActivity extends AppCompatActivity {
                 finish();
             }
         } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
-            ArrayList<Uri> streams = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
-            if (streams == null || streams.isEmpty()) finish(); else openSharedFiles(streams);
-        } else finish();
+            ArrayList<Uri> streams = readMultipleStreams(intent);
+            if (streams.isEmpty()) finish(); else openSharedFiles(streams);
+        } else {
+            finish();
+        }
+    }
+
+    private Uri readSingleStream(Intent intent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri.class);
+        }
+        Parcelable value = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        return value instanceof Uri ? (Uri) value : null;
+    }
+
+    private ArrayList<Uri> readMultipleStreams(Intent intent) {
+        ArrayList<Uri> result = new ArrayList<>();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ArrayList<Uri> values = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri.class);
+            if (values != null) result.addAll(values);
+            return result;
+        }
+        ArrayList<? extends Parcelable> values = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+        if (values != null) {
+            for (Parcelable value : values) if (value instanceof Uri) result.add((Uri) value);
+        }
+        return result;
     }
 
     private void openSharedText(String text) {
@@ -90,12 +116,11 @@ public final class ShareActivity extends AppCompatActivity {
     }
 
     private void openEditor() {
-        WorkItemEditorDialog dialog = new WorkItemEditorDialog(parsedItem, item -> {
-            repository.insert(item.toEntity(), id -> runOnUiThread(() -> {
-                Toast.makeText(this, "공유 내용을 저장했습니다.", Toast.LENGTH_SHORT).show();
-                finish();
-            }));
-        });
+        WorkItemEditorDialog dialog = new WorkItemEditorDialog(parsedItem, item ->
+                repository.insert(item.toEntity(), id -> runOnUiThread(() -> {
+                    Toast.makeText(this, "공유 내용을 저장했습니다.", Toast.LENGTH_SHORT).show();
+                    finish();
+                })));
         dialog.show(getSupportFragmentManager(), "shared_item_editor");
     }
 }
