@@ -1,8 +1,12 @@
 package kr.co.mybrain.v2.settings;
 
+import android.Manifest;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
@@ -15,14 +19,17 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import java.text.NumberFormat;
 import java.util.Locale;
 
-/** AI 비용 한도와 네트워크 정책을 설정하는 화면입니다. */
+/** AI 비용 한도, 알림과 네트워크 정책을 설정하는 화면입니다. */
 public class AiBudgetActivity extends AppCompatActivity {
     private static final int BG = Color.rgb(246, 248, 252);
     private static final int TEXT = Color.rgb(24, 34, 48);
@@ -30,22 +37,33 @@ public class AiBudgetActivity extends AppCompatActivity {
     private static final int PRIMARY = Color.rgb(45, 91, 255);
     private static final int BORDER = Color.rgb(218, 224, 234);
     private static final int DANGER = Color.rgb(218, 53, 69);
+    private static final int SUCCESS = Color.rgb(29, 128, 75);
 
     private AiSettings aiSettings;
     private AiBudgetSettings budget;
     private Switch wifiOnlySwitch;
     private Switch budgetEnabledSwitch;
     private Switch blockAtLimitSwitch;
+    private Switch notificationsSwitch;
     private EditText monthlyLimitInput;
     private EditText warningPercentInput;
     private EditText exchangeRateInput;
     private TextView monthlySummary;
     private TextView priceSummary;
 
+    private final ActivityResultLauncher<String> notificationPermission =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                Toast.makeText(this,
+                        granted ? "AI 비용 알림을 사용할 수 있습니다."
+                                : "알림 권한이 없어 비용 경고는 앱 안에서만 표시됩니다.",
+                        Toast.LENGTH_LONG).show();
+            });
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         aiSettings = AiSettings.load(this);
         budget = AiBudgetSettings.load(this);
+        AiBudgetNotifier.createChannel(this);
         setContentView(buildScreen());
         bindValues();
         refreshSummary();
@@ -76,7 +94,7 @@ public class AiBudgetActivity extends AppCompatActivity {
         TextView title = text("AI 사용 보호", 28, TEXT, true);
         title.setPadding(0, dp(18), 0, dp(4));
         root.addView(title);
-        TextView subtitle = text("데이터 사용과 월간 예상 비용을 제어합니다.", 15, SUBTEXT, false);
+        TextView subtitle = text("데이터 사용과 GPT·Gemini 합산 월간 예상 비용을 제어합니다.", 15, SUBTEXT, false);
         subtitle.setPadding(0, 0, 0, dp(12));
         root.addView(subtitle);
 
@@ -85,14 +103,14 @@ public class AiBudgetActivity extends AppCompatActivity {
         networkCard.addView(sectionTitle("1. 네트워크 사용"));
         wifiOnlySwitch = optionSwitch("Wi-Fi에서만 클라우드 AI 사용");
         networkCard.addView(wifiOnlySwitch);
-        TextView networkNote = text("모바일 데이터에서는 자동으로 기기 분석 결과를 사용합니다.", 13, SUBTEXT, false);
+        TextView networkNote = text("모바일 데이터나 인터넷 연결이 없으면 기기 분석으로 자동 전환합니다.", 13, SUBTEXT, false);
         networkNote.setPadding(0, dp(6), 0, 0);
         networkCard.addView(networkNote);
 
         LinearLayout budgetCard = card();
         root.addView(budgetCard, cardParams());
         budgetCard.addView(sectionTitle("2. 월간 예상 비용 한도"));
-        budgetEnabledSwitch = optionSwitch("월간 비용 한도 사용");
+        budgetEnabledSwitch = optionSwitch("GPT·Gemini 합산 월간 비용 한도 사용");
         budgetCard.addView(budgetEnabledSwitch);
         monthlyLimitInput = numericInput("예: 5000");
         budgetCard.addView(labeledInput("월간 한도(원)", monthlyLimitInput));
@@ -102,7 +120,11 @@ public class AiBudgetActivity extends AppCompatActivity {
         LinearLayout.LayoutParams switchParams = new LinearLayout.LayoutParams(-1, -2);
         switchParams.setMargins(0, dp(8), 0, 0);
         budgetCard.addView(blockAtLimitSwitch, switchParams);
-        TextView budgetNote = text("한도가 꺼져 있으면 비용을 계산만 하고 AI 호출은 차단하지 않습니다.", 13, SUBTEXT, false);
+        notificationsSwitch = optionSwitch("경고 기준·한도 도달 알림 받기");
+        LinearLayout.LayoutParams notificationParams = new LinearLayout.LayoutParams(-1, -2);
+        notificationParams.setMargins(0, dp(4), 0, 0);
+        budgetCard.addView(notificationsSwitch, notificationParams);
+        TextView budgetNote = text("비용 한도가 꺼져 있으면 예상 비용만 계산하고 AI 호출은 차단하지 않습니다.", 13, SUBTEXT, false);
         budgetNote.setPadding(0, dp(6), 0, 0);
         budgetCard.addView(budgetNote);
 
@@ -117,7 +139,7 @@ public class AiBudgetActivity extends AppCompatActivity {
 
         LinearLayout summaryCard = card();
         root.addView(summaryCard, cardParams());
-        summaryCard.addView(sectionTitle("4. 이번 달 사용 상태"));
+        summaryCard.addView(sectionTitle("4. 이번 달 전체 사용 상태"));
         monthlySummary = text("", 14, TEXT, false);
         monthlySummary.setLineSpacing(dp(3), 1f);
         summaryCard.addView(monthlySummary);
@@ -126,6 +148,12 @@ public class AiBudgetActivity extends AppCompatActivity {
         priceSummary.setPadding(0, dp(10), 0, 0);
         summaryCard.addView(priceSummary);
 
+        Button compare = secondaryButton("모델별 비용·속도 비교");
+        compare.setOnClickListener(v -> startActivity(new Intent(this, AiModelComparisonActivity.class)));
+        LinearLayout.LayoutParams compareParams = new LinearLayout.LayoutParams(-1, dp(50));
+        compareParams.setMargins(0, dp(10), 0, 0);
+        summaryCard.addView(compare, compareParams);
+
         Button save = primaryButton("✓  사용 보호 설정 저장");
         save.setOnClickListener(v -> saveSettings());
         LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, dp(56));
@@ -133,7 +161,8 @@ public class AiBudgetActivity extends AppCompatActivity {
         root.addView(save, saveParams);
 
         TextView notice = text("단가표 기준일: " + AiPricingCatalog.PRICE_EFFECTIVE_DATE
-                + " · 공급자 가격 변경, 무료 등급, 세금은 반영되지 않을 수 있습니다.", 12, SUBTEXT, false);
+                + " · 공급자 가격 변경, 무료 등급, 세금과 할인은 반영되지 않을 수 있습니다.",
+                12, SUBTEXT, false);
         notice.setGravity(Gravity.CENTER);
         notice.setPadding(dp(8), dp(12), dp(8), 0);
         root.addView(notice);
@@ -144,6 +173,7 @@ public class AiBudgetActivity extends AppCompatActivity {
         wifiOnlySwitch.setChecked(budget.wifiOnly);
         budgetEnabledSwitch.setChecked(budget.budgetEnabled);
         blockAtLimitSwitch.setChecked(budget.blockAtLimit);
+        notificationsSwitch.setChecked(budget.notificationsEnabled);
         monthlyLimitInput.setText(String.valueOf(budget.monthlyLimitWon));
         warningPercentInput.setText(String.valueOf(budget.warningPercent));
         exchangeRateInput.setText(String.valueOf(budget.wonPerUsd));
@@ -154,6 +184,7 @@ public class AiBudgetActivity extends AppCompatActivity {
             budget.wifiOnly = wifiOnlySwitch.isChecked();
             budget.budgetEnabled = budgetEnabledSwitch.isChecked();
             budget.blockAtLimit = blockAtLimitSwitch.isChecked();
+            budget.notificationsEnabled = notificationsSwitch.isChecked();
             budget.monthlyLimitWon = Long.parseLong(monthlyLimitInput.getText().toString().trim());
             budget.warningPercent = Integer.parseInt(warningPercentInput.getText().toString().trim());
             budget.wonPerUsd = Integer.parseInt(exchangeRateInput.getText().toString().trim());
@@ -161,47 +192,67 @@ public class AiBudgetActivity extends AppCompatActivity {
             budget = AiBudgetSettings.load(this);
             bindValues();
             refreshSummary();
+            requestNotificationPermissionIfNeeded();
             Toast.makeText(this, "AI 사용 보호 설정을 저장했습니다.", Toast.LENGTH_SHORT).show();
         } catch (Exception error) {
             Toast.makeText(this, "숫자 입력값을 확인하세요.", Toast.LENGTH_LONG).show();
         }
     }
 
+    private void requestNotificationPermissionIfNeeded() {
+        if (!budget.notificationsEnabled || Build.VERSION.SDK_INT < 33) return;
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS);
+        }
+    }
+
     private void refreshSummary() {
         aiSettings = AiSettings.load(this);
         budget = AiBudgetSettings.load(this);
-        AiUsageStore.Summary summary = AiUsageStore.load(this, aiSettings.provider);
-        long spent = summary.monthlyEstimatedCostWon;
+        AiUsageStore.CombinedSummary combined = AiUsageStore.loadCombined(this);
+        AiUsageStore.Summary openAi = AiUsageStore.load(this, AiSettings.PROVIDER_OPENAI);
+        AiUsageStore.Summary gemini = AiUsageStore.load(this, AiSettings.PROVIDER_GEMINI);
+        long spent = combined.monthlyEstimatedCostWon;
         String progress;
         if (budget.budgetEnabled) {
-            int percent = budget.monthlyLimitWon <= 0L ? 0
-                    : (int) Math.min(999L, Math.round(spent * 100.0 / budget.monthlyLimitWon));
-            progress = formatWon(spent) + " / " + formatWon(budget.monthlyLimitWon) + " · " + percent + "%";
+            progress = formatWon(spent) + " / " + formatWon(budget.monthlyLimitWon)
+                    + " · " + budget.progressPercent(spent) + "%";
         } else {
             progress = formatWon(spent) + " · 한도 사용 안 함";
         }
-        monthlySummary.setText(aiSettings.providerLabel() + " · " + summary.monthKey.substring(0, 4)
-                + "년 " + Integer.parseInt(summary.monthKey.substring(4)) + "월"
-                + "\n예상 비용: " + progress
-                + "\n요청 " + summary.monthlyRequests + "회 · 성공 " + summary.monthlySuccesses + "회"
-                + "\n토큰: 입력 " + summary.monthlyInputTokens + " / 출력 " + summary.monthlyOutputTokens
-                + " / 전체 " + summary.monthlyTotalTokens
-                + (summary.monthlyUnknownPricingRequests > 0
-                ? "\n단가를 알 수 없는 요청 " + summary.monthlyUnknownPricingRequests + "회는 비용에서 제외" : ""));
-        monthlySummary.setTextColor(budget.budgetEnabled && spent >= budget.monthlyLimitWon ? DANGER : TEXT);
+        String monthLabel = combined.monthKey.substring(0, 4) + "년 "
+                + Integer.parseInt(combined.monthKey.substring(4)) + "월";
+        monthlySummary.setText(monthLabel
+                + "\n합산 예상 비용: " + progress
+                + "\n전체 요청 " + combined.monthlyRequests + "회 · 성공 " + combined.monthlySuccesses + "회"
+                + "\n전체 토큰: " + combined.monthlyTotalTokens
+                + "\nGPT " + openAi.monthlyRequests + "회 · " + formatWon(openAi.monthlyEstimatedCostWon)
+                + " / Gemini " + gemini.monthlyRequests + "회 · " + formatWon(gemini.monthlyEstimatedCostWon)
+                + (combined.monthlyUnknownPricingRequests > 0
+                ? "\n단가를 알 수 없는 요청 " + combined.monthlyUnknownPricingRequests + "회는 비용에서 제외" : ""));
+
+        if (budget.budgetEnabled && spent >= budget.monthlyLimitWon) {
+            monthlySummary.setTextColor(DANGER);
+        } else if (budget.budgetEnabled && spent >= budget.warningAmountWon()) {
+            monthlySummary.setTextColor(Color.rgb(185, 108, 0));
+        } else {
+            monthlySummary.setTextColor(SUCCESS);
+        }
 
         AiPricingCatalog.Price price = AiPricingCatalog.resolve(aiSettings.provider, aiSettings.selectedModel());
         if (!price.known) {
-            priceSummary.setText("선택 모델: " + aiSettings.selectedModel()
-                    + "\n등록된 단가가 없어 비용은 계산되지 않습니다.");
+            priceSummary.setText("현재 선택: " + aiSettings.providerLabel() + " · " + aiSettings.selectedModel()
+                    + "\n등록된 단가가 없어 비용은 계산되지 않습니다. 모델 비교 화면에서 실측 기록은 확인할 수 있습니다.");
             return;
         }
         long inputWon = Math.round(price.inputUsdPerMillion * budget.wonPerUsd);
         long outputWon = Math.round(price.outputUsdPerMillion * budget.wonPerUsd);
-        priceSummary.setText("선택 모델: " + aiSettings.selectedModel()
-                + "\n1백만 입력 토큰 약 " + formatWon(inputWon)
-                + " · 출력 토큰 약 " + formatWon(outputWon)
-                + "\n환산 기준: 1달러 = " + NumberFormat.getIntegerInstance(Locale.KOREA).format(budget.wonPerUsd) + "원");
+        priceSummary.setText("현재 선택: " + aiSettings.providerLabel() + " · " + aiSettings.selectedModel()
+                + "\n입력 100만 토큰 약 " + formatWon(inputWon)
+                + " · 출력 약 " + formatWon(outputWon)
+                + "\n환산 기준: 1달러 = "
+                + NumberFormat.getIntegerInstance(Locale.KOREA).format(budget.wonPerUsd) + "원");
     }
 
     private LinearLayout labeledInput(String label, EditText input) {

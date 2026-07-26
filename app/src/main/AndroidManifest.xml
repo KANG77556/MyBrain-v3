@@ -53,6 +53,7 @@
         <activity android:name=".WorkItemListActivity" android:exported="false" />
         <activity android:name=".settings.AiSettingsActivity" android:exported="false" />
         <activity android:name=".settings.AiBudgetActivity" android:exported="false" />
+        <activity android:name=".settings.AiModelComparisonActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="false" />
         <activity
             android:name=".AdaptiveMainActivity"

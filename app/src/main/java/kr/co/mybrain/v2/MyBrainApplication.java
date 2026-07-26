@@ -3,13 +3,16 @@ package kr.co.mybrain.v2;
 import android.app.Application;
 import android.content.Context;
 
-/** 앱 전체에서 네트워크·비용 정책을 안전하게 확인하기 위한 Application 컨텍스트입니다. */
+import kr.co.mybrain.v2.settings.AiBudgetNotifier;
+
+/** 앱 전체 컨텍스트를 보관하고 알림 채널을 초기화합니다. */
 public class MyBrainApplication extends Application {
     private static Context appContext;
 
     @Override public void onCreate() {
         super.onCreate();
         appContext = getApplicationContext();
+        AiBudgetNotifier.createChannel(this);
     }
 
     public static Context appContext() {

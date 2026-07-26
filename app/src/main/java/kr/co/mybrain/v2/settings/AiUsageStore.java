@@ -30,7 +30,8 @@ public final class AiUsageStore {
             int corrections,
             String message) {
         String prefix = prefix(provider);
-        String monthPrefix = prefix + "_" + monthKey() + "_";
+        String month = monthKey();
+        String monthPrefix = prefix + "_" + month + "_";
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
 
         int safeInput = Math.max(0, inputTokens);
@@ -43,6 +44,9 @@ public final class AiUsageStore {
                 : 0L;
         boolean priced = estimatedCostWon >= 0L;
         long storedCost = priced ? estimatedCostWon : 0L;
+
+        long previousCombinedCost = monthlyCost(prefs, "openai", month)
+                + monthlyCost(prefs, "gemini", month);
 
         long requests = prefs.getLong(prefix + "_requests", 0L) + 1L;
         long successes = prefs.getLong(prefix + "_successes", 0L) + (success ? 1L : 0L);
@@ -99,6 +103,12 @@ public final class AiUsageStore {
                 .putLong(monthPrefix + "priced_requests", monthlyPriced)
                 .putLong(monthPrefix + "unknown_pricing_requests", monthlyUnknown)
                 .apply();
+
+        AiModelUsageStore.record(
+                context, provider, model, success, safeInput, safeOutput, safeTotal,
+                safeElapsed, estimatedCostWon);
+        AiBudgetNotifier.maybeNotify(
+                context, previousCombinedCost, previousCombinedCost + storedCost, budget);
     }
 
     public static Summary load(Context context, String provider) {
@@ -139,6 +149,20 @@ public final class AiUsageStore {
                 prefs.getLong(monthPrefix + "unknown_pricing_requests", 0L));
     }
 
+    public static CombinedSummary loadCombined(Context context) {
+        Summary openAi = load(context, AiSettings.PROVIDER_OPENAI);
+        Summary gemini = load(context, AiSettings.PROVIDER_GEMINI);
+        return new CombinedSummary(
+                openAi.monthKey,
+                openAi.monthlyRequests + gemini.monthlyRequests,
+                openAi.monthlySuccesses + gemini.monthlySuccesses,
+                openAi.monthlyInputTokens + gemini.monthlyInputTokens,
+                openAi.monthlyOutputTokens + gemini.monthlyOutputTokens,
+                openAi.monthlyTotalTokens + gemini.monthlyTotalTokens,
+                openAi.monthlyEstimatedCostWon + gemini.monthlyEstimatedCostWon,
+                openAi.monthlyUnknownPricingRequests + gemini.monthlyUnknownPricingRequests);
+    }
+
     public static void clear(Context context, String provider) {
         String prefix = prefix(provider) + "_";
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -147,6 +171,10 @@ public final class AiUsageStore {
             if (key.startsWith(prefix)) editor.remove(key);
         }
         editor.apply();
+    }
+
+    private static long monthlyCost(SharedPreferences prefs, String prefix, String month) {
+        return prefs.getLong(prefix + "_" + month + "_estimated_cost_won", 0L);
     }
 
     private static String monthKey() {
@@ -161,6 +189,30 @@ public final class AiUsageStore {
     private static String sanitize(String value, int maxLength) {
         String text = value == null ? "" : value.replaceAll("\\s+", " ").trim();
         return text.length() <= maxLength ? text : text.substring(0, maxLength) + "…";
+    }
+
+    public static final class CombinedSummary {
+        public final String monthKey;
+        public final long monthlyRequests;
+        public final long monthlySuccesses;
+        public final long monthlyInputTokens;
+        public final long monthlyOutputTokens;
+        public final long monthlyTotalTokens;
+        public final long monthlyEstimatedCostWon;
+        public final long monthlyUnknownPricingRequests;
+
+        CombinedSummary(String monthKey, long monthlyRequests, long monthlySuccesses,
+                        long monthlyInputTokens, long monthlyOutputTokens, long monthlyTotalTokens,
+                        long monthlyEstimatedCostWon, long monthlyUnknownPricingRequests) {
+            this.monthKey = monthKey;
+            this.monthlyRequests = monthlyRequests;
+            this.monthlySuccesses = monthlySuccesses;
+            this.monthlyInputTokens = monthlyInputTokens;
+            this.monthlyOutputTokens = monthlyOutputTokens;
+            this.monthlyTotalTokens = monthlyTotalTokens;
+            this.monthlyEstimatedCostWon = monthlyEstimatedCostWon;
+            this.monthlyUnknownPricingRequests = monthlyUnknownPricingRequests;
+        }
     }
 
     public static final class Summary {
