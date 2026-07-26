@@ -1,6 +1,8 @@
 package kr.co.mybrain.v2.transfer;
 
 import android.content.Context;
+import android.content.pm.PackageInfo;
+import android.os.Build;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -10,7 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import kr.co.mybrain.v2.BuildConfig;
 import kr.co.mybrain.v2.data.WorkItemEntity;
 import kr.co.mybrain.v2.settings.AiBudgetSettings;
 import kr.co.mybrain.v2.settings.AiSettings;
@@ -43,7 +44,7 @@ public final class BackupDataManager {
 
         return new JSONObject()
                 .put("schemaVersion", SCHEMA_VERSION)
-                .put("appVersion", BuildConfig.VERSION_NAME)
+                .put("appVersion", currentVersion(context))
                 .put("exportedAt", System.currentTimeMillis())
                 .put("timezone", ZoneId.systemDefault().getId())
                 .put("credentialsIncluded", false)
@@ -90,6 +91,17 @@ public final class BackupDataManager {
         budget.wonPerUsd = settings.optInt("wonPerUsd", budget.wonPerUsd);
         budget.notificationsEnabled = settings.optBoolean("notificationsEnabled", budget.notificationsEnabled);
         budget.save(context);
+    }
+
+    private static String currentVersion(Context context) {
+        try {
+            PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            long code = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                    ? info.getLongVersionCode() : info.versionCode;
+            return (info.versionName == null ? "unknown" : info.versionName) + " (" + code + ")";
+        } catch (Exception ignored) {
+            return "unknown";
+        }
     }
 
     private static JSONObject toJson(WorkItemEntity item) throws Exception {
