@@ -10,6 +10,8 @@ public final class ParsedWorkItem {
     public Long startAt;
     public Long endAt;
     public Long reminderAt;
+    /** 사용자가 명시적으로 '알림 없음'을 선택했는지 구분합니다. */
+    public boolean reminderExplicitlyDisabled;
     public boolean allDay;
     public String repeatRule = "NONE";
     public String priority = "NORMAL";
@@ -23,8 +25,9 @@ public final class ParsedWorkItem {
         item.sourceText = sourceText;
         item.startAt = startAt;
         item.endAt = endAt;
-        item.reminderAt = reminderAt != null ? reminderAt
-                : (startAt != null && startAt > System.currentTimeMillis() ? startAt : null);
+        item.reminderAt = reminderExplicitlyDisabled ? null
+                : (reminderAt != null ? reminderAt
+                : (startAt != null && startAt > System.currentTimeMillis() ? startAt : null));
         item.allDay = allDay;
         item.repeatRule = repeatRule;
         item.priority = priority;
