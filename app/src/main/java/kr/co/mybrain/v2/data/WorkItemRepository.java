@@ -39,7 +39,7 @@ public final class WorkItemRepository {
 
     public void insert(WorkItemEntity item, ResultCallback<Long> callback) {
         databaseExecutor.execute(() -> {
-            if (item.repeatRule != null && item.repeatRule.startsWith("RANGE_DAILY|")) {
+            if (item.repeatRule != null && (item.repeatRule.startsWith("RANGE_DAILY|") || item.repeatRule.startsWith("RANGE_DAYS|"))) {
                 long firstId = insertBoundedRange(item);
                 if (callback != null) callback.onResult(firstId);
                 return;
@@ -52,31 +52,22 @@ public final class WorkItemRepository {
         });
     }
 
-    /** 기간 제한 반복을 무기한 반복으로 저장하지 않고 실제 개별 일정으로 확장합니다. */
+    /** 기간 제한 반복을 실제 개별 일정으로 확장합니다. */
     private long insertBoundedRange(WorkItemEntity source) {
         String[] parts = source.repeatRule.split("\\|");
-        if (parts.length < 3 || source.startAt == null) {
-            source.repeatRule = "NONE";
-            source.updatedAt = System.currentTimeMillis();
-            long id = dao.insert(source);
-            source.id = id;
-            ReminderScheduler.schedule(appContext, source);
-            return id;
-        }
+        if (parts.length < 3 || source.startAt == null) return insertSingleFallback(source);
 
         long endEpochDay;
-        try {
-            endEpochDay = Long.parseLong(parts[1]);
-        } catch (NumberFormatException error) {
-            source.repeatRule = "NONE";
-            source.updatedAt = System.currentTimeMillis();
-            long id = dao.insert(source);
-            source.id = id;
-            ReminderScheduler.schedule(appContext, source);
-            return id;
+        try { endEpochDay = Long.parseLong(parts[1]); }
+        catch (NumberFormatException error) { return insertSingleFallback(source); }
+
+        int dayMask;
+        if ("RANGE_DAILY".equals(parts[0])) dayMask = "1".equals(parts[2]) ? 31 : 127;
+        else {
+            try { dayMask = Integer.parseInt(parts[2]); }
+            catch (NumberFormatException error) { dayMask = 127; }
         }
 
-        boolean skipWeekends = "1".equals(parts[2]);
         ZoneId zoneId = ZoneId.systemDefault();
         LocalDate startDate = Instant.ofEpochMilli(source.startAt).atZone(zoneId).toLocalDate();
         LocalDate endDate = LocalDate.ofEpochDay(endEpochDay);
@@ -85,9 +76,8 @@ public final class WorkItemRepository {
         long firstId = -1L;
 
         for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
-            DayOfWeek day = date.getDayOfWeek();
-            if (skipWeekends && (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY)) continue;
-
+            int bit = 1 << (date.getDayOfWeek().getValue() - 1);
+            if ((dayMask & bit) == 0) continue;
             WorkItemEntity item = copyOf(source);
             long start = date.atTime(Instant.ofEpochMilli(source.startAt).atZone(zoneId).toLocalTime())
                     .atZone(zoneId).toInstant().toEpochMilli();
@@ -105,100 +95,59 @@ public final class WorkItemRepository {
         return firstId;
     }
 
+    private long insertSingleFallback(WorkItemEntity source) {
+        source.repeatRule = "NONE";
+        source.updatedAt = System.currentTimeMillis();
+        long id = dao.insert(source);
+        source.id = id;
+        ReminderScheduler.schedule(appContext, source);
+        return id;
+    }
+
     private WorkItemEntity copyOf(WorkItemEntity source) {
         WorkItemEntity item = new WorkItemEntity();
-        item.externalId = UUID.randomUUID().toString();
-        item.type = source.type;
-        item.title = source.title;
-        item.content = source.content;
-        item.sourceText = source.sourceText;
-        item.startAt = source.startAt;
-        item.endAt = source.endAt;
-        item.allDay = source.allDay;
-        item.completed = source.completed;
-        item.priority = source.priority;
-        item.repeatRule = source.repeatRule;
-        item.reminderAt = source.reminderAt;
-        item.color = source.color;
-        item.aiProvider = source.aiProvider;
-        item.aiConfidence = source.aiConfidence;
+        item.externalId = UUID.randomUUID().toString(); item.type = source.type; item.title = source.title;
+        item.content = source.content; item.sourceText = source.sourceText; item.startAt = source.startAt; item.endAt = source.endAt;
+        item.allDay = source.allDay; item.completed = source.completed; item.priority = source.priority; item.repeatRule = source.repeatRule;
+        item.reminderAt = source.reminderAt; item.color = source.color; item.aiProvider = source.aiProvider; item.aiConfidence = source.aiConfidence;
         return item;
     }
 
     public void update(WorkItemEntity item, ResultCallback<Integer> callback) {
         databaseExecutor.execute(() -> {
-            item.updatedAt = System.currentTimeMillis();
-            int count = dao.update(item);
-            ReminderScheduler.cancel(appContext, item.id);
-            ReminderScheduler.schedule(appContext, item);
+            item.updatedAt = System.currentTimeMillis(); int count = dao.update(item);
+            ReminderScheduler.cancel(appContext, item.id); ReminderScheduler.schedule(appContext, item);
             if (callback != null) callback.onResult(count);
         });
     }
-
-    public void getAll(ResultCallback<List<WorkItemEntity>> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getAllActive()));
-    }
-
-    public void getDeleted(ResultCallback<List<WorkItemEntity>> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getDeleted()));
-    }
-
-    public void getByType(String type, ResultCallback<List<WorkItemEntity>> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getByType(type)));
-    }
-
-    public void getById(long id, ResultCallback<WorkItemEntity> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getById(id)));
-    }
-
-    public void getBetween(long from, long to, ResultCallback<List<WorkItemEntity>> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getBetween(from, to)));
-    }
-
-    public void getOpenTasks(ResultCallback<List<WorkItemEntity>> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getOpenTasks()));
-    }
-
-    public void findDuplicate(String sourceText, ResultCallback<WorkItemEntity> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.findActiveBySourceText(sourceText)));
-    }
+    public void getAll(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getAllActive())); }
+    public void getDeleted(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getDeleted())); }
+    public void getByType(String type, ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getByType(type))); }
+    public void getById(long id, ResultCallback<WorkItemEntity> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getById(id))); }
+    public void getBetween(long from, long to, ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getBetween(from, to))); }
+    public void getOpenTasks(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getOpenTasks())); }
+    public void findDuplicate(String sourceText, ResultCallback<WorkItemEntity> callback) { databaseExecutor.execute(() -> callback.onResult(dao.findActiveBySourceText(sourceText))); }
 
     public void setCompleted(long id, boolean completed, ResultCallback<Integer> callback) {
         databaseExecutor.execute(() -> {
             int count = dao.setCompleted(id, completed, System.currentTimeMillis());
-            if (completed) ReminderScheduler.cancel(appContext, id);
-            else ReminderScheduler.schedule(appContext, dao.getById(id));
+            if (completed) ReminderScheduler.cancel(appContext, id); else ReminderScheduler.schedule(appContext, dao.getById(id));
             if (callback != null) callback.onResult(count);
         });
     }
 
     public void advanceRecurrence(long id, ResultCallback<Boolean> callback) {
         databaseExecutor.execute(() -> {
-            WorkItemEntity item = dao.getById(id);
-            boolean advanced = RecurrenceCalculator.moveToNext(item, ZoneId.systemDefault());
-            if (advanced) {
-                item.updatedAt = System.currentTimeMillis();
-                dao.update(item);
-                ReminderScheduler.cancel(appContext, id);
-                ReminderScheduler.schedule(appContext, item);
-            }
+            WorkItemEntity item = dao.getById(id); boolean advanced = RecurrenceCalculator.moveToNext(item, ZoneId.systemDefault());
+            if (advanced) { item.updatedAt = System.currentTimeMillis(); dao.update(item); ReminderScheduler.cancel(appContext, id); ReminderScheduler.schedule(appContext, item); }
             if (callback != null) callback.onResult(advanced);
         });
     }
 
     public void softDelete(long id, ResultCallback<Integer> callback) {
-        databaseExecutor.execute(() -> {
-            int count = dao.softDelete(id, System.currentTimeMillis());
-            ReminderScheduler.cancel(appContext, id);
-            if (callback != null) callback.onResult(count);
-        });
+        databaseExecutor.execute(() -> { int count = dao.softDelete(id, System.currentTimeMillis()); ReminderScheduler.cancel(appContext, id); if (callback != null) callback.onResult(count); });
     }
-
     public void restore(long id, ResultCallback<Integer> callback) {
-        databaseExecutor.execute(() -> {
-            int count = dao.restore(id, System.currentTimeMillis());
-            ReminderScheduler.schedule(appContext, dao.getById(id));
-            if (callback != null) callback.onResult(count);
-        });
+        databaseExecutor.execute(() -> { int count = dao.restore(id, System.currentTimeMillis()); ReminderScheduler.schedule(appContext, dao.getById(id)); if (callback != null) callback.onResult(count); });
     }
 }
