@@ -66,6 +66,7 @@
 
         <activity android:name=".CalendarActivity" android:exported="false" />
         <activity android:name=".WorkItemListActivity" android:exported="false" />
+        <activity android:name=".settings.SettingsHubActivity" android:exported="false" />
         <activity android:name=".settings.AiSettingsActivity" android:exported="false" />
         <activity android:name=".settings.AiBudgetActivity" android:exported="false" />
         <activity android:name=".settings.AiModelComparisonActivity" android:exported="false" />

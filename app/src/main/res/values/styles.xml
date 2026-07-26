@@ -3,16 +3,22 @@
     <style name="Theme.MyBrain" parent="Theme.Material3.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">#F7F9FD</item>
+        <item name="android:statusBarColor">#F7F9FC</item>
         <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowBackground">#F7F9FC</item>
         <item name="android:windowActionModeOverlay">true</item>
-
-        <!-- 흰색 입력창에서도 글자가 흐려지지 않도록 밝은 테마와 글자색을 고정합니다. -->
-        <item name="android:textColorPrimary">#1C2634</item>
-        <item name="android:textColorSecondary">#66748A</item>
-        <item name="android:textColorHint">#7A8798</item>
-        <item name="colorOnSurface">#1C2634</item>
-        <item name="colorOnSurfaceVariant">#66748A</item>
+        <item name="android:colorAccent">#3559C7</item>
+        <item name="android:textColorPrimary">#1F2937</item>
+        <item name="android:textColorSecondary">#64748B</item>
+        <item name="android:textColorHint">#94A3B8</item>
         <item name="colorPrimary">#3559C7</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">#EEF2FF</item>
+        <item name="colorOnPrimaryContainer">#1E3A8A</item>
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#1F2937</item>
+        <item name="colorOnSurfaceVariant">#64748B</item>
+        <item name="colorOutline">#E2E8F0</item>
+        <item name="android:windowNoTitle">true</item>
     </style>
 </resources>

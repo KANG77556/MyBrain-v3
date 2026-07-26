@@ -19,36 +19,24 @@ import androidx.annotation.Nullable;
 import java.text.NumberFormat;
 import java.util.Locale;
 
-import kr.co.mybrain.v2.settings.AiBudgetActivity;
 import kr.co.mybrain.v2.settings.AiBudgetSettings;
-import kr.co.mybrain.v2.settings.AiModelComparisonActivity;
 import kr.co.mybrain.v2.settings.AiSettings;
-import kr.co.mybrain.v2.settings.AiSettingsActivity;
 import kr.co.mybrain.v2.settings.AiUsageStore;
-import kr.co.mybrain.v2.transfer.BackupRestoreActivity;
-import kr.co.mybrain.v2.transfer.ReleaseRecoveryDiagnosticsActivity;
+import kr.co.mybrain.v2.settings.SettingsHubActivity;
+import kr.co.mybrain.v2.ui.AppUi;
 
-/** 스마트폰 한 열·태블릿 두 열 UI와 AI 사용 현황 카드를 구성합니다. */
+/** 스마트폰 한 열·태블릿 두 열 UI와 단순한 홈 탐색을 구성합니다. */
 public class AdaptiveMainActivity extends MainActivity {
     private static final int TABLET_MIN_WIDTH_DP = 700;
-    private static final int TEXT = Color.rgb(24, 34, 48);
-    private static final int SUBTEXT = Color.rgb(91, 106, 128);
-    private static final int BORDER = Color.rgb(218, 224, 234);
-    private static final int DANGER = Color.rgb(218, 53, 69);
-    private static final int WARNING = Color.rgb(185, 108, 0);
-    private static final int SUCCESS = Color.rgb(29, 128, 75);
-
     private TextView homeUsageText;
     private ProgressBar homeBudgetProgress;
 
     @Override protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().getDecorView().post(() -> {
+            simplifyBaseHome();
             applyAdaptiveLayout();
-            addAiSettingsEntry();
-            addBudgetSettingsEntry();
-            addTransferEntry();
-            addDiagnosticsEntry();
+            addSettingsToTopNavigation();
             addHomeUsageCard();
             refreshHomeUsage();
         });
@@ -59,6 +47,34 @@ public class AdaptiveMainActivity extends MainActivity {
         getWindow().getDecorView().post(this::refreshHomeUsage);
     }
 
+    private void simplifyBaseHome() {
+        LinearLayout root = findRoot();
+        if (root == null || root.getChildCount() < 8) return;
+        if (root.getChildAt(0) instanceof TextView) ((TextView) root.getChildAt(0)).setText("MyBrain");
+        if (root.getChildAt(1) instanceof TextView) {
+            ((TextView) root.getChildAt(1)).setText("말하거나 입력하면 일정·할 일·메모로 정리합니다.");
+        }
+        renameButtons(root);
+    }
+
+    private void renameButtons(View view) {
+        if (view instanceof Button) {
+            Button button = (Button) view;
+            String value = String.valueOf(button.getText());
+            if (value.contains("일정·오늘")) button.setText("오늘 일정");
+            else if (value.contains("저장 목록")) button.setText("저장 목록");
+            else if (value.contains("음성으로 입력")) button.setText("말해서 입력");
+            else if (value.contains("AI로 정밀 분석")) button.setText("AI 정밀 분석");
+            else if (value.contains("결과 확인·수정")) button.setText("결과 확인·수정");
+            else if (value.contains("저장하기")) button.setText("저장");
+            else if (value.contains("빠른 추가")) button.setText("빠른 추가");
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) renameButtons(group.getChildAt(i));
+        }
+    }
+
     private void applyAdaptiveLayout() {
         int widthDp = Math.round(getResources().getDisplayMetrics().widthPixels
                 / getResources().getDisplayMetrics().density);
@@ -66,88 +82,68 @@ public class AdaptiveMainActivity extends MainActivity {
         boolean tablet = smallestWidth >= 600 || widthDp >= TABLET_MIN_WIDTH_DP;
         LinearLayout root = findRoot();
         if (root == null) return;
-        if (!tablet) {
-            root.setPadding(dp(18), root.getPaddingTop(), dp(18), root.getPaddingBottom());
-            return;
+        int side = tablet ? (widthDp >= 1100 ? dp(48) : dp(30)) : dp(18);
+        root.setPadding(side, root.getPaddingTop(), side, root.getPaddingBottom());
+        if (tablet) applyTabletLayout(root);
+    }
+
+    private void addSettingsToTopNavigation() {
+        LinearLayout root = findRoot();
+        if (root == null || root.findViewWithTag("alpha29-settings-hub") != null) return;
+        View candidate = root.getChildCount() > 2 ? root.getChildAt(2) : null;
+        if (!(candidate instanceof LinearLayout)) return;
+        LinearLayout nav = (LinearLayout) candidate;
+        if (nav.getChildCount() < 2) return;
+
+        for (int i = 0; i < 2; i++) {
+            View item = nav.getChildAt(i);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(50), 1f);
+            if (i == 0) params.setMargins(0, 0, dp(4), 0);
+            else params.setMargins(dp(4), 0, dp(4), 0);
+            item.setLayoutParams(params);
         }
-        applyTabletLayout(root, widthDp);
-    }
 
-    private void addAiSettingsEntry() {
-        LinearLayout root = findRoot();
-        if (root == null || root.findViewWithTag("alpha22-ai-settings") != null) return;
-        Button button = navigationButton("⚙  AI 설정");
-        button.setTag("alpha22-ai-settings");
-        button.setOnClickListener(v -> startActivity(new Intent(this, AiSettingsActivity.class)));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(48));
-        params.setMargins(0, dp(8), 0, dp(2));
-        root.addView(button, Math.min(2, root.getChildCount()), params);
-    }
-
-    private void addBudgetSettingsEntry() {
-        LinearLayout root = findRoot();
-        if (root == null || root.findViewWithTag("alpha25-budget-settings") != null) return;
-        Button button = navigationButton("₩  AI 비용·데이터 설정");
-        button.setTag("alpha25-budget-settings");
-        button.setOnClickListener(v -> startActivity(new Intent(this, AiBudgetActivity.class)));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(48));
-        params.setMargins(0, dp(4), 0, dp(2));
-        root.addView(button, Math.min(3, root.getChildCount()), params);
-    }
-
-    private void addTransferEntry() {
-        LinearLayout root = findRoot();
-        if (root == null || root.findViewWithTag("alpha27-transfer") != null) return;
-        Button button = navigationButton("💾  백업·복원·업데이트");
-        button.setTag("alpha27-transfer");
-        button.setOnClickListener(v -> startActivity(new Intent(this, BackupRestoreActivity.class)));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(48));
-        params.setMargins(0, dp(4), 0, dp(2));
-        root.addView(button, Math.min(4, root.getChildCount()), params);
-    }
-
-    private void addDiagnosticsEntry() {
-        LinearLayout root = findRoot();
-        if (root == null || root.findViewWithTag("alpha28-release-recovery") != null) return;
-        Button button = navigationButton("🛡  배포·복구 진단");
-        button.setTag("alpha28-release-recovery");
-        button.setOnClickListener(v -> startActivity(new Intent(this, ReleaseRecoveryDiagnosticsActivity.class)));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(48));
-        params.setMargins(0, dp(4), 0, dp(2));
-        root.addView(button, Math.min(5, root.getChildCount()), params);
+        Button settings = compactNavigationButton("설정");
+        settings.setTag("alpha29-settings-hub");
+        settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsHubActivity.class)));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        params.setMargins(dp(4), 0, 0, 0);
+        nav.addView(settings, params);
     }
 
     private void addHomeUsageCard() {
         LinearLayout root = findRoot();
-        if (root == null || root.findViewWithTag("alpha26-home-usage") != null) return;
+        if (root == null || root.findViewWithTag("alpha29-home-usage") != null) return;
         LinearLayout card = new LinearLayout(this);
-        card.setTag("alpha26-home-usage");
+        card.setTag("alpha29-home-usage");
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(14), dp(14), dp(14));
-        card.setBackground(rounded(Color.WHITE, 18, BORDER));
+        card.setPadding(dp(15), dp(13), dp(15), dp(13));
+        card.setBackground(AppUi.round(this, AppUi.SURFACE, 16, AppUi.BORDER));
+        card.setOnClickListener(v -> startActivity(new Intent(this, SettingsHubActivity.class)));
 
-        TextView title = text("이번 달 AI 사용", 17, TEXT, true);
-        card.addView(title);
-        homeUsageText = text("사용 기록을 불러오는 중입니다.", 14, SUBTEXT, false);
-        homeUsageText.setLineSpacing(dp(3), 1f);
-        homeUsageText.setPadding(0, dp(8), 0, 0);
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = text("이번 달 AI", 16, AppUi.TEXT, true);
+        TextView more = text("설정  ›", 14, AppUi.PRIMARY, true);
+        more.setGravity(Gravity.END);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+        header.addView(more, new LinearLayout.LayoutParams(-2, -2));
+        card.addView(header);
+
+        homeUsageText = text("사용 현황을 불러오는 중입니다.", 14, AppUi.SUBTEXT, false);
+        homeUsageText.setLineSpacing(dp(2), 1f);
+        homeUsageText.setPadding(0, dp(7), 0, 0);
         card.addView(homeUsageText);
 
         homeBudgetProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         homeBudgetProgress.setMax(100);
-        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(-1, dp(12));
-        progressParams.setMargins(0, dp(10), 0, 0);
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(-1, dp(10));
+        progressParams.setMargins(0, dp(9), 0, 0);
         card.addView(homeBudgetProgress, progressParams);
 
-        Button compare = navigationButton("모델별 비용·속도 비교");
-        compare.setOnClickListener(v -> startActivity(new Intent(this, AiModelComparisonActivity.class)));
-        LinearLayout.LayoutParams compareParams = new LinearLayout.LayoutParams(-1, dp(46));
-        compareParams.setMargins(0, dp(10), 0, 0);
-        card.addView(compare, compareParams);
-
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.setMargins(0, dp(10), 0, dp(4));
-        root.addView(card, Math.min(6, root.getChildCount()), params);
+        params.setMargins(0, dp(10), 0, dp(2));
+        root.addView(card, Math.min(3, root.getChildCount()), params);
     }
 
     private void refreshHomeUsage() {
@@ -158,28 +154,24 @@ public class AdaptiveMainActivity extends MainActivity {
         long spent = summary.monthlyEstimatedCostWon;
         String cost = budget.budgetEnabled
                 ? formatWon(spent) + " / " + formatWon(budget.monthlyLimitWon)
-                        + " · " + budget.progressPercent(spent) + "%"
-                : formatWon(spent) + " · 한도 사용 안 함";
-        homeUsageText.setText("요청 " + summary.monthlyRequests + "회 · 성공 "
-                + summary.monthlySuccesses + "회 · 전체 " + summary.monthlyTotalTokens + "토큰"
-                + "\n예상 비용 " + cost
-                + "\n현재 모델 " + settings.providerLabel() + " · " + settings.selectedModel()
-                + (summary.monthlyUnknownPricingRequests > 0
-                ? "\n단가 미등록 요청 " + summary.monthlyUnknownPricingRequests + "회 비용 제외" : ""));
+                : formatWon(spent);
+        homeUsageText.setText(settings.providerLabel() + " · " + settings.selectedModel()
+                + "\n요청 " + summary.monthlyRequests + "회 · " + summary.monthlyTotalTokens
+                + "토큰 · 예상 " + cost);
 
         if (!budget.budgetEnabled) {
             homeBudgetProgress.setVisibility(View.GONE);
-            homeUsageText.setTextColor(SUBTEXT);
+            homeUsageText.setTextColor(AppUi.SUBTEXT);
         } else {
             homeBudgetProgress.setVisibility(View.VISIBLE);
             homeBudgetProgress.setProgress(Math.min(100, budget.progressPercent(spent)));
-            if (spent >= budget.monthlyLimitWon) homeUsageText.setTextColor(DANGER);
-            else if (spent >= budget.warningAmountWon()) homeUsageText.setTextColor(WARNING);
-            else homeUsageText.setTextColor(SUCCESS);
+            if (spent >= budget.monthlyLimitWon) homeUsageText.setTextColor(AppUi.DANGER);
+            else if (spent >= budget.warningAmountWon()) homeUsageText.setTextColor(AppUi.WARNING);
+            else homeUsageText.setTextColor(AppUi.SUCCESS);
         }
     }
 
-    private void applyTabletLayout(LinearLayout root, int widthDp) {
+    private void applyTabletLayout(LinearLayout root) {
         if (root.getChildCount() < 8 || root.getTag() != null) return;
         root.setTag("adaptive-tablet-applied");
         View inputCard = root.getChildAt(3);
@@ -193,8 +185,6 @@ public class AdaptiveMainActivity extends MainActivity {
         root.removeView(resultCard);
         root.removeView(inputCard);
 
-        int sidePadding = widthDp >= 1100 ? dp(48) : dp(30);
-        root.setPadding(sidePadding, root.getPaddingTop(), sidePadding, root.getPaddingBottom());
         LinearLayout columns = new LinearLayout(this);
         columns.setOrientation(LinearLayout.HORIZONTAL);
         columns.setGravity(Gravity.TOP);
@@ -223,7 +213,7 @@ public class AdaptiveMainActivity extends MainActivity {
         columns.addView(left, leftParams);
         columns.addView(right, rightParams);
         LinearLayout.LayoutParams columnParams = new LinearLayout.LayoutParams(-1, -2);
-        columnParams.setMargins(0, dp(18), 0, 0);
+        columnParams.setMargins(0, dp(16), 0, 0);
         root.addView(columns, 3, columnParams);
         setMaximumTextWidth(root, dp(760));
     }
@@ -251,19 +241,18 @@ public class AdaptiveMainActivity extends MainActivity {
         if (view instanceof TextView) ((TextView) view).setMaxWidth(maxWidth);
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                setMaximumTextWidth(group.getChildAt(i), maxWidth);
-            }
+            for (int i = 0; i < group.getChildCount(); i++) setMaximumTextWidth(group.getChildAt(i), maxWidth);
         }
     }
 
-    private Button navigationButton(String label) {
+    private Button compactNavigationButton(String label) {
         Button button = new Button(this);
         button.setText(label);
-        button.setTextSize(15);
-        button.setTextColor(TEXT);
+        button.setTextSize(14);
+        button.setTextColor(AppUi.TEXT);
         button.setAllCaps(false);
         button.setGravity(Gravity.CENTER);
+        button.setBackground(AppUi.round(this, Color.WHITE, 13, AppUi.BORDER));
         button.setStateListAnimator(null);
         return button;
     }
@@ -275,14 +264,6 @@ public class AdaptiveMainActivity extends MainActivity {
         view.setTextColor(color);
         if (bold) view.setTypeface(null, Typeface.BOLD);
         return view;
-    }
-
-    private GradientDrawable rounded(int fill, int radius, int stroke) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(fill);
-        drawable.setCornerRadius(dp(radius));
-        if (stroke != 0) drawable.setStroke(dp(1), stroke);
-        return drawable;
     }
 
     private String formatWon(long value) {
