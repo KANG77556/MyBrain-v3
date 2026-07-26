@@ -29,6 +29,7 @@ import kr.co.mybrain.v2.assistant.KoreanNaturalLanguageParser;
 import kr.co.mybrain.v2.assistant.ParsedWorkItem;
 import kr.co.mybrain.v2.data.WorkItemEntity;
 import kr.co.mybrain.v2.data.WorkItemRepository;
+import kr.co.mybrain.v2.ui.WorkItemEditorDialog;
 import kr.co.mybrain.v2.voice.ContinuousSpeechRecognizer;
 
 /** 음성·텍스트 입력을 분석하고 저장하는 MyBrain AI v2 시작 화면입니다. */
@@ -117,12 +118,7 @@ public class MainActivity extends AppCompatActivity {
         root.addView(voiceButton, new LinearLayout.LayoutParams(-1, dp(54)));
 
         Button clearButton = button("입력 내용 지우기");
-        clearButton.setOnClickListener(v -> {
-            if (speechRecognizer != null) speechRecognizer.clearText();
-            inputText.setText("");
-            parsedItem = null;
-            previewText.setText("분석 결과가 여기에 표시됩니다.");
-        });
+        clearButton.setOnClickListener(v -> clearInput());
         LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(-1, dp(48));
         clearParams.setMargins(0, dp(6), 0, 0);
         root.addView(clearButton, clearParams);
@@ -137,17 +133,31 @@ public class MainActivity extends AppCompatActivity {
         previewText.setPadding(dp(14), dp(14), dp(14), dp(14));
         previewText.setBackgroundColor(Color.WHITE);
         LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, 0, 1f);
-        previewParams.setMargins(0, dp(12), 0, dp(10));
+        previewParams.setMargins(0, dp(12), 0, dp(8));
         root.addView(previewText, previewParams);
+
+        Button editButton = button("✏️ 분석 결과 확인·수정");
+        editButton.setOnClickListener(v -> openEditor());
+        root.addView(editButton, new LinearLayout.LayoutParams(-1, dp(50)));
 
         Button saveButton = button("저장하기");
         saveButton.setOnClickListener(v -> saveParsedItem());
-        root.addView(saveButton, new LinearLayout.LayoutParams(-1, dp(54)));
+        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, dp(54));
+        saveParams.setMargins(0, dp(6), 0, 0);
+        root.addView(saveButton, saveParams);
 
-        statusText = text("4단계 · 연속 음성인식 준비", 13, Color.rgb(102, 116, 138));
+        statusText = text("5단계 · 분석 결과 확인 및 수정", 13, Color.rgb(102, 116, 138));
         statusText.setPadding(0, dp(10), 0, 0);
         root.addView(statusText);
         return root;
+    }
+
+    private void clearInput() {
+        if (speechRecognizer != null) speechRecognizer.clearText();
+        inputText.setText("");
+        parsedItem = null;
+        previewText.setText("분석 결과가 여기에 표시됩니다.");
+        statusText.setText("입력 내용을 지웠습니다.");
     }
 
     private void toggleVoiceInput() {
@@ -190,7 +200,18 @@ public class MainActivity extends AppCompatActivity {
         }
         parsedItem = KoreanNaturalLanguageParser.parse(value, ZoneId.systemDefault());
         previewText.setText(formatResult(parsedItem));
-        statusText.setText("분석 완료 · 내용을 확인한 뒤 저장하세요.");
+        statusText.setText("분석 완료 · 필요하면 결과를 수정하세요.");
+    }
+
+    private void openEditor() {
+        if (parsedItem == null) analyzeInput();
+        if (parsedItem == null) return;
+        WorkItemEditorDialog dialog = new WorkItemEditorDialog(parsedItem, item -> {
+            parsedItem = item;
+            previewText.setText(formatResult(item));
+            statusText.setText("수정 사항 적용 완료 · 저장할 수 있습니다.");
+        });
+        dialog.show(getSupportFragmentManager(), "work_item_editor");
     }
 
     private void saveParsedItem() {
@@ -200,10 +221,7 @@ public class MainActivity extends AppCompatActivity {
         repository.insert(parsedItem.toEntity(), id -> runOnUiThread(() -> {
             statusText.setText("저장 완료 · 항목 번호 " + id);
             Toast.makeText(this, "MyBrain에 저장했습니다.", Toast.LENGTH_SHORT).show();
-            parsedItem = null;
-            speechRecognizer.clearText();
-            inputText.setText("");
-            previewText.setText("분석 결과가 여기에 표시됩니다.");
+            clearInput();
         }));
     }
 
@@ -212,8 +230,9 @@ public class MainActivity extends AppCompatActivity {
                 + "\n제목: " + item.title
                 + "\n시작: " + formatTime(item.startAt)
                 + "\n종료: " + formatTime(item.endAt)
-                + "\n반복: " + item.repeatRule
-                + "\n중요도: " + item.priority
+                + "\n종일: " + (item.allDay ? "예" : "아니오")
+                + "\n반복: " + repeatLabel(item.repeatRule)
+                + "\n중요도: " + priorityLabel(item.priority)
                 + "\n분석 신뢰도: " + Math.round(item.confidence * 100) + "%";
     }
 
@@ -221,6 +240,20 @@ public class MainActivity extends AppCompatActivity {
         if (WorkItemEntity.TYPE_SCHEDULE.equals(type)) return "일정";
         if (WorkItemEntity.TYPE_TASK.equals(type)) return "할 일";
         return "메모";
+    }
+
+    private String repeatLabel(String value) {
+        if ("DAILY".equals(value)) return "매일";
+        if ("WEEKDAYS".equals(value)) return "평일";
+        if ("WEEKLY".equals(value)) return "매주";
+        if ("MONTHLY".equals(value)) return "매월";
+        return "없음";
+    }
+
+    private String priorityLabel(String value) {
+        if ("LOW".equals(value)) return "낮음";
+        if ("HIGH".equals(value)) return "높음";
+        return "보통";
     }
 
     private String formatTime(Long millis) {
