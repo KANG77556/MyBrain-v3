@@ -16,16 +16,18 @@ public final class ReminderActionReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         long itemId = intent.getLongExtra("item_id", -1L);
         if (itemId < 0) return;
+
         WorkItemRepository repository = WorkItemRepository.getInstance(context);
         if (ACTION_COMPLETE.equals(intent.getAction())) {
-            repository.setCompleted(itemId, true, ignored -> cancelNotification(context, itemId));
-            ReminderScheduler.cancel(context, itemId);
+            repository.advanceRecurrence(itemId, advanced -> {
+                if (!advanced) repository.setCompleted(itemId, true, ignored -> { });
+                cancelNotification(context, itemId);
+            });
         } else if (ACTION_SNOOZE.equals(intent.getAction())) {
             repository.getById(itemId, item -> {
                 if (item == null) return;
                 item.reminderAt = System.currentTimeMillis() + 10 * 60 * 1000L;
-                repository.update(item, ignored -> ReminderScheduler.schedule(context, item));
-                cancelNotification(context, itemId);
+                repository.update(item, ignored -> cancelNotification(context, itemId));
             });
         }
     }
