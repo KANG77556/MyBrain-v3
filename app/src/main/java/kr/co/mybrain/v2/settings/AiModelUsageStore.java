@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /** 모델별 요청 횟수, 실제 응답시간, 토큰과 예상 비용을 기기 안에 저장합니다. */
@@ -108,7 +109,9 @@ public final class AiModelUsageStore {
     }
 
     private static String sanitizeModel(String value) {
-        String text = AiPricingCatalog.normalizeModel(value).replaceAll("[^a-z0-9._:-]", "");
+        String text = value == null ? "" : value.trim().toLowerCase(Locale.US);
+        if (text.startsWith("models/")) text = text.substring(7);
+        text = text.replaceAll("[^a-z0-9._:-]", "");
         return text.length() <= 100 ? text : text.substring(0, 100);
     }
 
@@ -117,7 +120,7 @@ public final class AiModelUsageStore {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(value.getBytes(StandardCharsets.UTF_8));
             StringBuilder result = new StringBuilder();
-            for (int i = 0; i < 10; i++) result.append(String.format("%02x", digest[i]));
+            for (int i = 0; i < 10; i++) result.append(String.format(Locale.US, "%02x", digest[i]));
             return result.toString();
         } catch (Exception ignored) {
             return Integer.toHexString(value.hashCode());
