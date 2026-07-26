@@ -2,9 +2,9 @@ name: Build MyBrain AI V2
 
 on:
   push:
-    branches: ["rebuild/v2"]
+    branches: ["rebuild/v2", "rebuild/v2-*"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "rebuild/v2"]
   workflow_dispatch:
 
 jobs:
