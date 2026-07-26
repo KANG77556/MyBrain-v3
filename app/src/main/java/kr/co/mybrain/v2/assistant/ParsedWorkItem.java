@@ -16,6 +16,8 @@ public final class ParsedWorkItem {
     public String repeatRule = "NONE";
     public String priority = "NORMAL";
     public float confidence;
+    /** 실제 분석에 사용한 공급자입니다. LOCAL, OPENAI, GEMINI 중 하나입니다. */
+    public String aiProvider = "LOCAL";
 
     public WorkItemEntity toEntity() {
         WorkItemEntity item = new WorkItemEntity();
@@ -31,7 +33,7 @@ public final class ParsedWorkItem {
         item.allDay = allDay;
         item.repeatRule = repeatRule;
         item.priority = priority;
-        item.aiProvider = "LOCAL";
+        item.aiProvider = aiProvider == null || aiProvider.trim().isEmpty() ? "LOCAL" : aiProvider;
         item.aiConfidence = confidence;
         return item;
     }
