@@ -15,7 +15,10 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
 
+import kr.co.mybrain.v2.MyBrainApplication;
 import kr.co.mybrain.v2.data.WorkItemEntity;
+import kr.co.mybrain.v2.settings.AiCloudPolicy;
+import kr.co.mybrain.v2.settings.AiPricingCatalog;
 import kr.co.mybrain.v2.settings.AiSettings;
 
 /** GPT 또는 Gemini를 호출해 일정·할 일·메모 구조를 추출합니다. */
@@ -33,6 +36,9 @@ public final class CloudAiWorkItemAnalyzer {
             ZoneId zoneId,
             ParsedWorkItem localBaseline) throws Exception {
         long startedAt = System.nanoTime();
+        AiCloudPolicy.Decision policy = AiCloudPolicy.evaluate(MyBrainApplication.appContext(), provider);
+        if (!policy.allowed) throw new AnalysisException(policy.message);
+
         CloudPrivacyFilter.FilteredText filtered = CloudPrivacyFilter.filter(originalText);
         String prompt = buildPrompt(filtered.text, zoneId);
         String normalizedProvider = AiSettings.normalizeProvider(provider);
@@ -45,6 +51,23 @@ public final class CloudAiWorkItemAnalyzer {
                 originalText, merged, localBaseline, zoneId);
         validated.item.aiProvider = normalizedProvider;
         long elapsedMs = Math.max(1L, (System.nanoTime() - startedAt) / 1_000_000L);
+
+        String pricingModel = response.modelVersion.isEmpty() ? model : response.modelVersion;
+        long estimatedCostWon = AiPricingCatalog.estimateWon(
+                normalizedProvider,
+                pricingModel,
+                response.inputTokens,
+                response.outputTokens,
+                policy.settings.wonPerUsd);
+        long projectedMonthCost = policy.spentWon + Math.max(0L, estimatedCostWon);
+        boolean budgetWarning = policy.settings.budgetEnabled
+                && projectedMonthCost >= policy.settings.warningAmountWon();
+        String costSummary = estimatedCostWon < 0L
+                ? "비용 단가 미등록"
+                : "예상 비용 " + estimatedCostWon + "원";
+        String summary = validated.summary + " · " + costSummary
+                + (budgetWarning ? " · 월간 한도 경고" : "");
+
         return new AnalysisResult(
                 validated.item,
                 filtered.masked,
@@ -54,7 +77,9 @@ public final class CloudAiWorkItemAnalyzer {
                 response.totalTokens,
                 response.modelVersion,
                 validated.corrections,
-                validated.summary);
+                summary,
+                estimatedCostWon,
+                budgetWarning);
     }
 
     private static ProviderResponse callOpenAi(String model, String credential, String prompt) throws Exception {
@@ -426,10 +451,13 @@ public final class CloudAiWorkItemAnalyzer {
         public final String modelVersion;
         public final int corrections;
         public final String validationSummary;
+        public final long estimatedCostWon;
+        public final boolean budgetWarning;
 
         AnalysisResult(ParsedWorkItem item, boolean privacyMasked, long elapsedMs,
                        int inputTokens, int outputTokens, int totalTokens,
-                       String modelVersion, int corrections, String validationSummary) {
+                       String modelVersion, int corrections, String validationSummary,
+                       long estimatedCostWon, boolean budgetWarning) {
             this.item = item;
             this.privacyMasked = privacyMasked;
             this.elapsedMs = elapsedMs;
@@ -439,6 +467,8 @@ public final class CloudAiWorkItemAnalyzer {
             this.modelVersion = modelVersion == null ? "" : modelVersion;
             this.corrections = corrections;
             this.validationSummary = validationSummary == null ? "" : validationSummary;
+            this.estimatedCostWon = estimatedCostWon;
+            this.budgetWarning = budgetWarning;
         }
     }
 
