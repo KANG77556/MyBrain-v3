@@ -6,9 +6,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * 화면과 Room 사이를 연결합니다. 데이터베이스 작업은 메인 스레드에서 실행하지 않습니다.
- */
+/** 화면과 Room 사이를 연결하며 모든 DB 작업을 백그라운드에서 실행합니다. */
 public final class WorkItemRepository {
 
     public interface ResultCallback<T> {
@@ -16,7 +14,6 @@ public final class WorkItemRepository {
     }
 
     private static volatile WorkItemRepository instance;
-
     private final WorkItemDao dao;
     private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor();
 
@@ -27,9 +24,7 @@ public final class WorkItemRepository {
     public static WorkItemRepository getInstance(Context context) {
         if (instance == null) {
             synchronized (WorkItemRepository.class) {
-                if (instance == null) {
-                    instance = new WorkItemRepository(context.getApplicationContext());
-                }
+                if (instance == null) instance = new WorkItemRepository(context.getApplicationContext());
             }
         }
         return instance;
@@ -55,17 +50,39 @@ public final class WorkItemRepository {
         databaseExecutor.execute(() -> callback.onResult(dao.getAllActive()));
     }
 
+    public void getDeleted(ResultCallback<List<WorkItemEntity>> callback) {
+        databaseExecutor.execute(() -> callback.onResult(dao.getDeleted()));
+    }
+
     public void getByType(String type, ResultCallback<List<WorkItemEntity>> callback) {
         databaseExecutor.execute(() -> callback.onResult(dao.getByType(type)));
+    }
+
+    public void getById(long id, ResultCallback<WorkItemEntity> callback) {
+        databaseExecutor.execute(() -> callback.onResult(dao.getById(id)));
     }
 
     public void getOpenTasks(ResultCallback<List<WorkItemEntity>> callback) {
         databaseExecutor.execute(() -> callback.onResult(dao.getOpenTasks()));
     }
 
+    public void setCompleted(long id, boolean completed, ResultCallback<Integer> callback) {
+        databaseExecutor.execute(() -> {
+            int count = dao.setCompleted(id, completed, System.currentTimeMillis());
+            if (callback != null) callback.onResult(count);
+        });
+    }
+
     public void softDelete(long id, ResultCallback<Integer> callback) {
         databaseExecutor.execute(() -> {
             int count = dao.softDelete(id, System.currentTimeMillis());
+            if (callback != null) callback.onResult(count);
+        });
+    }
+
+    public void restore(long id, ResultCallback<Integer> callback) {
+        databaseExecutor.execute(() -> {
+            int count = dao.restore(id, System.currentTimeMillis());
             if (callback != null) callback.onResult(count);
         });
     }
