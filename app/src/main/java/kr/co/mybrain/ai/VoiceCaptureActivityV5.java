@@ -28,7 +28,7 @@ import java.util.ArrayList;
 import java.util.Locale;
 
 /**
- * MyBrain AI 1.9.9 음성 입력 화면입니다.
+ * MyBrain AI 1.10.2 음성 입력 화면입니다.
  * 마이크 음량 표시, 말하기 길이 선택, 마지막 문장 수정 기능을 제공합니다.
  */
 public class VoiceCaptureActivityV5 extends Activity implements RecognitionListener {
