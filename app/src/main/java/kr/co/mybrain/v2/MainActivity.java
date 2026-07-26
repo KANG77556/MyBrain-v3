@@ -51,7 +51,7 @@ public class MainActivity extends AppCompatActivity {
         root.setPadding(dp(18), dp(12), dp(18), dp(16));
 
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
-            WindowInsetsCompat.Type.InsetsTypeMask mask = WindowInsetsCompat.Type.systemBars();
+            int mask = WindowInsetsCompat.Type.systemBars();
             androidx.core.graphics.Insets bars = insets.getInsets(mask);
             view.setPadding(dp(18), bars.top + dp(12), dp(18), bars.bottom + dp(16));
             return insets;
