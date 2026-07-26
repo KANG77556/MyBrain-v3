@@ -2,8 +2,12 @@ package kr.co.mybrain.v2.data;
 
 import android.content.Context;
 
+import java.time.DayOfWeek;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -35,12 +39,90 @@ public final class WorkItemRepository {
 
     public void insert(WorkItemEntity item, ResultCallback<Long> callback) {
         databaseExecutor.execute(() -> {
+            if (item.repeatRule != null && item.repeatRule.startsWith("RANGE_DAILY|")) {
+                long firstId = insertBoundedRange(item);
+                if (callback != null) callback.onResult(firstId);
+                return;
+            }
             item.updatedAt = System.currentTimeMillis();
             long id = dao.insert(item);
             item.id = id;
             ReminderScheduler.schedule(appContext, item);
             if (callback != null) callback.onResult(id);
         });
+    }
+
+    /** 기간 제한 반복을 무기한 반복으로 저장하지 않고 실제 개별 일정으로 확장합니다. */
+    private long insertBoundedRange(WorkItemEntity source) {
+        String[] parts = source.repeatRule.split("\\|");
+        if (parts.length < 3 || source.startAt == null) {
+            source.repeatRule = "NONE";
+            source.updatedAt = System.currentTimeMillis();
+            long id = dao.insert(source);
+            source.id = id;
+            ReminderScheduler.schedule(appContext, source);
+            return id;
+        }
+
+        long endEpochDay;
+        try {
+            endEpochDay = Long.parseLong(parts[1]);
+        } catch (NumberFormatException error) {
+            source.repeatRule = "NONE";
+            source.updatedAt = System.currentTimeMillis();
+            long id = dao.insert(source);
+            source.id = id;
+            ReminderScheduler.schedule(appContext, source);
+            return id;
+        }
+
+        boolean skipWeekends = "1".equals(parts[2]);
+        ZoneId zoneId = ZoneId.systemDefault();
+        LocalDate startDate = Instant.ofEpochMilli(source.startAt).atZone(zoneId).toLocalDate();
+        LocalDate endDate = LocalDate.ofEpochDay(endEpochDay);
+        long duration = source.endAt == null ? 3_600_000L : Math.max(60_000L, source.endAt - source.startAt);
+        Long reminderOffset = source.reminderAt == null ? null : source.startAt - source.reminderAt;
+        long firstId = -1L;
+
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            DayOfWeek day = date.getDayOfWeek();
+            if (skipWeekends && (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY)) continue;
+
+            WorkItemEntity item = copyOf(source);
+            long start = date.atTime(Instant.ofEpochMilli(source.startAt).atZone(zoneId).toLocalTime())
+                    .atZone(zoneId).toInstant().toEpochMilli();
+            item.startAt = start;
+            item.endAt = start + duration;
+            item.reminderAt = reminderOffset == null ? null : start - reminderOffset;
+            item.repeatRule = "NONE";
+            item.updatedAt = System.currentTimeMillis();
+            item.createdAt = System.currentTimeMillis();
+            long id = dao.insert(item);
+            item.id = id;
+            if (firstId < 0) firstId = id;
+            ReminderScheduler.schedule(appContext, item);
+        }
+        return firstId;
+    }
+
+    private WorkItemEntity copyOf(WorkItemEntity source) {
+        WorkItemEntity item = new WorkItemEntity();
+        item.externalId = UUID.randomUUID().toString();
+        item.type = source.type;
+        item.title = source.title;
+        item.content = source.content;
+        item.sourceText = source.sourceText;
+        item.startAt = source.startAt;
+        item.endAt = source.endAt;
+        item.allDay = source.allDay;
+        item.completed = source.completed;
+        item.priority = source.priority;
+        item.repeatRule = source.repeatRule;
+        item.reminderAt = source.reminderAt;
+        item.color = source.color;
+        item.aiProvider = source.aiProvider;
+        item.aiConfidence = source.aiConfidence;
+        return item;
     }
 
     public void update(WorkItemEntity item, ResultCallback<Integer> callback) {
