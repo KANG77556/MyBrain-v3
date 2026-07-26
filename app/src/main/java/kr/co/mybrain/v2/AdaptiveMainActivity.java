@@ -25,6 +25,7 @@ import kr.co.mybrain.v2.settings.AiModelComparisonActivity;
 import kr.co.mybrain.v2.settings.AiSettings;
 import kr.co.mybrain.v2.settings.AiSettingsActivity;
 import kr.co.mybrain.v2.settings.AiUsageStore;
+import kr.co.mybrain.v2.transfer.BackupRestoreActivity;
 
 /** 스마트폰 한 열·태블릿 두 열 UI와 AI 사용 현황 카드를 구성합니다. */
 public class AdaptiveMainActivity extends MainActivity {
@@ -45,6 +46,7 @@ public class AdaptiveMainActivity extends MainActivity {
             applyAdaptiveLayout();
             addAiSettingsEntry();
             addBudgetSettingsEntry();
+            addTransferEntry();
             addHomeUsageCard();
             refreshHomeUsage();
         });
@@ -91,6 +93,17 @@ public class AdaptiveMainActivity extends MainActivity {
         root.addView(button, Math.min(3, root.getChildCount()), params);
     }
 
+    private void addTransferEntry() {
+        LinearLayout root = findRoot();
+        if (root == null || root.findViewWithTag("alpha27-transfer") != null) return;
+        Button button = navigationButton("💾  백업·복원·업데이트");
+        button.setTag("alpha27-transfer");
+        button.setOnClickListener(v -> startActivity(new Intent(this, BackupRestoreActivity.class)));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(48));
+        params.setMargins(0, dp(4), 0, dp(2));
+        root.addView(button, Math.min(4, root.getChildCount()), params);
+    }
+
     private void addHomeUsageCard() {
         LinearLayout root = findRoot();
         if (root == null || root.findViewWithTag("alpha26-home-usage") != null) return;
@@ -121,7 +134,7 @@ public class AdaptiveMainActivity extends MainActivity {
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.setMargins(0, dp(10), 0, dp(4));
-        root.addView(card, Math.min(4, root.getChildCount()), params);
+        root.addView(card, Math.min(5, root.getChildCount()), params);
     }
 
     private void refreshHomeUsage() {

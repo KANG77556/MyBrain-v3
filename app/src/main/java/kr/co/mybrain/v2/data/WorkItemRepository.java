@@ -2,10 +2,10 @@ package kr.co.mybrain.v2.data;
 
 import android.content.Context;
 
-import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -19,13 +19,15 @@ public final class WorkItemRepository {
     public interface ResultCallback<T> { void onResult(T value); }
 
     private static volatile WorkItemRepository instance;
+    private final MyBrainDatabase database;
     private final WorkItemDao dao;
     private final Context appContext;
     private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor();
 
     private WorkItemRepository(Context context) {
         appContext = context.getApplicationContext();
-        dao = MyBrainDatabase.getInstance(appContext).workItemDao();
+        database = MyBrainDatabase.getInstance(appContext);
+        dao = database.workItemDao();
     }
 
     public static WorkItemRepository getInstance(Context context) {
@@ -121,12 +123,80 @@ public final class WorkItemRepository {
         });
     }
     public void getAll(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getAllActive())); }
+    public void getAllForBackup(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getAllIncludingDeleted())); }
     public void getDeleted(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getDeleted())); }
     public void getByType(String type, ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getByType(type))); }
     public void getById(long id, ResultCallback<WorkItemEntity> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getById(id))); }
     public void getBetween(long from, long to, ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getBetween(from, to))); }
     public void getOpenTasks(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getOpenTasks())); }
     public void findDuplicate(String sourceText, ResultCallback<WorkItemEntity> callback) { databaseExecutor.execute(() -> callback.onResult(dao.findActiveBySourceText(sourceText))); }
+
+    /**
+     * 외부 식별자를 기준으로 백업을 병합하거나 기존 데이터를 완전히 교체합니다.
+     * 동일 항목은 덮어쓰고 새 항목만 추가하므로 반복 복원 시 중복이 생기지 않습니다.
+     */
+    public void restoreBackup(List<WorkItemEntity> incoming, boolean replaceAll, ResultCallback<RestoreResult> callback) {
+        databaseExecutor.execute(() -> {
+            List<WorkItemEntity> current = dao.getAllIncludingDeleted();
+            if (replaceAll) {
+                for (WorkItemEntity item : current) ReminderScheduler.cancel(appContext, item.id);
+            }
+
+            int[] inserted = {0};
+            int[] updated = {0};
+            List<WorkItemEntity> activeAfterRestore = new ArrayList<>();
+            try {
+                database.runInTransaction(() -> {
+                    if (replaceAll) dao.deleteAllForRestore();
+                    if (incoming == null) return;
+                    for (WorkItemEntity source : incoming) {
+                        WorkItemEntity item = normalizeBackupItem(source);
+                        WorkItemEntity existing = dao.getByExternalId(item.externalId);
+                        if (existing != null) {
+                            item.id = existing.id;
+                            dao.update(item);
+                            updated[0]++;
+                        } else {
+                            item.id = 0L;
+                            item.id = dao.insert(item);
+                            inserted[0]++;
+                        }
+                        if (item.deletedAt == null) activeAfterRestore.add(item);
+                    }
+                });
+                if (!replaceAll) {
+                    for (WorkItemEntity item : activeAfterRestore) ReminderScheduler.cancel(appContext, item.id);
+                }
+                for (WorkItemEntity item : activeAfterRestore) ReminderScheduler.schedule(appContext, item);
+                if (callback != null) callback.onResult(new RestoreResult(true, inserted[0], updated[0], null));
+            } catch (Exception error) {
+                if (callback != null) callback.onResult(new RestoreResult(false, inserted[0], updated[0], error));
+            }
+        });
+    }
+
+    private WorkItemEntity normalizeBackupItem(WorkItemEntity source) {
+        WorkItemEntity item = source == null ? new WorkItemEntity() : source;
+        if (item.externalId == null || item.externalId.trim().isEmpty()) item.externalId = UUID.randomUUID().toString();
+        if (!WorkItemEntity.TYPE_SCHEDULE.equals(item.type) && !WorkItemEntity.TYPE_TASK.equals(item.type)) item.type = WorkItemEntity.TYPE_MEMO;
+        item.title = safe(item.title, 240);
+        item.content = safe(item.content, 20_000);
+        item.sourceText = safe(item.sourceText, 20_000);
+        if (item.priority == null || !("LOW".equals(item.priority) || "NORMAL".equals(item.priority) || "HIGH".equals(item.priority))) item.priority = "NORMAL";
+        if (item.repeatRule == null || item.repeatRule.trim().isEmpty()) item.repeatRule = "NONE";
+        if (item.color == null || item.color.trim().isEmpty()) item.color = "DEFAULT";
+        if (item.aiProvider == null || item.aiProvider.trim().isEmpty()) item.aiProvider = "LOCAL";
+        item.aiConfidence = Math.max(0f, Math.min(1f, item.aiConfidence));
+        long now = System.currentTimeMillis();
+        if (item.createdAt <= 0L) item.createdAt = now;
+        if (item.updatedAt <= 0L) item.updatedAt = item.createdAt;
+        return item;
+    }
+
+    private String safe(String value, int max) {
+        String text = value == null ? "" : value;
+        return text.length() <= max ? text : text.substring(0, max);
+    }
 
     public void setCompleted(long id, boolean completed, ResultCallback<Integer> callback) {
         databaseExecutor.execute(() -> {
@@ -149,5 +219,19 @@ public final class WorkItemRepository {
     }
     public void restore(long id, ResultCallback<Integer> callback) {
         databaseExecutor.execute(() -> { int count = dao.restore(id, System.currentTimeMillis()); ReminderScheduler.schedule(appContext, dao.getById(id)); if (callback != null) callback.onResult(count); });
+    }
+
+    public static final class RestoreResult {
+        public final boolean success;
+        public final int inserted;
+        public final int updated;
+        public final Exception error;
+
+        RestoreResult(boolean success, int inserted, int updated, Exception error) {
+            this.success = success;
+            this.inserted = inserted;
+            this.updated = updated;
+            this.error = error;
+        }
     }
 }
