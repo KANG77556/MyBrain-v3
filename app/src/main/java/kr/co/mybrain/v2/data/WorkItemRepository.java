@@ -62,6 +62,10 @@ public final class WorkItemRepository {
         databaseExecutor.execute(() -> callback.onResult(dao.getById(id)));
     }
 
+    public void getBetween(long from, long to, ResultCallback<List<WorkItemEntity>> callback) {
+        databaseExecutor.execute(() -> callback.onResult(dao.getBetween(from, to)));
+    }
+
     public void getOpenTasks(ResultCallback<List<WorkItemEntity>> callback) {
         databaseExecutor.execute(() -> callback.onResult(dao.getOpenTasks()));
     }
