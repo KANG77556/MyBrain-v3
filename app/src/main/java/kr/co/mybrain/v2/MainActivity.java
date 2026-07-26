@@ -1,13 +1,19 @@
 package kr.co.mybrain.v2;
 
 import android.Manifest;
+import android.animation.ObjectAnimator;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.speech.SpeechRecognizer;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
@@ -37,26 +43,36 @@ import kr.co.mybrain.v2.data.WorkItemRepository;
 import kr.co.mybrain.v2.ui.WorkItemEditorDialog;
 import kr.co.mybrain.v2.voice.ContinuousSpeechRecognizer;
 
-/** 음성·텍스트 입력을 분석하고 저장하는 MyBrain AI 시작 화면입니다. */
+/** 음성·텍스트 입력을 자동 분석하고 저장하는 MyBrain AI 시작 화면입니다. */
 public class MainActivity extends AppCompatActivity {
     private static final int BG = Color.rgb(246, 248, 252);
     private static final int TEXT = Color.rgb(24, 34, 48);
     private static final int SUBTEXT = Color.rgb(91, 106, 128);
     private static final int PRIMARY = Color.rgb(45, 91, 255);
-    private static final int PRIMARY_DARK = Color.rgb(27, 65, 205);
     private static final int BORDER = Color.rgb(218, 224, 234);
+    private static final int DANGER = Color.rgb(218, 53, 69);
+
+    private final Handler autoAnalyzeHandler = new Handler(Looper.getMainLooper());
+    private final Runnable autoAnalyzeRunnable = () -> {
+        if (!listening && inputText != null && inputText.getText().toString().trim().length() >= 3) {
+            analyzeInput(false);
+        }
+    };
 
     private EditText inputText;
     private TextView previewText;
     private TextView statusText;
     private TextView resultLabel;
+    private TextView waveText;
     private Button voiceButton;
     private Button editButton;
     private Button saveButton;
     private ParsedWorkItem parsedItem;
     private WorkItemRepository repository;
     private ContinuousSpeechRecognizer speechRecognizer;
+    private ObjectAnimator waveAnimator;
     private boolean listening;
+    private boolean internalTextChange;
 
     private final ActivityResultLauncher<String> microphonePermission =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
@@ -79,22 +95,20 @@ public class MainActivity extends AppCompatActivity {
                 listening = active;
                 runOnUiThread(() -> {
                     voiceButton.setText(active ? "■  음성 입력 끝내기" : "🎤  음성으로 입력하기");
-                    voiceButton.setBackground(rounded(active ? Color.rgb(218, 53, 69) : PRIMARY, 14, 0));
-                    statusText.setText(active ? "듣는 중입니다. 자연스럽게 말씀하세요." : "음성 입력을 마쳤습니다. 내용을 확인하세요.");
+                    voiceButton.setBackground(rounded(active ? DANGER : PRIMARY, 14, 0));
+                    waveText.setVisibility(active ? View.VISIBLE : View.GONE);
+                    if (active) startWaveAnimation(); else stopWaveAnimation();
+                    statusText.setText(active ? "듣는 중입니다. 자연스럽게 말씀하세요." : "음성 입력을 마쳤습니다.");
                 });
             }
 
             @Override public void onPartialText(String committedText, String partialText) {
-                runOnUiThread(() -> {
-                    inputText.setText(joinSpeech(committedText, partialText));
-                    inputText.setSelection(inputText.length());
-                });
+                runOnUiThread(() -> setInputText(joinSpeech(committedText, partialText)));
             }
 
             @Override public void onFinalText(String committedText) {
                 runOnUiThread(() -> {
-                    inputText.setText(committedText);
-                    inputText.setSelection(inputText.length());
+                    setInputText(committedText);
                     if (listening) statusText.setText("문장을 기록했습니다. 계속 말씀하셔도 됩니다.");
                 });
             }
@@ -112,18 +126,18 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(18), dp(12), dp(18), dp(28));
+        root.setPadding(dp(18), dp(12), dp(18), dp(30));
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
         ViewCompat.setOnApplyWindowInsetsListener(scroll, (view, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            root.setPadding(dp(18), bars.top + dp(12), dp(18), bars.bottom + dp(28));
+            root.setPadding(dp(18), bars.top + dp(12), dp(18), bars.bottom + dp(30));
             return insets;
         });
 
         TextView title = text("MyBrain AI", 30, TEXT, true);
         root.addView(title);
-        TextView subtitle = text("말하거나 입력하면 일정·할 일·메모로 정리합니다.", 15, SUBTEXT, false);
+        TextView subtitle = text("말하거나 입력하면 AI가 자동으로 정리합니다.", 15, SUBTEXT, false);
         subtitle.setPadding(0, dp(2), 0, dp(16));
         root.addView(subtitle);
 
@@ -133,22 +147,22 @@ public class MainActivity extends AppCompatActivity {
         calendarButton.setOnClickListener(v -> startActivity(new Intent(this, CalendarActivity.class)));
         Button listButton = secondaryButton("☰  저장 목록");
         listButton.setOnClickListener(v -> startActivity(new Intent(this, WorkItemListActivity.class)));
-        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(50), 1f);
-        left.setMargins(0, 0, dp(5), 0);
-        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, dp(50), 1f);
-        right.setMargins(dp(5), 0, 0, 0);
-        navigation.addView(calendarButton, left);
-        navigation.addView(listButton, right);
+        LinearLayout.LayoutParams navLeft = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        navLeft.setMargins(0, 0, dp(5), 0);
+        LinearLayout.LayoutParams navRight = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        navRight.setMargins(dp(5), 0, 0, 0);
+        navigation.addView(calendarButton, navLeft);
+        navigation.addView(listButton, navRight);
         root.addView(navigation);
 
         LinearLayout inputCard = card();
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
         cardParams.setMargins(0, dp(16), 0, 0);
         root.addView(inputCard, cardParams);
+        inputCard.addView(sectionTitle("무엇을 기억할까요?"));
 
-        inputCard.addView(sectionTitle("내용 입력"));
         inputText = new EditText(this);
-        inputText.setHint("예: 내일 오전 9시부터 12시까지 교무회의");
+        inputText.setHint("예: 내일 오전 9시 교무회의");
         inputText.setHintTextColor(Color.rgb(125, 136, 153));
         inputText.setTextColor(TEXT);
         inputText.setTextSize(18);
@@ -156,7 +170,27 @@ public class MainActivity extends AppCompatActivity {
         inputText.setPadding(dp(14), dp(13), dp(14), dp(13));
         inputText.setMinHeight(dp(132));
         inputText.setBackground(rounded(Color.WHITE, 12, BORDER));
+        inputText.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if (internalTextChange || listening) return;
+                parsedItem = null;
+                updateActionState(false);
+                autoAnalyzeHandler.removeCallbacks(autoAnalyzeRunnable);
+                if (s.toString().trim().length() >= 3) {
+                    statusText.setText("입력이 끝나면 자동으로 분석합니다.");
+                    autoAnalyzeHandler.postDelayed(autoAnalyzeRunnable, 900);
+                }
+            }
+            @Override public void afterTextChanged(Editable s) {}
+        });
         inputCard.addView(inputText, new LinearLayout.LayoutParams(-1, -2));
+
+        waveText = text("▂  ▅  ▇  ▃  ▆  ▂  ▅", 22, PRIMARY, true);
+        waveText.setGravity(Gravity.CENTER);
+        waveText.setPadding(0, dp(12), 0, 0);
+        waveText.setVisibility(View.GONE);
+        inputCard.addView(waveText);
 
         voiceButton = primaryButton("🎤  음성으로 입력하기");
         voiceButton.setOnClickListener(v -> toggleVoiceInput());
@@ -164,28 +198,26 @@ public class MainActivity extends AppCompatActivity {
         voiceParams.setMargins(0, dp(12), 0, 0);
         inputCard.addView(voiceButton, voiceParams);
 
-        LinearLayout inputActions = new LinearLayout(this);
-        inputActions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout actions = new LinearLayout(this);
         Button clearButton = secondaryButton("지우기");
         clearButton.setOnClickListener(v -> clearInput());
-        Button analyzeButton = primaryButton("✨  분석하기");
-        analyzeButton.setOnClickListener(v -> analyzeInput());
-        LinearLayout.LayoutParams halfLeft = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        Button analyzeButton = secondaryButton("즉시 분석");
+        analyzeButton.setOnClickListener(v -> analyzeInput(true));
+        LinearLayout.LayoutParams halfLeft = new LinearLayout.LayoutParams(0, dp(48), 1f);
         halfLeft.setMargins(0, dp(9), dp(5), 0);
-        LinearLayout.LayoutParams halfRight = new LinearLayout.LayoutParams(0, dp(50), 1.6f);
+        LinearLayout.LayoutParams halfRight = new LinearLayout.LayoutParams(0, dp(48), 1f);
         halfRight.setMargins(dp(5), dp(9), 0, 0);
-        inputActions.addView(clearButton, halfLeft);
-        inputActions.addView(analyzeButton, halfRight);
-        inputCard.addView(inputActions);
+        actions.addView(clearButton, halfLeft);
+        actions.addView(analyzeButton, halfRight);
+        inputCard.addView(actions);
 
         LinearLayout resultCard = card();
         LinearLayout.LayoutParams resultParams = new LinearLayout.LayoutParams(-1, -2);
         resultParams.setMargins(0, dp(14), 0, 0);
         root.addView(resultCard, resultParams);
-
-        resultLabel = sectionTitle("분석 결과");
+        resultLabel = sectionTitle("AI 분석 결과");
         resultCard.addView(resultLabel);
-        previewText = text("아직 분석하지 않았습니다.\n내용을 입력한 뒤 ‘분석하기’를 누르세요.", 15, SUBTEXT, false);
+        previewText = text("내용을 입력하면 자동으로 분석됩니다.", 15, SUBTEXT, false);
         previewText.setLineSpacing(dp(3), 1f);
         previewText.setPadding(dp(14), dp(13), dp(14), dp(13));
         previewText.setBackground(rounded(Color.rgb(250, 251, 253), 12, BORDER));
@@ -198,17 +230,41 @@ public class MainActivity extends AppCompatActivity {
         editParams.setMargins(0, dp(10), 0, 0);
         resultCard.addView(editButton, editParams);
 
-        saveButton = primaryButton("저장하기");
+        saveButton = primaryButton("✓  저장하기");
         saveButton.setOnClickListener(v -> saveParsedItem());
         LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, dp(56));
         saveParams.setMargins(0, dp(10), 0, 0);
         root.addView(saveButton, saveParams);
+
+        Button quickAddButton = primaryButton("＋  빠른 추가");
+        quickAddButton.setOnClickListener(v -> showQuickAdd());
+        LinearLayout.LayoutParams quickParams = new LinearLayout.LayoutParams(-1, dp(52));
+        quickParams.setMargins(0, dp(10), 0, 0);
+        root.addView(quickAddButton, quickParams);
 
         statusText = text("입력하거나 음성 버튼을 눌러 시작하세요.", 13, SUBTEXT, false);
         statusText.setGravity(Gravity.CENTER);
         statusText.setPadding(dp(6), dp(12), dp(6), 0);
         root.addView(statusText);
         return scroll;
+    }
+
+    private void showQuickAdd() {
+        String[] items = {"새 일정", "새 할 일", "새 메모", "음성으로 입력"};
+        new AlertDialog.Builder(this)
+                .setTitle("빠른 추가")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 3) {
+                        toggleVoiceInput();
+                        return;
+                    }
+                    String prefix = which == 0 ? "일정: " : which == 1 ? "할 일: " : "메모: ";
+                    setInputText(prefix);
+                    inputText.requestFocus();
+                    inputText.setSelection(inputText.length());
+                    InputMethodManager manager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                    if (manager != null) manager.showSoftInput(inputText, InputMethodManager.SHOW_IMPLICIT);
+                }).show();
     }
 
     private LinearLayout card() {
@@ -226,13 +282,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void clearInput() {
+        autoAnalyzeHandler.removeCallbacks(autoAnalyzeRunnable);
         if (listening && speechRecognizer != null) speechRecognizer.stop();
         if (speechRecognizer != null) speechRecognizer.clearText();
-        inputText.setText("");
+        setInputText("");
         parsedItem = null;
-        previewText.setText("아직 분석하지 않았습니다.\n내용을 입력한 뒤 ‘분석하기’를 누르세요.");
+        previewText.setText("내용을 입력하면 자동으로 분석됩니다.");
         previewText.setTextColor(SUBTEXT);
-        resultLabel.setText("분석 결과");
+        resultLabel.setText("AI 분석 결과");
         statusText.setText("입력 내용을 지웠습니다.");
         updateActionState(false);
         inputText.requestFocus();
@@ -242,7 +299,7 @@ public class MainActivity extends AppCompatActivity {
         hideKeyboard();
         if (listening) {
             speechRecognizer.stop();
-            analyzeInput();
+            analyzeInput(false);
             return;
         }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
@@ -255,13 +312,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startContinuousVoice() {
+        autoAnalyzeHandler.removeCallbacks(autoAnalyzeRunnable);
         parsedItem = null;
         updateActionState(false);
         speechRecognizer.clearText();
-        inputText.setText("");
-        previewText.setText("음성 입력이 끝나면 자동으로 분석합니다.");
+        setInputText("");
+        previewText.setText("말을 마치고 음성 입력을 끝내면 자동 분석합니다.");
         previewText.setTextColor(SUBTEXT);
         speechRecognizer.start();
+    }
+
+    private void setInputText(String value) {
+        internalTextChange = true;
+        inputText.setText(value == null ? "" : value);
+        inputText.setSelection(inputText.length());
+        internalTextChange = false;
     }
 
     private String joinSpeech(String committedText, String partialText) {
@@ -272,30 +337,32 @@ public class MainActivity extends AppCompatActivity {
         return committed + " " + partial;
     }
 
-    private void analyzeInput() {
+    private void analyzeInput(boolean manual) {
+        autoAnalyzeHandler.removeCallbacks(autoAnalyzeRunnable);
         String value = inputText.getText().toString().trim();
         if (value.isEmpty()) {
-            Toast.makeText(this, "분석할 내용을 입력하세요.", Toast.LENGTH_SHORT).show();
+            if (manual) Toast.makeText(this, "분석할 내용을 입력하세요.", Toast.LENGTH_SHORT).show();
             return;
         }
+        statusText.setText("AI가 내용을 분석하고 있습니다…");
         parsedItem = KoreanNaturalLanguageParser.parse(value, ZoneId.systemDefault());
         previewText.setText(formatResult(parsedItem));
         previewText.setTextColor(TEXT);
-        resultLabel.setText("분석 결과 · " + typeLabel(parsedItem.type));
-        statusText.setText("분석 완료 · 결과를 확인한 뒤 저장하세요.");
+        resultLabel.setText("AI 분석 결과 · " + typeLabel(parsedItem.type));
+        statusText.setText("분석 완료 · 확인 후 저장하세요.");
         updateActionState(true);
         hideKeyboard();
     }
 
     private void openEditor() {
-        if (parsedItem == null) analyzeInput();
+        if (parsedItem == null) analyzeInput(true);
         if (parsedItem == null) return;
         WorkItemEditorDialog dialog = new WorkItemEditorDialog(parsedItem, item -> {
             parsedItem = item;
             previewText.setText(formatResult(item));
             previewText.setTextColor(TEXT);
-            resultLabel.setText("분석 결과 · " + typeLabel(item.type));
-            statusText.setText("수정 사항을 적용했습니다. 저장할 수 있습니다.");
+            resultLabel.setText("AI 분석 결과 · " + typeLabel(item.type));
+            statusText.setText("수정 사항을 적용했습니다.");
             updateActionState(true);
         });
         dialog.show(getSupportFragmentManager(), "work_item_editor");
@@ -303,14 +370,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void saveParsedItem() {
         if (listening) speechRecognizer.stop();
-        if (parsedItem == null) analyzeInput();
+        if (parsedItem == null) analyzeInput(true);
         if (parsedItem == null) return;
         saveButton.setEnabled(false);
         saveButton.setText("저장 중…");
         repository.insert(parsedItem.toEntity(), id -> runOnUiThread(() -> {
-            Toast.makeText(this, "MyBrain에 저장했습니다.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "저장되었습니다 ✓", Toast.LENGTH_SHORT).show();
             clearInput();
-            saveButton.setText("저장하기");
+            saveButton.setText("✓  저장하기");
             statusText.setText("저장 완료 · 일정과 저장 목록에서 확인할 수 있습니다.");
         }));
     }
@@ -321,6 +388,23 @@ public class MainActivity extends AppCompatActivity {
         saveButton.setEnabled(ready);
         editButton.setAlpha(ready ? 1f : 0.45f);
         saveButton.setAlpha(ready ? 1f : 0.45f);
+    }
+
+    private void startWaveAnimation() {
+        stopWaveAnimation();
+        waveAnimator = ObjectAnimator.ofFloat(waveText, View.ALPHA, 0.35f, 1f);
+        waveAnimator.setDuration(550);
+        waveAnimator.setRepeatMode(ObjectAnimator.REVERSE);
+        waveAnimator.setRepeatCount(ObjectAnimator.INFINITE);
+        waveAnimator.start();
+    }
+
+    private void stopWaveAnimation() {
+        if (waveAnimator != null) {
+            waveAnimator.cancel();
+            waveAnimator = null;
+        }
+        if (waveText != null) waveText.setAlpha(1f);
     }
 
     private String formatResult(ParsedWorkItem item) {
@@ -415,11 +499,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
+        autoAnalyzeHandler.removeCallbacks(autoAnalyzeRunnable);
         if (listening && speechRecognizer != null) speechRecognizer.stop();
     }
 
     @Override
     protected void onDestroy() {
+        autoAnalyzeHandler.removeCallbacksAndMessages(null);
+        stopWaveAnimation();
         if (speechRecognizer != null) speechRecognizer.destroy();
         super.onDestroy();
     }
