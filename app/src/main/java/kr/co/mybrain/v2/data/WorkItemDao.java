@@ -24,6 +24,9 @@ public interface WorkItemDao {
     @Query("SELECT * FROM work_items WHERE deletedAt IS NULL ORDER BY createdAt DESC")
     List<WorkItemEntity> getAllActive();
 
+    @Query("SELECT * FROM work_items WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
+    List<WorkItemEntity> getDeleted();
+
     @Query("SELECT * FROM work_items WHERE type = :type AND deletedAt IS NULL ORDER BY CASE WHEN startAt IS NULL THEN 1 ELSE 0 END, startAt ASC, createdAt DESC")
     List<WorkItemEntity> getByType(String type);
 
@@ -44,6 +47,9 @@ public interface WorkItemDao {
 
     @Query("UPDATE work_items SET deletedAt = :deletedAt, updatedAt = :deletedAt WHERE id = :id")
     int softDelete(long id, long deletedAt);
+
+    @Query("UPDATE work_items SET deletedAt = NULL, updatedAt = :updatedAt WHERE id = :id")
+    int restore(long id, long updatedAt);
 
     @Query("SELECT COUNT(*) FROM work_items WHERE deletedAt IS NULL")
     int countActive();
