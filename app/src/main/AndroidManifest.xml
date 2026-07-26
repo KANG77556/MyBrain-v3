@@ -18,6 +18,10 @@
         android:theme="@style/Theme.MyBrain">
 
         <activity
+            android:name=".WorkItemListActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
