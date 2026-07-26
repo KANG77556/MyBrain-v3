@@ -11,15 +11,9 @@ import java.util.List;
 
 @Dao
 public interface WorkItemDao {
-
-    @Insert(onConflict = OnConflictStrategy.ABORT)
-    long insert(WorkItemEntity item);
-
-    @Update
-    int update(WorkItemEntity item);
-
-    @Delete
-    int delete(WorkItemEntity item);
+    @Insert(onConflict = OnConflictStrategy.ABORT) long insert(WorkItemEntity item);
+    @Update int update(WorkItemEntity item);
+    @Delete int delete(WorkItemEntity item);
 
     @Query("SELECT * FROM work_items WHERE deletedAt IS NULL ORDER BY createdAt DESC")
     List<WorkItemEntity> getAllActive();
@@ -35,6 +29,9 @@ public interface WorkItemDao {
 
     @Query("SELECT * FROM work_items WHERE externalId = :externalId LIMIT 1")
     WorkItemEntity getByExternalId(String externalId);
+
+    @Query("SELECT * FROM work_items WHERE sourceText = :sourceText AND deletedAt IS NULL LIMIT 1")
+    WorkItemEntity findActiveBySourceText(String sourceText);
 
     @Query("SELECT * FROM work_items WHERE deletedAt IS NULL AND startAt >= :from AND startAt < :to ORDER BY startAt ASC")
     List<WorkItemEntity> getBetween(long from, long to);
