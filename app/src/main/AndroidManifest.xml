@@ -25,6 +25,28 @@
             </intent-filter>
         </receiver>
 
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="MyBrain에 저장">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+        </activity>
+
         <activity android:name=".CalendarActivity" android:exported="false" />
         <activity android:name=".WorkItemListActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
