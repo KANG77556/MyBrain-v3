@@ -2,10 +2,12 @@ package kr.co.mybrain.v2.data;
 
 import android.content.Context;
 
+import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import kr.co.mybrain.v2.reminder.RecurrenceCalculator;
 import kr.co.mybrain.v2.reminder.ReminderScheduler;
 
 /** 화면과 Room 사이를 연결하며 모든 DB 작업을 백그라운드에서 실행합니다. */
@@ -76,11 +78,23 @@ public final class WorkItemRepository {
         databaseExecutor.execute(() -> {
             int count = dao.setCompleted(id, completed, System.currentTimeMillis());
             if (completed) ReminderScheduler.cancel(appContext, id);
-            else {
-                WorkItemEntity item = dao.getById(id);
+            else ReminderScheduler.schedule(appContext, dao.getById(id));
+            if (callback != null) callback.onResult(count);
+        });
+    }
+
+    /** 반복 항목을 다음 회차로 이동하고 다음 알림을 등록합니다. */
+    public void advanceRecurrence(long id, ResultCallback<Boolean> callback) {
+        databaseExecutor.execute(() -> {
+            WorkItemEntity item = dao.getById(id);
+            boolean advanced = RecurrenceCalculator.moveToNext(item, ZoneId.systemDefault());
+            if (advanced) {
+                item.updatedAt = System.currentTimeMillis();
+                dao.update(item);
+                ReminderScheduler.cancel(appContext, id);
                 ReminderScheduler.schedule(appContext, item);
             }
-            if (callback != null) callback.onResult(count);
+            if (callback != null) callback.onResult(advanced);
         });
     }
 
