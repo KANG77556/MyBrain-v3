@@ -12,7 +12,6 @@ import kr.co.mybrain.v2.reminder.ReminderScheduler;
 
 /** 화면과 Room 사이를 연결하며 모든 DB 작업을 백그라운드에서 실행합니다. */
 public final class WorkItemRepository {
-
     public interface ResultCallback<T> { void onResult(T value); }
 
     private static volatile WorkItemRepository instance;
@@ -54,25 +53,12 @@ public final class WorkItemRepository {
         });
     }
 
-    public void getAll(ResultCallback<List<WorkItemEntity>> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getAllActive()));
-    }
-
-    public void getDeleted(ResultCallback<List<WorkItemEntity>> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getDeleted()));
-    }
-
-    public void getByType(String type, ResultCallback<List<WorkItemEntity>> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getByType(type)));
-    }
-
-    public void getById(long id, ResultCallback<WorkItemEntity> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getById(id)));
-    }
-
-    public void getOpenTasks(ResultCallback<List<WorkItemEntity>> callback) {
-        databaseExecutor.execute(() -> callback.onResult(dao.getOpenTasks()));
-    }
+    public void getAll(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getAllActive())); }
+    public void getDeleted(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getDeleted())); }
+    public void getByType(String type, ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getByType(type))); }
+    public void getById(long id, ResultCallback<WorkItemEntity> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getById(id))); }
+    public void getOpenTasks(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getOpenTasks())); }
+    public void findDuplicate(String sourceText, ResultCallback<WorkItemEntity> callback) { databaseExecutor.execute(() -> callback.onResult(dao.findActiveBySourceText(sourceText))); }
 
     public void setCompleted(long id, boolean completed, ResultCallback<Integer> callback) {
         databaseExecutor.execute(() -> {
@@ -83,7 +69,6 @@ public final class WorkItemRepository {
         });
     }
 
-    /** 반복 항목을 다음 회차로 이동하고 다음 알림을 등록합니다. */
     public void advanceRecurrence(long id, ResultCallback<Boolean> callback) {
         databaseExecutor.execute(() -> {
             WorkItemEntity item = dao.getById(id);
