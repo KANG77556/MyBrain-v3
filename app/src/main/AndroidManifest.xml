@@ -44,31 +44,21 @@
             android:exported="false"
             android:label="MyBrain AI" />
 
-        <activity android:name=".WorkspaceActivityV9" android:exported="false" android:label="MyBrain AI 이전 화면" />
         <activity android:name=".UnifiedQuickInputActivityV4" android:exported="false" android:label="빠른 입력" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".DocumentCaptureActivityV2" android:exported="false" android:label="문서 품질 확인" />
         <activity android:name=".VoiceCaptureActivityV3" android:exported="false" android:label="음성으로 입력" />
-        <activity android:name=".WorkspaceActivityV8" android:exported="false" android:label="MyBrain AI 1.9.0 화면" />
         <activity android:name=".UnifiedQuickInputActivityV3" android:exported="false" android:label="안전한 빠른 입력 1.9.0" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".DocumentCaptureActivity" android:exported="false" android:label="문서 품질 확인 1.9.0" />
         <activity android:name=".PrivacyReviewActivity" android:exported="false" android:label="개인정보 확인" />
         <activity android:name=".VoiceCaptureActivityV2" android:exported="false" android:label="음성 이어 말하기 1.9.0" />
-        <activity android:name=".WorkspaceActivityV7" android:exported="false" android:label="MyBrain AI 1.8.9 화면" />
         <activity android:name=".UnifiedQuickInputActivityV2" android:exported="false" android:label="안전한 빠른 입력 1.8.9" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".VoiceCaptureActivity" android:exported="false" android:label="음성으로 입력" />
-        <activity android:name=".WorkspaceActivityV6" android:exported="false" android:label="MyBrain AI 1.8.8 화면" />
         <activity android:name=".UnifiedQuickInputActivity" android:exported="false" android:label="빠른 입력 1.8.8" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".WorkspaceActivityV5" android:exported="false" android:label="MyBrain AI 1.8.7 화면" />
         <activity android:name=".QuickInputActivity" android:exported="false" android:label="새 기록" />
         <activity android:name=".QuickCaptureReviewActivity" android:exported="false" android:label="추출 내용 확인" />
-        <activity android:name=".WorkspaceActivityV4" android:exported="false" android:label="MyBrain AI 1.8.5 화면" />
         <activity android:name=".WorkItemEditorActivity" android:exported="false" android:label="항목 입력" />
         <activity android:name=".WorkItemDetailActivity" android:exported="false" android:label="항목 상세" />
         <activity android:name=".WorkItemManagerActivity" android:exported="false" android:label="항목 관리" />
-        <activity android:name=".WorkspaceActivityV3" android:exported="false" android:label="MyBrain AI 1.8.4 화면" />
-        <activity android:name=".WorkspaceActivityV2" android:exported="false" android:label="MyBrain AI 1.8.3 화면" />
-        <activity android:name=".WorkspaceActivity" android:exported="false" android:label="MyBrain AI 이전 화면" />
-        <activity android:name=".MainActivity" android:exported="false" />
 
         <activity
             android:name=".IntegratedMainActivity"
