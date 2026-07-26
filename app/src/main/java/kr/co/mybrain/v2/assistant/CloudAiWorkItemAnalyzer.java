@@ -14,6 +14,8 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import kr.co.mybrain.v2.MyBrainApplication;
 import kr.co.mybrain.v2.data.WorkItemEntity;
@@ -25,6 +27,14 @@ import kr.co.mybrain.v2.settings.AiSettings;
 public final class CloudAiWorkItemAnalyzer {
     private static final int CONNECT_TIMEOUT_MS = 20_000;
     private static final int READ_TIMEOUT_MS = 35_000;
+    private static final Pattern STRING_FIELD = Pattern.compile(
+            "\\\"([A-Za-z][A-Za-z0-9]*)\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"\\\\])*)\\\"");
+    private static final Pattern NULL_FIELD = Pattern.compile(
+            "\\\"(startAt|endAt|reminderAt)\\\"\\s*:\\s*null", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BOOLEAN_FIELD = Pattern.compile(
+            "\\\"(allDay|reminderExplicitlyDisabled)\\\"\\s*:\\s*(true|false)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CONFIDENCE_FIELD = Pattern.compile(
+            "\\\"confidence\\\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)", Pattern.CASE_INSENSITIVE);
 
     private CloudAiWorkItemAnalyzer() {}
 
@@ -45,10 +55,10 @@ public final class CloudAiWorkItemAnalyzer {
         ProviderResponse response = AiSettings.PROVIDER_GEMINI.equals(normalizedProvider)
                 ? callGemini(model, credential, prompt)
                 : callOpenAi(model, credential, prompt);
-        ParsedWorkItem merged = mergeJson(response.jsonText, originalText, localBaseline, zoneId);
-        merged.aiProvider = normalizedProvider;
+        MergeOutcome merge = mergeJson(response.jsonText, originalText, localBaseline, zoneId);
+        merge.item.aiProvider = normalizedProvider;
         CloudResultValidator.ValidationResult validated = CloudResultValidator.validate(
-                originalText, merged, localBaseline, zoneId);
+                originalText, merge.item, localBaseline, zoneId);
         validated.item.aiProvider = normalizedProvider;
         long elapsedMs = Math.max(1L, (System.nanoTime() - startedAt) / 1_000_000L);
 
@@ -65,7 +75,9 @@ public final class CloudAiWorkItemAnalyzer {
         String costSummary = estimatedCostWon < 0L
                 ? "비용 단가 미등록"
                 : "예상 비용 " + estimatedCostWon + "원";
-        String summary = validated.summary + " · " + costSummary
+        String summary = validated.summary
+                + (merge.recovered ? " · 응답 자동 복구" : "")
+                + " · " + costSummary
                 + (budgetWarning ? " · 월간 한도 경고" : "");
 
         return new AnalysisResult(
@@ -79,7 +91,8 @@ public final class CloudAiWorkItemAnalyzer {
                 validated.corrections,
                 summary,
                 estimatedCostWon,
-                budgetWarning);
+                budgetWarning,
+                merge.recovered);
     }
 
     private static ProviderResponse callOpenAi(String model, String credential, String prompt) throws Exception {
@@ -146,7 +159,6 @@ public final class CloudAiWorkItemAnalyzer {
         String endpoint = "https://generativelanguage.googleapis.com/v1beta/models/"
                 + URLEncoder.encode(normalizedModel, StandardCharsets.UTF_8.name()).replace("+", "%20")
                 + ":generateContent";
-        // Gemini 3.5/3.6 이후 모델과의 호환을 위해 temperature/topP/topK를 보내지 않습니다.
         JSONObject body = new JSONObject()
                 .put("systemInstruction", new JSONObject()
                         .put("parts", new JSONArray().put(new JSONObject().put("text", systemInstruction()))))
@@ -154,7 +166,8 @@ public final class CloudAiWorkItemAnalyzer {
                         .put("role", "user")
                         .put("parts", new JSONArray().put(new JSONObject().put("text", prompt)))))
                 .put("generationConfig", new JSONObject()
-                        .put("maxOutputTokens", 800)
+                        .put("candidateCount", 1)
+                        .put("maxOutputTokens", 1600)
                         .put("responseMimeType", "application/json"));
 
         HttpURLConnection connection = openPost(endpoint);
@@ -202,16 +215,35 @@ public final class CloudAiWorkItemAnalyzer {
         throw new AnalysisException("Gemini 분석 결과를 읽지 못했습니다.");
     }
 
-    private static ParsedWorkItem mergeJson(
+    private static MergeOutcome mergeJson(
             String jsonText,
             String originalText,
             ParsedWorkItem baseline,
             ZoneId zoneId) throws Exception {
-        JSONObject json = new JSONObject(stripCodeFence(jsonText));
+        JSONObject json;
+        boolean recovered = false;
+        try {
+            AiJsonRecovery.Recovery recovery = AiJsonRecovery.recover(jsonText);
+            recovered = recovery.recovered;
+            try {
+                json = new JSONObject(recovery.json);
+            } catch (Exception parseError) {
+                json = salvageKnownFields(jsonText);
+                recovered = true;
+            }
+        } catch (Exception recoveryError) {
+            try {
+                json = salvageKnownFields(jsonText);
+                recovered = true;
+            } catch (Exception salvageError) {
+                throw new AnalysisException("AI 응답 형식을 확인하지 못했습니다. 기기 분석 결과를 사용합니다.");
+            }
+        }
+
         ParsedWorkItem result = copyOf(baseline);
         result.sourceText = originalText;
 
-        String type = json.optString("type", "").toUpperCase();
+        String type = json.optString("type", json.optString("category", "")).toUpperCase();
         if ("SCHEDULE".equals(type)) result.type = WorkItemEntity.TYPE_SCHEDULE;
         else if ("TASK".equals(type)) result.type = WorkItemEntity.TYPE_TASK;
         else if ("MEMO".equals(type)) result.type = WorkItemEntity.TYPE_MEMO;
@@ -243,9 +275,57 @@ public final class CloudAiWorkItemAnalyzer {
             result.confidence = (float) Math.max(0.0,
                     Math.min(1.0, json.optDouble("confidence", result.confidence)));
         } else {
-            result.confidence = Math.max(result.confidence, 0.82f);
+            result.confidence = Math.max(result.confidence, recovered ? 0.76f : 0.82f);
         }
-        return result;
+        return new MergeOutcome(result, recovered);
+    }
+
+    /** 완전한 JSON 복구가 불가능해도 이미 도착한 알려진 필드만 안전하게 추출합니다. */
+    private static JSONObject salvageKnownFields(String raw) throws Exception {
+        String text = raw == null ? "" : raw;
+        JSONObject json = new JSONObject();
+        int recognized = 0;
+
+        Matcher strings = STRING_FIELD.matcher(text);
+        while (strings.find()) {
+            String key = strings.group(1);
+            if (!isKnownField(key)) continue;
+            String value;
+            try {
+                value = new JSONArray("[\"" + strings.group(2) + "\"]").getString(0);
+            } catch (Exception ignored) {
+                value = strings.group(2).replace("\\\"", "\"").replace("\\\\", "\\");
+            }
+            json.put(key, value);
+            recognized++;
+        }
+
+        Matcher nulls = NULL_FIELD.matcher(text);
+        while (nulls.find()) {
+            json.put(nulls.group(1), JSONObject.NULL);
+            recognized++;
+        }
+
+        Matcher booleans = BOOLEAN_FIELD.matcher(text);
+        while (booleans.find()) {
+            json.put(booleans.group(1), Boolean.parseBoolean(booleans.group(2)));
+            recognized++;
+        }
+
+        Matcher confidence = CONFIDENCE_FIELD.matcher(text);
+        if (confidence.find()) {
+            json.put("confidence", Double.parseDouble(confidence.group(1)));
+            recognized++;
+        }
+
+        if (recognized == 0) throw new AnalysisException("복구할 수 있는 AI 응답 필드가 없습니다.");
+        return json;
+    }
+
+    private static boolean isKnownField(String key) {
+        return "type".equals(key) || "category".equals(key) || "title".equals(key)
+                || "startAt".equals(key) || "endAt".equals(key) || "reminderAt".equals(key)
+                || "repeatRule".equals(key) || "priority".equals(key);
     }
 
     private static ParsedWorkItem copyOf(ParsedWorkItem source) {
@@ -315,7 +395,9 @@ public final class CloudAiWorkItemAnalyzer {
     }
 
     private static String systemInstruction() {
-        return "당신은 한국어 개인 비서 입력 분석기다. 사용자의 문장을 일정(SCHEDULE), 할 일(TASK), 메모(MEMO) 중 하나로 분류하고 JSON만 반환한다. "
+        return "당신은 한국어 개인 비서 입력 분석기다. 사용자의 문장을 일정(SCHEDULE), 할 일(TASK), 메모(MEMO) 중 하나로 분류한다. "
+                + "설명이나 코드펜스 없이 500자 이내의 JSON 객체 하나만 반환한다. "
+                + "분류 필드 이름은 category가 아니라 반드시 type을 사용한다. "
                 + "사용자가 말하지 않은 날짜, 시간, 알림, 반복, 장소, 우선순위를 만들지 않는다. "
                 + "일정은 특정 시각이나 일정 성격의 사건, 할 일은 사용자가 수행해야 하는 행동, 메모는 단순 정보로 구분한다. "
                 + "날짜와 시간은 제공된 현재 시각과 시간대를 기준으로 계산하여 ISO-8601 형식으로 반환한다. "
@@ -325,6 +407,7 @@ public final class CloudAiWorkItemAnalyzer {
     private static String buildPrompt(String text, ZoneId zoneId) {
         ZonedDateTime now = ZonedDateTime.now(zoneId);
         return "현재 시각: " + now + "\n시간대: " + zoneId.getId() + "\n"
+                + "반환 필드: type, title, startAt, endAt, reminderAt, reminderExplicitlyDisabled, allDay, repeatRule, priority, confidence\n"
                 + "반복 규칙 허용값: NONE, DAILY, WEEKDAYS, WEEKLY, MONTHLY\n"
                 + "중요도 허용값: LOW, NORMAL, HIGH\n"
                 + "원문에 날짜나 시간이 없으면 startAt, endAt, reminderAt은 null로 둔다.\n"
@@ -335,18 +418,6 @@ public final class CloudAiWorkItemAnalyzer {
     private static boolean isAllowedRepeat(String value) {
         return "NONE".equals(value) || "DAILY".equals(value) || "WEEKDAYS".equals(value)
                 || "WEEKLY".equals(value) || "MONTHLY".equals(value);
-    }
-
-    private static String stripCodeFence(String value) {
-        String text = value == null ? "" : value.trim();
-        if (text.startsWith("```")) {
-            int firstBreak = text.indexOf('\n');
-            int lastFence = text.lastIndexOf("```");
-            if (firstBreak >= 0 && lastFence > firstBreak) {
-                text = text.substring(firstBreak + 1, lastFence).trim();
-            }
-        }
-        return text;
     }
 
     private static HttpURLConnection openPost(String endpoint) throws Exception {
@@ -424,6 +495,16 @@ public final class CloudAiWorkItemAnalyzer {
         }
     }
 
+    private static final class MergeOutcome {
+        final ParsedWorkItem item;
+        final boolean recovered;
+
+        MergeOutcome(ParsedWorkItem item, boolean recovered) {
+            this.item = item;
+            this.recovered = recovered;
+        }
+    }
+
     private static final class ProviderResponse {
         final String jsonText;
         final int inputTokens;
@@ -453,11 +534,12 @@ public final class CloudAiWorkItemAnalyzer {
         public final String validationSummary;
         public final long estimatedCostWon;
         public final boolean budgetWarning;
+        public final boolean responseRecovered;
 
         AnalysisResult(ParsedWorkItem item, boolean privacyMasked, long elapsedMs,
                        int inputTokens, int outputTokens, int totalTokens,
                        String modelVersion, int corrections, String validationSummary,
-                       long estimatedCostWon, boolean budgetWarning) {
+                       long estimatedCostWon, boolean budgetWarning, boolean responseRecovered) {
             this.item = item;
             this.privacyMasked = privacyMasked;
             this.elapsedMs = elapsedMs;
@@ -469,6 +551,7 @@ public final class CloudAiWorkItemAnalyzer {
             this.validationSummary = validationSummary == null ? "" : validationSummary;
             this.estimatedCostWon = estimatedCostWon;
             this.budgetWarning = budgetWarning;
+            this.responseRecovered = responseRecovered;
         }
     }
 
