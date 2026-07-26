@@ -2,6 +2,14 @@ plugins {
     id 'com.android.application'
 }
 
+// 고정 서명 정보는 GitHub Actions 또는 로컬 환경변수에서만 읽습니다.
+// JKS 파일과 비밀번호는 소스 저장소에 기록하지 않습니다.
+def releaseStoreFile = System.getenv('MYBRAIN_KEYSTORE_FILE')
+def releaseStorePassword = System.getenv('MYBRAIN_KEYSTORE_PASSWORD')
+def releaseKeyAlias = System.getenv('MYBRAIN_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('MYBRAIN_KEY_PASSWORD')
+def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 android {
     namespace 'kr.co.mybrain.v2'
     compileSdk 35
@@ -10,8 +18,23 @@ android {
         applicationId 'kr.co.mybrain.v2'
         minSdk 26
         targetSdk 35
-        versionCode 26
-        versionName '2.0.0-alpha26'
+        versionCode 27
+        versionName '2.0.0-alpha27'
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+                enableV4Signing true
+            }
+        }
     }
 
     buildTypes {
@@ -21,6 +44,7 @@ android {
         release {
             minifyEnabled false
             shrinkResources false
+            if (hasReleaseSigning) signingConfig signingConfigs.release
         }
     }
 
