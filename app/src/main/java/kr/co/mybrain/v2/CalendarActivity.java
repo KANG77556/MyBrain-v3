@@ -1,6 +1,7 @@
 package kr.co.mybrain.v2;
 
-import android.graphics.Color;
+import android.content.Intent;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -26,22 +27,30 @@ import java.util.Locale;
 
 import kr.co.mybrain.v2.data.WorkItemEntity;
 import kr.co.mybrain.v2.data.WorkItemRepository;
+import kr.co.mybrain.v2.ui.AppUi;
+import kr.co.mybrain.v2.ui.UiSelection;
 
-/** 월간 달력, 주간 일정, 오늘 할 일을 한 화면에서 보여줍니다. */
+/** 월간 달력, 주간 일정, 오늘 할 일을 일관된 한 화면에서 보여줍니다. */
 public class CalendarActivity extends AppCompatActivity {
+    private static final String MODE_DAY = "DAY";
+    private static final String MODE_WEEK = "WEEK";
+    private static final String MODE_TODAY = "TODAY";
 
     private final ZoneId zoneId = ZoneId.systemDefault();
     private final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd (E)", Locale.KOREA);
-    private final DateTimeFormatter timeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.KOREA);
 
     private WorkItemRepository repository;
     private CalendarView calendarView;
     private LinearLayout itemContainer;
     private TextView rangeTitle;
+    private TextView countText;
+    private Button dayButton;
+    private Button weekButton;
+    private Button todayButton;
     private LocalDate selectedDate = LocalDate.now();
+    private String currentMode = MODE_DAY;
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         repository = WorkItemRepository.getInstance(this);
         setContentView(buildScreen());
@@ -51,38 +60,46 @@ public class CalendarActivity extends AppCompatActivity {
     private View buildScreen() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(247, 249, 253));
-        root.setPadding(dp(16), dp(10), dp(16), dp(14));
+        root.setBackgroundColor(AppUi.BG);
+        int side = AppUi.isTablet(this) ? AppUi.dp(this, 28) : AppUi.dp(this, 16);
+        root.setPadding(side, AppUi.dp(this, 10), side, AppUi.dp(this, 14));
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            view.setPadding(dp(16), bars.top + dp(10), dp(16), bars.bottom + dp(14));
+            int horizontal = AppUi.isTablet(this) ? AppUi.dp(this, 28) : AppUi.dp(this, 16);
+            view.setPadding(horizontal, bars.top + AppUi.dp(this, 10), horizontal,
+                    bars.bottom + AppUi.dp(this, 14));
             return insets;
         });
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        Button back = button("←");
+        Button back = AppUi.compactButton(this, "←");
+        back.setContentDescription("홈으로 돌아가기");
         back.setOnClickListener(v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(52), dp(46)));
-        TextView title = text("일정과 할 일", 24, Color.rgb(28, 38, 52));
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, dp(52), 1f);
-        titleParams.setMargins(dp(8), 0, 0, 0);
+        header.addView(back, new LinearLayout.LayoutParams(AppUi.dp(this, 52), AppUi.dp(this, 48)));
+        TextView title = AppUi.text(this, "일정", 25, AppUi.TEXT, true);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, AppUi.dp(this, 48), 1f);
+        titleParams.setMargins(AppUi.dp(this, 10), 0, 0, 0);
         header.addView(title, titleParams);
         root.addView(header);
 
+        TextView subtitle = AppUi.body(this, "날짜별 일정과 오늘 할 일을 빠르게 확인합니다.");
+        subtitle.setPadding(0, AppUi.dp(this, 4), 0, AppUi.dp(this, 10));
+        root.addView(subtitle);
+
         LinearLayout tabs = new LinearLayout(this);
         tabs.setWeightSum(3f);
-        Button month = button("월간");
-        Button week = button("주간");
-        Button today = button("오늘 할 일");
-        month.setOnClickListener(v -> showDay(selectedDate));
-        week.setOnClickListener(v -> showWeek(selectedDate));
-        today.setOnClickListener(v -> showTodayTasks());
-        tabs.addView(month, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        tabs.addView(week, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        tabs.addView(today, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        root.addView(tabs);
+        dayButton = UiSelection.button(this, "날짜");
+        weekButton = UiSelection.button(this, "주간");
+        todayButton = UiSelection.button(this, "오늘 할 일");
+        dayButton.setOnClickListener(v -> showDay(selectedDate));
+        weekButton.setOnClickListener(v -> showWeek(selectedDate));
+        todayButton.setOnClickListener(v -> showTodayTasks());
+        addTab(tabs, dayButton, true, false);
+        addTab(tabs, weekButton, false, false);
+        addTab(tabs, todayButton, false, true);
+        root.addView(tabs, new LinearLayout.LayoutParams(-1, AppUi.dp(this, 48)));
 
         calendarView = new CalendarView(this);
         calendarView.setDate(System.currentTimeMillis());
@@ -90,31 +107,65 @@ public class CalendarActivity extends AppCompatActivity {
             selectedDate = LocalDate.of(year, monthValue + 1, dayOfMonth);
             showDay(selectedDate);
         });
-        root.addView(calendarView, new LinearLayout.LayoutParams(-1, dp(300)));
+        int calendarHeight = AppUi.isTablet(this) ? 320 : 286;
+        LinearLayout.LayoutParams calendarParams = new LinearLayout.LayoutParams(-1, AppUi.dp(this, calendarHeight));
+        calendarParams.setMargins(0, AppUi.dp(this, 8), 0, 0);
+        root.addView(calendarView, calendarParams);
 
-        rangeTitle = text("", 17, Color.rgb(28, 38, 52));
-        rangeTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        rangeTitle.setPadding(0, dp(12), 0, dp(8));
-        root.addView(rangeTitle);
+        LinearLayout rangeRow = new LinearLayout(this);
+        rangeRow.setGravity(Gravity.CENTER_VERTICAL);
+        rangeTitle = AppUi.text(this, "", 17, AppUi.TEXT, true);
+        rangeTitle.setGravity(Gravity.CENTER_VERTICAL);
+        countText = AppUi.text(this, "", 13, AppUi.SUBTEXT, false);
+        countText.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams rangeParams = new LinearLayout.LayoutParams(0, AppUi.dp(this, 48), 1f);
+        rangeParams.setMargins(0, AppUi.dp(this, 4), 0, 0);
+        rangeRow.addView(rangeTitle, rangeParams);
+        rangeRow.addView(countText, new LinearLayout.LayoutParams(-2, AppUi.dp(this, 48)));
+        root.addView(rangeRow);
 
         ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
         itemContainer = new LinearLayout(this);
         itemContainer.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(itemContainer);
+        scroll.addView(itemContainer, new ScrollView.LayoutParams(-1, -2));
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        Button add = AppUi.primaryButton(this, "＋  새 항목 추가");
+        add.setOnClickListener(v -> openHomeForAdd());
+        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(-1, AppUi.dp(this, 54));
+        addParams.setMargins(0, AppUi.dp(this, 10), 0, 0);
+        root.addView(add, addParams);
         return root;
     }
 
+    private void addTab(LinearLayout parent, Button button, boolean first, boolean last) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, AppUi.dp(this, 44), 1f);
+        params.setMargins(first ? 0 : AppUi.dp(this, 4), AppUi.dp(this, 2),
+                last ? 0 : AppUi.dp(this, 4), AppUi.dp(this, 2));
+        parent.addView(button, params);
+    }
+
+    private void updateTabs() {
+        UiSelection.apply(this, dayButton, MODE_DAY.equals(currentMode));
+        UiSelection.apply(this, weekButton, MODE_WEEK.equals(currentMode));
+        UiSelection.apply(this, todayButton, MODE_TODAY.equals(currentMode));
+    }
+
     private void showDay(LocalDate date) {
+        currentMode = MODE_DAY;
+        updateTabs();
         calendarView.setVisibility(View.VISIBLE);
         selectedDate = date;
-        rangeTitle.setText(date.format(dateFormat) + " 일정");
+        rangeTitle.setText(date.format(dateFormat));
         long from = date.atStartOfDay(zoneId).toInstant().toEpochMilli();
         long to = date.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli();
         repository.getBetween(from, to, items -> runOnUiThread(() -> renderItems(items, false)));
     }
 
     private void showWeek(LocalDate date) {
+        currentMode = MODE_WEEK;
+        updateTabs();
         calendarView.setVisibility(View.GONE);
         LocalDate monday = date.with(DayOfWeek.MONDAY);
         LocalDate nextMonday = monday.plusWeeks(1);
@@ -125,9 +176,11 @@ public class CalendarActivity extends AppCompatActivity {
     }
 
     private void showTodayTasks() {
+        currentMode = MODE_TODAY;
+        updateTabs();
         calendarView.setVisibility(View.GONE);
         LocalDate today = LocalDate.now();
-        rangeTitle.setText("오늘 할 일 · " + today.format(dateFormat));
+        rangeTitle.setText(today.format(dateFormat));
         long from = today.atStartOfDay(zoneId).toInstant().toEpochMilli();
         long to = today.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli();
         repository.getOpenTasks(tasks -> {
@@ -141,48 +194,56 @@ public class CalendarActivity extends AppCompatActivity {
 
     private void renderItems(List<WorkItemEntity> items, boolean taskMode) {
         itemContainer.removeAllViews();
-        if (items == null || items.isEmpty()) {
-            TextView empty = text(taskMode ? "오늘 처리할 할 일이 없습니다." : "등록된 일정이 없습니다.", 16, Color.rgb(102, 116, 138));
-            empty.setPadding(dp(12), dp(24), dp(12), dp(24));
-            itemContainer.addView(empty);
+        int count = items == null ? 0 : items.size();
+        countText.setText(count + "개");
+        if (count == 0) {
+            String title = taskMode ? "오늘 할 일이 없습니다" : "등록된 일정이 없습니다";
+            String description = taskMode
+                    ? "새 할 일을 추가하면 오늘 목록에서 바로 확인할 수 있습니다."
+                    : "아래 버튼으로 일정·할 일·메모를 추가해 보세요.";
+            itemContainer.addView(AppUi.emptyState(this, title, description), AppUi.cardParams(this));
             return;
         }
         for (WorkItemEntity item : items) itemContainer.addView(buildCard(item));
     }
 
     private View buildCard(WorkItemEntity item) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(12), dp(14), dp(12));
-        card.setBackgroundColor(Color.WHITE);
-        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
-        cardParams.setMargins(0, 0, 0, dp(8));
+        LinearLayout card = AppUi.card(this);
+        LinearLayout.LayoutParams cardParams = AppUi.cardParams(this);
         card.setLayoutParams(cardParams);
 
         if (WorkItemEntity.TYPE_TASK.equals(item.type)) {
             CheckBox completed = new CheckBox(this);
             completed.setText(item.title);
             completed.setTextSize(17);
+            completed.setTextColor(AppUi.TEXT);
+            completed.setTypeface(null, Typeface.BOLD);
             completed.setChecked(item.completed);
             completed.setOnCheckedChangeListener((buttonView, checked) ->
                     repository.setCompleted(item.id, checked, ignored -> runOnUiThread(() -> item.completed = checked)));
             card.addView(completed);
         } else {
-            TextView title = text(typeLabel(item.type) + " · " + item.title, 17, Color.rgb(28, 38, 52));
-            title.setTypeface(null, android.graphics.Typeface.BOLD);
+            TextView title = AppUi.text(this, typeLabel(item.type) + " · " + item.title, 17, AppUi.TEXT, true);
             card.addView(title);
         }
 
         String timing = item.startAt == null ? "시간 미지정" : formatDateTime(item.startAt);
         if (item.endAt != null) timing += " ~ " + formatDateTime(item.endAt);
-        TextView detail = text(timing + repeatText(item.repeatRule), 14, Color.rgb(102, 116, 138));
-        detail.setPadding(0, dp(5), 0, 0);
+        TextView detail = AppUi.body(this, timing + repeatText(item.repeatRule));
+        detail.setPadding(0, AppUi.dp(this, 6), 0, 0);
         card.addView(detail);
         return card;
     }
 
+    private void openHomeForAdd() {
+        Intent intent = new Intent(this, AdaptiveMainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
+    }
+
     private String formatDateTime(long millis) {
-        return Instant.ofEpochMilli(millis).atZone(zoneId).format(DateTimeFormatter.ofPattern("MM.dd (E) HH:mm", Locale.KOREA));
+        return Instant.ofEpochMilli(millis).atZone(zoneId)
+                .format(DateTimeFormatter.ofPattern("MM.dd (E) HH:mm", Locale.KOREA));
     }
 
     private String repeatText(String rule) {
@@ -197,25 +258,5 @@ public class CalendarActivity extends AppCompatActivity {
         if (WorkItemEntity.TYPE_SCHEDULE.equals(type)) return "일정";
         if (WorkItemEntity.TYPE_TASK.equals(type)) return "할 일";
         return "메모";
-    }
-
-    private Button button(String label) {
-        Button button = new Button(this);
-        button.setText(label);
-        button.setTextSize(15);
-        button.setAllCaps(false);
-        return button;
-    }
-
-    private TextView text(String value, int size, int color) {
-        TextView view = new TextView(this);
-        view.setText(value);
-        view.setTextSize(size);
-        view.setTextColor(color);
-        return view;
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }
