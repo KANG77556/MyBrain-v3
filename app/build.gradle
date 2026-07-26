@@ -2,13 +2,23 @@ plugins {
     id 'com.android.application'
 }
 
-// 고정 서명 정보는 GitHub Actions 또는 로컬 환경변수에서만 읽습니다.
+// 정식 Release 서명 정보는 GitHub Actions 또는 로컬 환경변수에서만 읽습니다.
 // JKS 파일과 비밀번호는 소스 저장소에 기록하지 않습니다.
 def releaseStoreFile = System.getenv('MYBRAIN_KEYSTORE_FILE')
 def releaseStorePassword = System.getenv('MYBRAIN_KEYSTORE_PASSWORD')
 def releaseKeyAlias = System.getenv('MYBRAIN_KEY_ALIAS')
 def releaseKeyPassword = System.getenv('MYBRAIN_KEY_PASSWORD')
 def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
+// 개발 APK도 매 빌드마다 서명이 바뀌면 덮어쓰기 설치가 불가능합니다.
+// 아래 인증서는 개발용으로만 공개 보관하며 정식 배포에는 절대 사용하지 않습니다.
+def stableDebugBase64File = file('debug/mybrain-v2-debug.p12.b64')
+def stableDebugStoreFile = file("${buildDir}/generated/signing/mybrain-v2-debug.p12")
+if (!stableDebugBase64File.exists()) {
+    throw new GradleException('고정 개발 서명 파일이 없습니다: ' + stableDebugBase64File)
+}
+stableDebugStoreFile.parentFile.mkdirs()
+stableDebugStoreFile.bytes = java.util.Base64.decoder.decode(stableDebugBase64File.text.trim())
 
 android {
     namespace 'kr.co.mybrain.v2'
@@ -18,11 +28,22 @@ android {
         applicationId 'kr.co.mybrain.v2'
         minSdk 26
         targetSdk 35
-        versionCode 31
-        versionName '2.0.0-alpha31'
+        versionCode 32
+        versionName '2.0.0-alpha32'
     }
 
     signingConfigs {
+        stableDebug {
+            storeFile stableDebugStoreFile
+            storePassword 'mybrain-debug-only'
+            keyAlias 'mybrain-debug'
+            keyPassword 'mybrain-debug-only'
+            storeType 'PKCS12'
+            enableV1Signing true
+            enableV2Signing true
+            enableV3Signing true
+            enableV4Signing true
+        }
         if (hasReleaseSigning) {
             release {
                 storeFile file(releaseStoreFile)
@@ -40,6 +61,7 @@ android {
     buildTypes {
         debug {
             debuggable true
+            signingConfig signingConfigs.stableDebug
         }
         release {
             minifyEnabled false

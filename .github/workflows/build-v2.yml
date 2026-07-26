@@ -13,6 +13,7 @@ jobs:
     env:
       HAS_RELEASE_SIGNING: ${{ secrets.MYBRAIN_KEYSTORE_BASE64 != '' && secrets.MYBRAIN_KEYSTORE_PASSWORD != '' && secrets.MYBRAIN_KEY_ALIAS != '' && secrets.MYBRAIN_KEY_PASSWORD != '' }}
       EXPECTED_CERT_SHA256: ee9b89627074c2708f7d91ae1a9fcf5ebd8f9611b4df0719e8aa4eef63765520
+      EXPECTED_DEBUG_CERT_SHA256: 49c3fde6dff9be797d506eade00bb660288efc83d385b6b8b930c5d8fe771b87
 
     steps:
       - name: 소스 내려받기
@@ -51,6 +52,24 @@ jobs:
           set -o pipefail
           gradle --stacktrace assembleDebug 2>&1 | tee build.log
 
+      - name: 개발 APK 고정 서명 검증
+        shell: bash
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -f "$APK"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee debug-apk-signature-report.txt
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" debug-apk-signature-report.txt
+          ACTUAL_DEBUG_CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' debug-apk-signature-report.txt \
+            | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')
+          if [ "$ACTUAL_DEBUG_CERT" != "$EXPECTED_DEBUG_CERT_SHA256" ]; then
+            echo "개발 APK 서명이 고정 인증서와 다릅니다."
+            echo "예상: $EXPECTED_DEBUG_CERT_SHA256"
+            echo "실제: $ACTUAL_DEBUG_CERT"
+            exit 1
+          fi
+          sha256sum "$APK" > debug-apk.sha256
+
       - name: 빌드 로그 업로드
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,7 +82,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MyBrainAI-v2-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            debug-apk.sha256
+            debug-apk-signature-report.txt
           if-no-files-found: error
 
       - name: 미서명 Release 컴파일 검증

@@ -1,14 +1,18 @@
 package kr.co.mybrain.v2;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -17,34 +21,63 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 
 import java.text.NumberFormat;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 
+import kr.co.mybrain.v2.data.WorkItemEntity;
+import kr.co.mybrain.v2.data.WorkItemRepository;
 import kr.co.mybrain.v2.settings.AiBudgetSettings;
 import kr.co.mybrain.v2.settings.AiSettings;
 import kr.co.mybrain.v2.settings.AiUsageStore;
 import kr.co.mybrain.v2.settings.SettingsHubActivity;
 import kr.co.mybrain.v2.ui.AppUi;
 
-/** 스마트폰 한 열·태블릿 두 열 UI와 단순한 홈 탐색을 구성합니다. */
+/** 스마트폰 한 열·태블릿 두 열 UI와 짧은 기록 흐름을 구성합니다. */
 public class AdaptiveMainActivity extends MainActivity {
     private static final int TABLET_MIN_WIDTH_DP = 700;
+
     private TextView homeUsageText;
     private ProgressBar homeBudgetProgress;
+    private TextView todaySummaryText;
+    private TextView todayItemsText;
+    private TextView recentItemsText;
+    private WorkItemRepository repository;
+
+    private EditText homeInput;
+    private TextView analysisPreview;
+    private TextView homeStatus;
+    private View resultCard;
+    private View saveAction;
+    private boolean saveActionDialogShown;
+    private String lastAnalyzedTitle = "저장한 항목";
 
     @Override protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        repository = WorkItemRepository.getInstance(this);
         getWindow().getDecorView().post(() -> {
             simplifyBaseHome();
             applyAdaptiveLayout();
             addSettingsToTopNavigation();
+            installCompactInputFlow();
+            addTodayRecentCard();
             addHomeUsageCard();
+            refreshDashboard();
             refreshHomeUsage();
         });
     }
 
     @Override protected void onResume() {
         super.onResume();
-        getWindow().getDecorView().post(this::refreshHomeUsage);
+        getWindow().getDecorView().post(() -> {
+            refreshDashboard();
+            refreshHomeUsage();
+        });
     }
 
     private void simplifyBaseHome() {
@@ -52,7 +85,7 @@ public class AdaptiveMainActivity extends MainActivity {
         if (root == null || root.getChildCount() < 8) return;
         if (root.getChildAt(0) instanceof TextView) ((TextView) root.getChildAt(0)).setText("MyBrain");
         if (root.getChildAt(1) instanceof TextView) {
-            ((TextView) root.getChildAt(1)).setText("말하거나 입력하면 일정·할 일·메모로 정리합니다.");
+            ((TextView) root.getChildAt(1)).setText("말하거나 입력하면 바로 일정·할 일·메모로 정리합니다.");
         }
         renameButtons(root);
     }
@@ -64,10 +97,10 @@ public class AdaptiveMainActivity extends MainActivity {
             if (value.contains("일정·오늘")) button.setText("오늘 일정");
             else if (value.contains("저장 목록")) button.setText("저장 목록");
             else if (value.contains("음성으로 입력")) button.setText("말해서 입력");
-            else if (value.contains("AI로 정밀 분석")) button.setText("AI 정밀 분석");
-            else if (value.contains("결과 확인·수정")) button.setText("결과 확인·수정");
+            else if (value.contains("AI로 정밀 분석")) button.setText("더 정확히");
+            else if (value.contains("결과 확인·수정")) button.setText("확인·수정");
             else if (value.contains("저장하기")) button.setText("저장");
-            else if (value.contains("빠른 추가")) button.setText("빠른 추가");
+            else if (value.contains("빠른 추가")) button.setText("종류 선택");
         }
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
@@ -75,16 +108,89 @@ public class AdaptiveMainActivity extends MainActivity {
         }
     }
 
-    private void applyAdaptiveLayout() {
-        int widthDp = Math.round(getResources().getDisplayMetrics().widthPixels
-                / getResources().getDisplayMetrics().density);
-        int smallestWidth = getResources().getConfiguration().smallestScreenWidthDp;
-        boolean tablet = smallestWidth >= 600 || widthDp >= TABLET_MIN_WIDTH_DP;
+    /** 결과 카드는 분석됐을 때만 보이고 저장 완료 시 다음 행동을 안내합니다. */
+    private void installCompactInputFlow() {
         LinearLayout root = findRoot();
-        if (root == null) return;
-        int side = tablet ? (widthDp >= 1100 ? dp(48) : dp(30)) : dp(18);
-        root.setPadding(side, root.getPaddingTop(), side, root.getPaddingBottom());
-        if (tablet) applyTabletLayout(root);
+        if (root == null || root.findViewWithTag("alpha32-compact-flow") != null) return;
+        root.setTag("alpha32-compact-flow");
+
+        homeInput = findFirstEditText(root);
+        analysisPreview = findTextStarting(root, "내용을 입력하면");
+        homeStatus = findTextStarting(root, "입력하거나");
+        TextView resultTitle = findTextStarting(root, "AI 분석 결과");
+        resultCard = resultTitle == null ? null : (View) resultTitle.getParent();
+        saveAction = findButtonExact(root, "저장");
+        hideResultArea();
+
+        if (homeInput != null) {
+            homeInput.setHint("예: 내일 오전 9시 교무회의, 금요일까지 보고서 제출");
+            homeInput.addTextChangedListener(new SimpleWatcher() {
+                @Override public void afterTextChanged(Editable editable) {
+                    if (editable.toString().trim().length() < 3) hideResultArea();
+                }
+            });
+        }
+
+        if (analysisPreview != null) {
+            analysisPreview.addTextChangedListener(new SimpleWatcher() {
+                @Override public void afterTextChanged(Editable editable) {
+                    String value = editable.toString();
+                    if (value.startsWith("제목  ")) {
+                        lastAnalyzedTitle = firstResultValue(value);
+                        showResultArea();
+                    } else if (value.startsWith("내용을 입력하면")) {
+                        hideResultArea();
+                    }
+                }
+            });
+        }
+
+        if (homeStatus != null) {
+            homeStatus.addTextChangedListener(new SimpleWatcher() {
+                @Override public void afterTextChanged(Editable editable) {
+                    String value = editable.toString();
+                    if (value.startsWith("저장 완료")) {
+                        refreshDashboard();
+                        showSavedActionsSoon();
+                    }
+                }
+            });
+        }
+    }
+
+    private void showResultArea() {
+        if (resultCard != null) resultCard.setVisibility(View.VISIBLE);
+        if (saveAction != null) saveAction.setVisibility(View.VISIBLE);
+    }
+
+    private void hideResultArea() {
+        if (resultCard != null) resultCard.setVisibility(View.GONE);
+        if (saveAction != null) saveAction.setVisibility(View.GONE);
+    }
+
+    private void showSavedActionsSoon() {
+        if (saveActionDialogShown || isFinishing() || isDestroyed()) return;
+        saveActionDialogShown = true;
+        getWindow().getDecorView().postDelayed(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            new AlertDialog.Builder(this)
+                    .setTitle("저장 완료")
+                    .setMessage("‘" + safeTitle(lastAnalyzedTitle) + "’을 저장했습니다. 다음에 무엇을 할까요?")
+                    .setPositiveButton("오늘 보기", (dialog, which) ->
+                            startActivity(new Intent(this, CalendarActivity.class)))
+                    .setNeutralButton("저장 목록", (dialog, which) ->
+                            startActivity(new Intent(this, WorkItemListActivity.class)))
+                    .setNegativeButton("계속 입력", (dialog, which) -> focusHomeInput())
+                    .setOnDismissListener(dialog -> saveActionDialogShown = false)
+                    .show();
+        }, 140L);
+    }
+
+    private void focusHomeInput() {
+        if (homeInput == null) return;
+        homeInput.requestFocus();
+        InputMethodManager manager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (manager != null) manager.showSoftInput(homeInput, InputMethodManager.SHOW_IMPLICIT);
     }
 
     private void addSettingsToTopNavigation() {
@@ -109,6 +215,112 @@ public class AdaptiveMainActivity extends MainActivity {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(50), 1f);
         params.setMargins(dp(4), 0, 0, 0);
         nav.addView(settings, params);
+    }
+
+    private void addTodayRecentCard() {
+        LinearLayout root = findRoot();
+        if (root == null || root.findViewWithTag("alpha32-today-recent") != null) return;
+        LinearLayout card = new LinearLayout(this);
+        card.setTag("alpha32-today-recent");
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(15), dp(16), dp(15));
+        card.setBackground(AppUi.round(this, AppUi.SURFACE, 18, AppUi.BORDER));
+
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = text("오늘과 최근 기록", 17, AppUi.TEXT, true);
+        TextView more = text("전체 보기  ›", 14, AppUi.PRIMARY, true);
+        more.setGravity(Gravity.END);
+        more.setOnClickListener(v -> startActivity(new Intent(this, WorkItemListActivity.class)));
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+        header.addView(more, new LinearLayout.LayoutParams(-2, dp(48)));
+        card.addView(header);
+
+        todaySummaryText = text("오늘 내용을 불러오는 중입니다.", 15, AppUi.TEXT, true);
+        todaySummaryText.setPadding(0, dp(6), 0, 0);
+        card.addView(todaySummaryText);
+        todayItemsText = text("", 14, AppUi.SUBTEXT, false);
+        todayItemsText.setLineSpacing(dp(3), 1.05f);
+        todayItemsText.setPadding(0, dp(7), 0, 0);
+        card.addView(todayItemsText);
+
+        TextView recentTitle = text("최근 저장", 15, AppUi.TEXT, true);
+        recentTitle.setPadding(0, dp(14), 0, 0);
+        card.addView(recentTitle);
+        recentItemsText = text("최근 저장 항목을 불러오는 중입니다.", 14, AppUi.SUBTEXT, false);
+        recentItemsText.setLineSpacing(dp(3), 1.05f);
+        recentItemsText.setPadding(0, dp(7), 0, 0);
+        card.addView(recentItemsText);
+
+        LinearLayout actions = new LinearLayout(this);
+        Button today = AppUi.compactButton(this, "오늘 일정");
+        today.setOnClickListener(v -> startActivity(new Intent(this, CalendarActivity.class)));
+        Button all = AppUi.compactButton(this, "저장 목록");
+        all.setOnClickListener(v -> startActivity(new Intent(this, WorkItemListActivity.class)));
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(52), 1f);
+        left.setMargins(0, dp(12), dp(5), 0);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, dp(52), 1f);
+        right.setMargins(dp(5), dp(12), 0, 0);
+        actions.addView(today, left);
+        actions.addView(all, right);
+        card.addView(actions);
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(12), 0, 0);
+        root.addView(card, params);
+    }
+
+    private void refreshDashboard() {
+        if (repository == null || todaySummaryText == null) return;
+        repository.getAll(items -> runOnUiThread(() -> renderDashboard(items)));
+    }
+
+    private void renderDashboard(List<WorkItemEntity> source) {
+        if (todaySummaryText == null || isFinishing() || isDestroyed()) return;
+        List<WorkItemEntity> items = source == null ? new ArrayList<>() : source;
+        LocalDate today = LocalDate.now();
+        List<WorkItemEntity> todayItems = new ArrayList<>();
+        int scheduleCount = 0;
+        int taskCount = 0;
+
+        for (WorkItemEntity item : items) {
+            if (item == null || item.deletedAt != null) continue;
+            boolean datedToday = item.startAt != null
+                    && Instant.ofEpochMilli(item.startAt).atZone(ZoneId.systemDefault()).toLocalDate().equals(today);
+            if (WorkItemEntity.TYPE_SCHEDULE.equals(item.type) && datedToday) {
+                scheduleCount++;
+                todayItems.add(item);
+            } else if (WorkItemEntity.TYPE_TASK.equals(item.type) && !item.completed
+                    && (item.startAt == null || datedToday)) {
+                taskCount++;
+                todayItems.add(item);
+            }
+        }
+
+        todayItems.sort(Comparator.comparingLong(item -> item.startAt == null ? Long.MAX_VALUE : item.startAt));
+        todaySummaryText.setText("오늘 일정 " + scheduleCount + "개 · 남은 할 일 " + taskCount + "개");
+        todayItemsText.setText(todayItems.isEmpty()
+                ? "오늘 등록된 일정이나 남은 할 일이 없습니다."
+                : joinItems(todayItems, 3, true));
+
+        recentItemsText.setText(items.isEmpty()
+                ? "아직 저장한 항목이 없습니다."
+                : joinItems(items, 3, false));
+    }
+
+    private String joinItems(List<WorkItemEntity> items, int max, boolean showTime) {
+        StringBuilder value = new StringBuilder();
+        int count = 0;
+        for (WorkItemEntity item : items) {
+            if (item == null || item.deletedAt != null) continue;
+            if (count > 0) value.append('\n');
+            value.append(typeIcon(item.type)).append(' ');
+            if (showTime && item.startAt != null) value.append(formatTime(item.startAt)).append("  ");
+            value.append(safeTitle(item.title));
+            count++;
+            if (count >= max) break;
+        }
+        return value.length() == 0 ? "표시할 항목이 없습니다." : value.toString();
     }
 
     private void addHomeUsageCard() {
@@ -143,7 +355,7 @@ public class AdaptiveMainActivity extends MainActivity {
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.setMargins(0, dp(10), 0, dp(2));
-        root.addView(card, Math.min(3, root.getChildCount()), params);
+        root.addView(card, params);
     }
 
     private void refreshHomeUsage() {
@@ -169,6 +381,18 @@ public class AdaptiveMainActivity extends MainActivity {
             else if (spent >= budget.warningAmountWon()) homeUsageText.setTextColor(AppUi.WARNING);
             else homeUsageText.setTextColor(AppUi.SUCCESS);
         }
+    }
+
+    private void applyAdaptiveLayout() {
+        int widthDp = Math.round(getResources().getDisplayMetrics().widthPixels
+                / getResources().getDisplayMetrics().density);
+        int smallestWidth = getResources().getConfiguration().smallestScreenWidthDp;
+        boolean tablet = smallestWidth >= 600 || widthDp >= TABLET_MIN_WIDTH_DP;
+        LinearLayout root = findRoot();
+        if (root == null) return;
+        int side = tablet ? (widthDp >= 1100 ? dp(48) : dp(30)) : dp(18);
+        root.setPadding(side, root.getPaddingTop(), side, root.getPaddingBottom());
+        if (tablet) applyTabletLayout(root);
     }
 
     private void applyTabletLayout(LinearLayout root) {
@@ -237,6 +461,41 @@ public class AdaptiveMainActivity extends MainActivity {
         return null;
     }
 
+    private EditText findFirstEditText(View view) {
+        if (view instanceof EditText) return (EditText) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            EditText found = findFirstEditText(group.getChildAt(i));
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private TextView findTextStarting(View view, String prefix) {
+        if (view instanceof TextView && String.valueOf(((TextView) view).getText()).startsWith(prefix)) {
+            return (TextView) view;
+        }
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            TextView found = findTextStarting(group.getChildAt(i), prefix);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private Button findButtonExact(View view, String value) {
+        if (view instanceof Button && value.equals(String.valueOf(((Button) view).getText()))) return (Button) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            Button found = findButtonExact(group.getChildAt(i), value);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
     private void setMaximumTextWidth(View view, int maxWidth) {
         if (view instanceof TextView) ((TextView) view).setMaxWidth(maxWidth);
         if (view instanceof ViewGroup) {
@@ -266,11 +525,39 @@ public class AdaptiveMainActivity extends MainActivity {
         return view;
     }
 
+    private String firstResultValue(String value) {
+        int lineEnd = value.indexOf('\n');
+        String first = lineEnd < 0 ? value : value.substring(0, lineEnd);
+        return first.replaceFirst("^제목\\s+", "").trim();
+    }
+
+    private String safeTitle(String value) {
+        String text = value == null ? "" : value.trim();
+        if (text.isEmpty()) return "제목 없음";
+        return text.length() <= 34 ? text : text.substring(0, 34) + "…";
+    }
+
+    private String typeIcon(String type) {
+        if (WorkItemEntity.TYPE_SCHEDULE.equals(type)) return "일정·";
+        if (WorkItemEntity.TYPE_TASK.equals(type)) return "할 일·";
+        return "메모·";
+    }
+
+    private String formatTime(long millis) {
+        return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
+                .format(DateTimeFormatter.ofPattern("HH:mm", Locale.KOREA));
+    }
+
     private String formatWon(long value) {
         return NumberFormat.getIntegerInstance(Locale.KOREA).format(Math.max(0L, value)) + "원";
     }
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private abstract static class SimpleWatcher implements TextWatcher {
+        @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+        @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
     }
 }
