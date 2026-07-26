@@ -66,6 +66,33 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
+      - name: 미서명 Release 컴파일 검증
+        if: env.HAS_RELEASE_SIGNING != 'true'
+        run: gradle --stacktrace assembleRelease
+
+      - name: 미서명 Release 안내 파일 생성
+        if: env.HAS_RELEASE_SIGNING != 'true'
+        shell: bash
+        run: |
+          cat > RELEASE-SIGNING-REQUIRED.txt <<'EOF'
+          이 APK는 Release 컴파일 검증용 미서명 파일입니다.
+          Android 기기에 설치하거나 기존 앱 업데이트에 사용할 수 없습니다.
+          scripts/register-v2-release-signing.bat로 고정 JKS를 GitHub Secrets에 등록한 뒤
+          MyBrainAI-v2-release 아티팩트를 사용하세요.
+          EOF
+          sha256sum app/build/outputs/apk/release/app-release-unsigned.apk > unsigned-release.sha256
+
+      - name: 미서명 Release 검증 결과 업로드
+        if: env.HAS_RELEASE_SIGNING != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrainAI-v2-unsigned-release-check
+          path: |
+            app/build/outputs/apk/release/app-release-unsigned.apk
+            unsigned-release.sha256
+            RELEASE-SIGNING-REQUIRED.txt
+          if-no-files-found: error
+
       - name: 고정 서명키 복원
         if: env.HAS_RELEASE_SIGNING == 'true'
         shell: bash
