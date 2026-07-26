@@ -47,6 +47,9 @@ jobs:
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "현재 앱 버전: $VERSION_NAME"
 
+      - name: AI JSON 복구 단위 테스트
+        run: gradle --stacktrace testDebugUnitTest
+
       - name: 디버그 APK 빌드
         run: |
           set -o pipefail
