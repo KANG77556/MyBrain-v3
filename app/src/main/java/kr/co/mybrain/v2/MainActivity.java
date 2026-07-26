@@ -98,16 +98,21 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
 
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = text("MyBrain AI", 28, Color.rgb(28, 38, 52));
         title.setTypeface(null, android.graphics.Typeface.BOLD);
-        header.addView(title, new LinearLayout.LayoutParams(0, dp(54), 1f));
+        root.addView(title, new LinearLayout.LayoutParams(-1, dp(48)));
+
+        LinearLayout navigation = new LinearLayout(this);
+        navigation.setWeightSum(2f);
+        Button calendarButton = button("📅 일정·오늘 할 일");
+        calendarButton.setTextSize(14);
+        calendarButton.setOnClickListener(v -> startActivity(new Intent(this, CalendarActivity.class)));
         Button listButton = button("저장 목록");
         listButton.setTextSize(14);
         listButton.setOnClickListener(v -> startActivity(new Intent(this, WorkItemListActivity.class)));
-        header.addView(listButton, new LinearLayout.LayoutParams(dp(104), dp(48)));
-        root.addView(header);
+        navigation.addView(calendarButton, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        navigation.addView(listButton, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        root.addView(navigation);
 
         root.addView(text("말하거나 입력하면 일정·할 일·메모로 자동 정리합니다.", 15, Color.rgb(102, 116, 138)));
 
@@ -117,45 +122,45 @@ public class MainActivity extends AppCompatActivity {
         inputText.setGravity(Gravity.TOP | Gravity.START);
         inputText.setPadding(dp(16), dp(14), dp(16), dp(14));
         inputText.setBackgroundColor(Color.WHITE);
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(145));
-        inputParams.setMargins(0, dp(16), 0, dp(10));
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(130));
+        inputParams.setMargins(0, dp(12), 0, dp(8));
         root.addView(inputText, inputParams);
 
         voiceButton = button("🎤 연속 음성으로 말하기");
         voiceButton.setOnClickListener(v -> toggleVoiceInput());
-        root.addView(voiceButton, new LinearLayout.LayoutParams(-1, dp(54)));
+        root.addView(voiceButton, new LinearLayout.LayoutParams(-1, dp(52)));
 
         Button clearButton = button("입력 내용 지우기");
         clearButton.setOnClickListener(v -> clearInput());
-        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(-1, dp(48));
-        clearParams.setMargins(0, dp(6), 0, 0);
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(-1, dp(44));
+        clearParams.setMargins(0, dp(5), 0, 0);
         root.addView(clearButton, clearParams);
 
         Button analyzeButton = button("✨ 내용 분석하기");
         analyzeButton.setOnClickListener(v -> analyzeInput());
-        LinearLayout.LayoutParams analyzeParams = new LinearLayout.LayoutParams(-1, dp(54));
-        analyzeParams.setMargins(0, dp(8), 0, 0);
+        LinearLayout.LayoutParams analyzeParams = new LinearLayout.LayoutParams(-1, dp(52));
+        analyzeParams.setMargins(0, dp(7), 0, 0);
         root.addView(analyzeButton, analyzeParams);
 
         previewText = text("분석 결과가 여기에 표시됩니다.", 15, Color.rgb(28, 38, 52));
-        previewText.setPadding(dp(14), dp(14), dp(14), dp(14));
+        previewText.setPadding(dp(14), dp(12), dp(14), dp(12));
         previewText.setBackgroundColor(Color.WHITE);
         LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, 0, 1f);
-        previewParams.setMargins(0, dp(12), 0, dp(8));
+        previewParams.setMargins(0, dp(10), 0, dp(7));
         root.addView(previewText, previewParams);
 
         Button editButton = button("✏️ 분석 결과 확인·수정");
         editButton.setOnClickListener(v -> openEditor());
-        root.addView(editButton, new LinearLayout.LayoutParams(-1, dp(50)));
+        root.addView(editButton, new LinearLayout.LayoutParams(-1, dp(48)));
 
         Button saveButton = button("저장하기");
         saveButton.setOnClickListener(v -> saveParsedItem());
-        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, dp(54));
-        saveParams.setMargins(0, dp(6), 0, 0);
+        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, dp(52));
+        saveParams.setMargins(0, dp(5), 0, 0);
         root.addView(saveButton, saveParams);
 
-        statusText = text("6단계 · 저장 항목 관리 화면 연결", 13, Color.rgb(102, 116, 138));
-        statusText.setPadding(0, dp(10), 0, 0);
+        statusText = text("7단계 · 월간·주간 일정과 오늘 할 일", 13, Color.rgb(102, 116, 138));
+        statusText.setPadding(0, dp(8), 0, 0);
         root.addView(statusText);
         return root;
     }
@@ -229,7 +234,7 @@ public class MainActivity extends AppCompatActivity {
         repository.insert(parsedItem.toEntity(), id -> runOnUiThread(() -> {
             Toast.makeText(this, "MyBrain에 저장했습니다.", Toast.LENGTH_SHORT).show();
             clearInput();
-            statusText.setText("저장 완료 · 저장 목록에서 확인할 수 있습니다.");
+            statusText.setText("저장 완료 · 일정 화면과 저장 목록에서 확인할 수 있습니다.");
         }));
     }
 
