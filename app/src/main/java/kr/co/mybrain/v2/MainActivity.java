@@ -1,11 +1,9 @@
 package kr.co.mybrain.v2;
 
 import android.Manifest;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.view.Gravity;
 import android.view.View;
@@ -17,7 +15,6 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
@@ -26,27 +23,29 @@ import androidx.core.view.WindowInsetsCompat;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.Locale;
 
 import kr.co.mybrain.v2.assistant.KoreanNaturalLanguageParser;
 import kr.co.mybrain.v2.assistant.ParsedWorkItem;
 import kr.co.mybrain.v2.data.WorkItemEntity;
 import kr.co.mybrain.v2.data.WorkItemRepository;
+import kr.co.mybrain.v2.voice.ContinuousSpeechRecognizer;
 
 /** 음성·텍스트 입력을 분석하고 저장하는 MyBrain AI v2 시작 화면입니다. */
 public class MainActivity extends AppCompatActivity {
 
-    private static final int REQUEST_SPEECH = 2001;
     private EditText inputText;
     private TextView previewText;
     private TextView statusText;
+    private Button voiceButton;
     private ParsedWorkItem parsedItem;
     private WorkItemRepository repository;
+    private ContinuousSpeechRecognizer speechRecognizer;
+    private boolean listening;
 
     private final ActivityResultLauncher<String> microphonePermission =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
-                if (granted) startVoiceInput();
+                if (granted) startContinuousVoice();
                 else Toast.makeText(this, "음성 입력을 사용하려면 마이크 권한이 필요합니다.", Toast.LENGTH_LONG).show();
             });
 
@@ -55,6 +54,35 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         repository = WorkItemRepository.getInstance(this);
         setContentView(buildScreen());
+        createSpeechRecognizer();
+    }
+
+    private void createSpeechRecognizer() {
+        speechRecognizer = new ContinuousSpeechRecognizer(this, new ContinuousSpeechRecognizer.Listener() {
+            @Override public void onListeningStateChanged(boolean active) {
+                listening = active;
+                runOnUiThread(() -> {
+                    voiceButton.setText(active ? "⏹ 음성 입력 끝내기" : "🎤 연속 음성으로 말하기");
+                    statusText.setText(active ? "듣는 중 · 잠시 쉬어도 자동으로 계속 듣습니다." : "음성 입력 중지 · 내용을 확인하세요.");
+                });
+            }
+
+            @Override public void onPartialText(String committedText, String partialText) {
+                runOnUiThread(() -> inputText.setText(joinSpeech(committedText, partialText)));
+            }
+
+            @Override public void onFinalText(String committedText) {
+                runOnUiThread(() -> {
+                    inputText.setText(committedText);
+                    inputText.setSelection(inputText.length());
+                    statusText.setText("문장을 기록했습니다 · 계속 말씀하세요.");
+                });
+            }
+
+            @Override public void onRecoverableError(String message) {
+                runOnUiThread(() -> statusText.setText(message));
+            }
+        });
     }
 
     private View buildScreen() {
@@ -80,13 +108,24 @@ public class MainActivity extends AppCompatActivity {
         inputText.setGravity(Gravity.TOP | Gravity.START);
         inputText.setPadding(dp(16), dp(14), dp(16), dp(14));
         inputText.setBackgroundColor(Color.WHITE);
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(130));
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(145));
         inputParams.setMargins(0, dp(16), 0, dp(10));
         root.addView(inputText, inputParams);
 
-        Button voiceButton = button("🎤 음성으로 말하기");
-        voiceButton.setOnClickListener(v -> requestVoiceInput());
+        voiceButton = button("🎤 연속 음성으로 말하기");
+        voiceButton.setOnClickListener(v -> toggleVoiceInput());
         root.addView(voiceButton, new LinearLayout.LayoutParams(-1, dp(54)));
+
+        Button clearButton = button("입력 내용 지우기");
+        clearButton.setOnClickListener(v -> {
+            if (speechRecognizer != null) speechRecognizer.clearText();
+            inputText.setText("");
+            parsedItem = null;
+            previewText.setText("분석 결과가 여기에 표시됩니다.");
+        });
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(-1, dp(48));
+        clearParams.setMargins(0, dp(6), 0, 0);
+        root.addView(clearButton, clearParams);
 
         Button analyzeButton = button("✨ 내용 분석하기");
         analyzeButton.setOnClickListener(v -> analyzeInput());
@@ -105,10 +144,42 @@ public class MainActivity extends AppCompatActivity {
         saveButton.setOnClickListener(v -> saveParsedItem());
         root.addView(saveButton, new LinearLayout.LayoutParams(-1, dp(54)));
 
-        statusText = text("3단계 · 자연어 분석 및 Room 저장", 13, Color.rgb(102, 116, 138));
+        statusText = text("4단계 · 연속 음성인식 준비", 13, Color.rgb(102, 116, 138));
         statusText.setPadding(0, dp(10), 0, 0);
         root.addView(statusText);
         return root;
+    }
+
+    private void toggleVoiceInput() {
+        if (listening) {
+            speechRecognizer.stop();
+            analyzeInput();
+            return;
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            Toast.makeText(this, "이 기기에서 음성인식 서비스를 사용할 수 없습니다.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            startContinuousVoice();
+        } else {
+            microphonePermission.launch(Manifest.permission.RECORD_AUDIO);
+        }
+    }
+
+    private void startContinuousVoice() {
+        parsedItem = null;
+        speechRecognizer.clearText();
+        inputText.setText("");
+        speechRecognizer.start();
+    }
+
+    private String joinSpeech(String committedText, String partialText) {
+        String committed = committedText == null ? "" : committedText.trim();
+        String partial = partialText == null ? "" : partialText.trim();
+        if (committed.isEmpty()) return partial;
+        if (partial.isEmpty()) return committed;
+        return committed + " " + partial;
     }
 
     private void analyzeInput() {
@@ -123,27 +194,27 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void saveParsedItem() {
+        if (listening) speechRecognizer.stop();
         if (parsedItem == null) analyzeInput();
         if (parsedItem == null) return;
         repository.insert(parsedItem.toEntity(), id -> runOnUiThread(() -> {
             statusText.setText("저장 완료 · 항목 번호 " + id);
             Toast.makeText(this, "MyBrain에 저장했습니다.", Toast.LENGTH_SHORT).show();
             parsedItem = null;
+            speechRecognizer.clearText();
             inputText.setText("");
             previewText.setText("분석 결과가 여기에 표시됩니다.");
         }));
     }
 
     private String formatResult(ParsedWorkItem item) {
-        StringBuilder value = new StringBuilder();
-        value.append("분류: ").append(typeLabel(item.type));
-        value.append("\n제목: ").append(item.title);
-        value.append("\n시작: ").append(formatTime(item.startAt));
-        value.append("\n종료: ").append(formatTime(item.endAt));
-        value.append("\n반복: ").append(item.repeatRule);
-        value.append("\n중요도: ").append(item.priority);
-        value.append("\n분석 신뢰도: ").append(Math.round(item.confidence * 100)).append("%");
-        return value.toString();
+        return "분류: " + typeLabel(item.type)
+                + "\n제목: " + item.title
+                + "\n시작: " + formatTime(item.startAt)
+                + "\n종료: " + formatTime(item.endAt)
+                + "\n반복: " + item.repeatRule
+                + "\n중요도: " + item.priority
+                + "\n분석 신뢰도: " + Math.round(item.confidence * 100) + "%";
     }
 
     private String typeLabel(String type) {
@@ -156,39 +227,6 @@ public class MainActivity extends AppCompatActivity {
         if (millis == null) return "없음";
         return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("yyyy.MM.dd (E) HH:mm", Locale.KOREA));
-    }
-
-    private void requestVoiceInput() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            Toast.makeText(this, "이 기기에서 음성인식 서비스를 사용할 수 없습니다.", Toast.LENGTH_LONG).show();
-            return;
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startVoiceInput();
-        else microphonePermission.launch(Manifest.permission.RECORD_AUDIO);
-    }
-
-    private void startVoiceInput() {
-        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.KOREA.toLanguageTag());
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "일정이나 할 일을 자연스럽게 말씀하세요.");
-        try {
-            startActivityForResult(intent, REQUEST_SPEECH);
-            statusText.setText("음성을 듣고 있습니다…");
-        } catch (Exception error) {
-            Toast.makeText(this, "음성인식 화면을 열 수 없습니다.", Toast.LENGTH_LONG).show();
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_SPEECH || resultCode != RESULT_OK || data == null) return;
-        ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-        if (results == null || results.isEmpty()) return;
-        inputText.setText(results.get(0));
-        statusText.setText("음성 인식 완료 · 자동 분석합니다.");
-        analyzeInput();
     }
 
     private Button button(String value) {
@@ -209,5 +247,17 @@ public class MainActivity extends AppCompatActivity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (listening && speechRecognizer != null) speechRecognizer.stop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (speechRecognizer != null) speechRecognizer.destroy();
+        super.onDestroy();
     }
 }
