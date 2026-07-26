@@ -12,10 +12,7 @@ import android.speech.SpeechRecognizer;
 import java.util.ArrayList;
 import java.util.Locale;
 
-/**
- * 앱 화면을 벗어나지 않고 음성을 연속으로 받아 적는 엔진입니다.
- * Android 음성인식 세션이 종료되면 사용자가 중지하기 전까지 자동으로 다시 시작합니다.
- */
+/** 앱 화면 안에서 한국어 음성을 연속으로 받아 적는 엔진입니다. */
 public final class ContinuousSpeechRecognizer implements RecognitionListener {
 
     public interface Listener {
@@ -34,6 +31,8 @@ public final class ContinuousSpeechRecognizer implements RecognitionListener {
     private boolean requested;
     private boolean destroyed;
     private boolean restartScheduled;
+    private String lastFinal = "";
+    private long lastFinalAt;
 
     public ContinuousSpeechRecognizer(Context context, Listener listener) {
         this.listener = listener;
@@ -43,10 +42,11 @@ public final class ContinuousSpeechRecognizer implements RecognitionListener {
         recognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.KOREA.toLanguageTag());
+        recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, Locale.KOREA.toLanguageTag());
         recognizerIntent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         recognizerIntent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3);
-        recognizerIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L);
-        recognizerIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 700L);
+        recognizerIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L);
+        recognizerIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 900L);
     }
 
     public void start() {
@@ -60,20 +60,18 @@ public final class ContinuousSpeechRecognizer implements RecognitionListener {
         requested = false;
         restartScheduled = false;
         mainHandler.removeCallbacksAndMessages(null);
-        try {
-            recognizer.stopListening();
-        } catch (Exception ignored) { }
+        try { recognizer.stopListening(); } catch (Exception ignored) { }
         listener.onListeningStateChanged(false);
     }
 
     public void clearText() {
         committed.setLength(0);
+        lastFinal = "";
+        lastFinalAt = 0L;
         listener.onPartialText("", "");
     }
 
-    public String getCommittedText() {
-        return committed.toString().trim();
-    }
+    public String getCommittedText() { return committed.toString().trim(); }
 
     public void destroy() {
         destroyed = true;
@@ -102,10 +100,32 @@ public final class ContinuousSpeechRecognizer implements RecognitionListener {
     }
 
     private void appendCommitted(String value) {
-        String cleaned = value == null ? "" : value.trim();
+        String cleaned = normalize(value);
         if (cleaned.isEmpty()) return;
+
+        long now = System.currentTimeMillis();
+        if (cleaned.equals(lastFinal) && now - lastFinalAt < 4000L) return;
+
+        String existing = normalize(committed.toString());
+        if (!existing.isEmpty()) {
+            if (existing.equals(cleaned) || existing.endsWith(" " + cleaned)) return;
+            if (cleaned.startsWith(existing) && cleaned.length() > existing.length()) {
+                committed.setLength(0);
+                committed.append(cleaned);
+                lastFinal = cleaned;
+                lastFinalAt = now;
+                return;
+            }
+        }
+
         if (committed.length() > 0) committed.append(' ');
         committed.append(cleaned);
+        lastFinal = cleaned;
+        lastFinalAt = now;
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().replaceAll("\\s+", " ");
     }
 
     private String firstResult(Bundle results, String key) {
@@ -132,20 +152,23 @@ public final class ContinuousSpeechRecognizer implements RecognitionListener {
         if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
             listener.onRecoverableError("음성 연결을 다시 시도합니다.");
         }
-        scheduleRestart(error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ? 900L : 300L);
+        scheduleRestart(error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ? 900L : 350L);
     }
 
     @Override
     public void onResults(Bundle results) {
-        String value = firstResult(results, SpeechRecognizer.RESULTS_RECOGNITION);
-        appendCommitted(value);
+        if (!requested || destroyed) return;
+        appendCommitted(firstResult(results, SpeechRecognizer.RESULTS_RECOGNITION));
         listener.onFinalText(getCommittedText());
-        scheduleRestart(200L);
+        scheduleRestart(250L);
     }
 
     @Override
     public void onPartialResults(Bundle partialResults) {
-        listener.onPartialText(getCommittedText(), firstResult(partialResults, SpeechRecognizer.RESULTS_RECOGNITION));
+        if (!requested || destroyed) return;
+        String partial = normalize(firstResult(partialResults, SpeechRecognizer.RESULTS_RECOGNITION));
+        if (partial.equals(lastFinal)) partial = "";
+        listener.onPartialText(getCommittedText(), partial);
     }
 
     @Override public void onEvent(int eventType, Bundle params) { }
