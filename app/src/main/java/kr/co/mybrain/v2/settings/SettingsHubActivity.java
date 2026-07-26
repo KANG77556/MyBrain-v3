@@ -17,10 +17,12 @@ import java.util.Locale;
 import kr.co.mybrain.v2.transfer.BackupRestoreActivity;
 import kr.co.mybrain.v2.transfer.ReleaseRecoveryDiagnosticsActivity;
 import kr.co.mybrain.v2.ui.AppUi;
+import kr.co.mybrain.v2.ui.UiPreferences;
 
 /** 자주 쓰는 설정과 고급 관리 기능을 분리한 설정 허브입니다. */
 public class SettingsHubActivity extends AppCompatActivity {
     private TextView summaryText;
+    private TextView displaySummary;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -38,7 +40,7 @@ public class SettingsHubActivity extends AppCompatActivity {
 
         Button back = AppUi.secondaryButton(this, "←  홈으로");
         back.setOnClickListener(v -> finish());
-        root.addView(back, new LinearLayout.LayoutParams(-1, AppUi.dp(this, 48)));
+        root.addView(back, new LinearLayout.LayoutParams(-1, AppUi.dp(this, AppUi.minimumTouchDp(this))));
 
         root.addView(AppUi.title(this, "설정"));
         root.addView(AppUi.subtitle(this, "자주 쓰는 설정부터 순서대로 배치했습니다."));
@@ -48,6 +50,15 @@ public class SettingsHubActivity extends AppCompatActivity {
         summary.addView(AppUi.sectionTitle(this, "현재 사용 상태"));
         summaryText = AppUi.body(this, "설정을 불러오는 중입니다.");
         summary.addView(summaryText);
+
+        LinearLayout displayCard = AppUi.card(this);
+        root.addView(displayCard, AppUi.cardParams(this));
+        displayCard.addView(AppUi.sectionTitle(this, "화면과 조작"));
+        displaySummary = AppUi.body(this, "화면 설정을 불러오는 중입니다.");
+        displayCard.addView(displaySummary);
+        Button accessibility = AppUi.menuButton(this, "화면·접근성", "글자 크기, 큰 버튼, 고대비, 한 손 조작");
+        accessibility.setOnClickListener(v -> startActivity(new Intent(this, AccessibilitySettingsActivity.class)));
+        AppUi.addMenu(displayCard, this, accessibility);
 
         LinearLayout aiCard = AppUi.card(this);
         root.addView(aiCard, AppUi.cardParams(this));
@@ -99,6 +110,7 @@ public class SettingsHubActivity extends AppCompatActivity {
                 + "\n이번 달  요청 " + usage.monthlyRequests + "회 · " + usage.monthlyTotalTokens + "토큰"
                 + "\n예상 비용  " + budgetText
                 + "\n네트워크  " + (budget.wifiOnly ? "Wi-Fi에서만 AI 사용" : "모바일 데이터 사용 가능"));
+        if (displaySummary != null) displaySummary.setText(UiPreferences.load(this).summary());
     }
 
     private String currentVersion() {
