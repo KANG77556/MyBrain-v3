@@ -17,7 +17,7 @@ import android.widget.TextView;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-/** MyBrain 전 화면에서 사용하는 색상·여백·카드·버튼 규칙입니다. */
+/** MyBrain 전 화면에서 사용하는 색상·여백·카드·버튼·접근성 규칙입니다. */
 public final class AppUi {
     public static final int BG = Color.rgb(247, 249, 252);
     public static final int SURFACE = Color.WHITE;
@@ -33,17 +33,23 @@ public final class AppUi {
     private AppUi() {}
 
     public static Screen screen(Activity activity) {
+        UiPreferences preferences = UiPreferences.load(activity);
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(BG);
+        scroll.setBackgroundColor(preferences.highContrast ? Color.WHITE : BG);
+        scroll.setSmoothScrollingEnabled(!preferences.reduceMotion);
         LinearLayout root = new LinearLayout(activity);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(activity, 18), dp(activity, 12), dp(activity, 18), dp(activity, 30));
+        int side = initialSidePadding(activity, preferences);
+        int bottom = preferences.oneHandMode ? 112 : 30;
+        root.setPadding(dp(activity, side), dp(activity, 12), dp(activity, side), dp(activity, bottom));
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
         ViewCompat.setOnApplyWindowInsetsListener(scroll, (v, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            int side = isTablet(activity) ? dp(activity, 28) : dp(activity, 18);
-            root.setPadding(side, bars.top + dp(activity, 12), side, bars.bottom + dp(activity, 30));
+            int resolvedSide = initialSidePadding(activity, preferences);
+            int resolvedBottom = preferences.oneHandMode ? 112 : 30;
+            root.setPadding(dp(activity, resolvedSide), bars.top + dp(activity, 12),
+                    dp(activity, resolvedSide), bars.bottom + dp(activity, resolvedBottom));
             return insets;
         });
         return new Screen(scroll, root);
@@ -52,12 +58,15 @@ public final class AppUi {
     public static TextView title(Context context, String value) {
         TextView view = text(context, value, 28, TEXT, true);
         view.setPadding(0, dp(context, 18), 0, dp(context, 4));
+        view.setContentDescription("화면 제목, " + value);
+        ViewCompat.setAccessibilityHeading(view, true);
         return view;
     }
 
     public static TextView subtitle(Context context, String value) {
-        TextView view = text(context, value, 15, SUBTEXT, false);
-        view.setLineSpacing(dp(context, 2), 1f);
+        TextView view = text(context, value, 15, UiPreferences.load(context).highContrast
+                ? Color.rgb(55, 65, 81) : SUBTEXT, false);
+        view.setLineSpacing(dp(context, 2), 1.05f);
         view.setPadding(0, 0, 0, dp(context, 14));
         return view;
     }
@@ -65,12 +74,14 @@ public final class AppUi {
     public static TextView sectionTitle(Context context, String value) {
         TextView view = text(context, value, 17, TEXT, true);
         view.setPadding(0, 0, 0, dp(context, 9));
+        ViewCompat.setAccessibilityHeading(view, true);
         return view;
     }
 
     public static TextView body(Context context, String value) {
-        TextView view = text(context, value, 14, SUBTEXT, false);
-        view.setLineSpacing(dp(context, 3), 1f);
+        TextView view = text(context, value, 14, UiPreferences.load(context).highContrast
+                ? Color.rgb(55, 65, 81) : SUBTEXT, false);
+        view.setLineSpacing(dp(context, 3), 1.05f);
         return view;
     }
 
@@ -78,7 +89,8 @@ public final class AppUi {
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(context, 16), dp(context, 15), dp(context, 16), dp(context, 15));
-        card.setBackground(round(context, SURFACE, 18, BORDER));
+        card.setBackground(round(context, SURFACE, 18,
+                UiPreferences.load(context).highContrast ? Color.rgb(148, 163, 184) : BORDER));
         return card;
     }
 
@@ -88,6 +100,7 @@ public final class AppUi {
         empty.setPadding(dp(context, 20), dp(context, 28), dp(context, 20), dp(context, 28));
         TextView titleView = text(context, title, 17, TEXT, true);
         titleView.setGravity(Gravity.CENTER);
+        ViewCompat.setAccessibilityHeading(titleView, true);
         empty.addView(titleView);
         TextView descriptionView = body(context, description);
         descriptionView.setGravity(Gravity.CENTER);
@@ -103,7 +116,9 @@ public final class AppUi {
     }
 
     public static LinearLayout.LayoutParams actionParams(Context context) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(context, 54));
+        UiPreferences preferences = UiPreferences.load(context);
+        int height = preferences.largeTouchTargets || preferences.oneHandMode ? 58 : 52;
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(context, height));
         params.setMargins(0, dp(context, 12), 0, 0);
         return params;
     }
@@ -119,7 +134,8 @@ public final class AppUi {
     public static Button secondaryButton(Context context, String value) {
         Button button = baseButton(context, value);
         button.setTextColor(TEXT);
-        button.setBackground(round(context, SURFACE, 14, BORDER));
+        button.setBackground(round(context, SURFACE, 14,
+                UiPreferences.load(context).highContrast ? Color.rgb(100, 116, 139) : BORDER));
         return button;
     }
 
@@ -129,8 +145,10 @@ public final class AppUi {
         button.setTextColor(TEXT);
         button.setTextSize(15);
         button.setPadding(dp(context, 16), dp(context, 8), dp(context, 16), dp(context, 8));
-        button.setBackground(round(context, SURFACE, 14, BORDER));
-        button.setMinHeight(dp(context, 68));
+        button.setBackground(round(context, SURFACE, 14,
+                UiPreferences.load(context).highContrast ? Color.rgb(100, 116, 139) : BORDER));
+        button.setMinHeight(dp(context, 72));
+        button.setContentDescription(title + ", " + description);
         return button;
     }
 
@@ -138,7 +156,8 @@ public final class AppUi {
         Button button = baseButton(context, value);
         button.setTextColor(TEXT);
         button.setTextSize(14);
-        button.setBackground(round(context, SURFACE, 12, BORDER));
+        button.setBackground(round(context, SURFACE, 12,
+                UiPreferences.load(context).highContrast ? Color.rgb(100, 116, 139) : BORDER));
         return button;
     }
 
@@ -149,10 +168,13 @@ public final class AppUi {
         input.setInputType(InputType.TYPE_CLASS_TEXT);
         input.setTextSize(16);
         input.setTextColor(TEXT);
-        input.setHintTextColor(SUBTEXT);
+        input.setHintTextColor(UiPreferences.load(context).highContrast
+                ? Color.rgb(75, 85, 99) : SUBTEXT);
         input.setPadding(dp(context, 14), 0, dp(context, 14), 0);
-        input.setBackground(round(context, SURFACE, 14, BORDER));
-        input.setMinHeight(dp(context, 52));
+        input.setBackground(round(context, SURFACE, 14,
+                UiPreferences.load(context).highContrast ? Color.rgb(100, 116, 139) : BORDER));
+        input.setMinHeight(dp(context, minimumTouchDp(context)));
+        input.setContentDescription(hint);
         return input;
     }
 
@@ -161,6 +183,7 @@ public final class AppUi {
         view.setText(value);
         view.setTextSize(size);
         view.setTextColor(color);
+        view.setIncludeFontPadding(true);
         if (bold) view.setTypeface(null, Typeface.BOLD);
         return view;
     }
@@ -182,6 +205,7 @@ public final class AppUi {
     public static void setEnabled(Button button, boolean enabled) {
         button.setEnabled(enabled);
         button.setAlpha(enabled ? 1f : .45f);
+        button.setContentDescription(button.getText() + (enabled ? "" : ", 현재 사용할 수 없음"));
     }
 
     public static int dp(Context context, int value) {
@@ -192,6 +216,16 @@ public final class AppUi {
         return context.getResources().getConfiguration().smallestScreenWidthDp >= 600;
     }
 
+    public static int minimumTouchDp(Context context) {
+        UiPreferences preferences = UiPreferences.load(context);
+        return preferences.largeTouchTargets || preferences.oneHandMode ? 56 : 48;
+    }
+
+    private static int initialSidePadding(Context context, UiPreferences preferences) {
+        if (preferences.oneHandMode && !isTablet(context)) return 16;
+        return isTablet(context) ? 28 : 18;
+    }
+
     private static Button baseButton(Context context, String value) {
         Button button = new Button(context);
         button.setText(value);
@@ -199,7 +233,8 @@ public final class AppUi {
         button.setAllCaps(false);
         button.setGravity(Gravity.CENTER);
         button.setStateListAnimator(null);
-        button.setMinHeight(dp(context, 50));
+        button.setMinHeight(dp(context, minimumTouchDp(context)));
+        button.setContentDescription(value.replace('\n', ' '));
         return button;
     }
 
