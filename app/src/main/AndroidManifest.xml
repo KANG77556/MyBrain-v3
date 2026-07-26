@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -11,6 +12,7 @@
     </queries>
 
     <application
+        android:name=".MyBrainApplication"
         android:allowBackup="false"
         android:label="MyBrain AI"
         android:supportsRtl="true"
@@ -50,6 +52,7 @@
         <activity android:name=".CalendarActivity" android:exported="false" />
         <activity android:name=".WorkItemListActivity" android:exported="false" />
         <activity android:name=".settings.AiSettingsActivity" android:exported="false" />
+        <activity android:name=".settings.AiBudgetActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="false" />
         <activity
             android:name=".AdaptiveMainActivity"

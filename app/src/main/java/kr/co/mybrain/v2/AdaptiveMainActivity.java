@@ -12,6 +12,7 @@ import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 
+import kr.co.mybrain.v2.settings.AiBudgetActivity;
 import kr.co.mybrain.v2.settings.AiSettingsActivity;
 
 /**
@@ -28,6 +29,7 @@ public class AdaptiveMainActivity extends MainActivity {
         getWindow().getDecorView().post(() -> {
             applyAdaptiveLayout();
             addAiSettingsEntry();
+            addBudgetSettingsEntry();
         });
     }
 
@@ -74,6 +76,31 @@ public class AdaptiveMainActivity extends MainActivity {
         params.setMargins(0, dp(8), 0, dp(2));
         int position = Math.min(2, root.getChildCount());
         root.addView(settingsButton, position, params);
+    }
+
+    private void addBudgetSettingsEntry() {
+        View content = findViewById(android.R.id.content);
+        ScrollView scroll = findScrollView(content);
+        if (scroll == null || scroll.getChildCount() == 0) return;
+        View child = scroll.getChildAt(0);
+        if (!(child instanceof LinearLayout)) return;
+        LinearLayout root = (LinearLayout) child;
+        if (root.findViewWithTag("alpha25-budget-settings") != null) return;
+
+        Button budgetButton = new Button(this);
+        budgetButton.setTag("alpha25-budget-settings");
+        budgetButton.setText("₩  AI 비용·데이터 설정");
+        budgetButton.setTextSize(15);
+        budgetButton.setAllCaps(false);
+        budgetButton.setGravity(Gravity.CENTER);
+        budgetButton.setOnClickListener(v ->
+                startActivity(new Intent(this, AiBudgetActivity.class)));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        params.setMargins(0, dp(4), 0, dp(2));
+        int position = Math.min(3, root.getChildCount());
+        root.addView(budgetButton, position, params);
     }
 
     private void applyPhoneLayout(LinearLayout root) {
