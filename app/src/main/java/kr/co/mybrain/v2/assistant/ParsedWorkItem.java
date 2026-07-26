@@ -9,6 +9,7 @@ public final class ParsedWorkItem {
     public String sourceText = "";
     public Long startAt;
     public Long endAt;
+    public Long reminderAt;
     public boolean allDay;
     public String repeatRule = "NONE";
     public String priority = "NORMAL";
@@ -22,6 +23,7 @@ public final class ParsedWorkItem {
         item.sourceText = sourceText;
         item.startAt = startAt;
         item.endAt = endAt;
+        item.reminderAt = reminderAt;
         item.allDay = allDay;
         item.repeatRule = repeatRule;
         item.priority = priority;
