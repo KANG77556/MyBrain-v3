@@ -18,7 +18,7 @@ import kr.co.mybrain.v2.transfer.BackupRestoreActivity;
 import kr.co.mybrain.v2.transfer.ReleaseRecoveryDiagnosticsActivity;
 import kr.co.mybrain.v2.ui.AppUi;
 
-/** 홈에 흩어진 설정 메뉴를 한곳에 모은 단순한 설정 허브입니다. */
+/** 자주 쓰는 설정과 고급 관리 기능을 분리한 설정 허브입니다. */
 public class SettingsHubActivity extends AppCompatActivity {
     private TextView summaryText;
 
@@ -36,44 +36,49 @@ public class SettingsHubActivity extends AppCompatActivity {
         AppUi.Screen screen = AppUi.screen(this);
         LinearLayout root = screen.root;
 
-        Button back = AppUi.secondaryButton(this, "←  설정");
+        Button back = AppUi.secondaryButton(this, "←  홈으로");
         back.setOnClickListener(v -> finish());
         root.addView(back, new LinearLayout.LayoutParams(-1, AppUi.dp(this, 48)));
 
         root.addView(AppUi.title(this, "설정"));
-        root.addView(AppUi.subtitle(this, "AI 연결, 비용, 백업과 앱 상태를 한곳에서 관리합니다."));
+        root.addView(AppUi.subtitle(this, "자주 쓰는 설정부터 순서대로 배치했습니다."));
 
         LinearLayout summary = AppUi.card(this);
         root.addView(summary, AppUi.cardParams(this));
-        summary.addView(AppUi.sectionTitle(this, "현재 상태"));
+        summary.addView(AppUi.sectionTitle(this, "현재 사용 상태"));
         summaryText = AppUi.body(this, "설정을 불러오는 중입니다.");
         summary.addView(summaryText);
 
         LinearLayout aiCard = AppUi.card(this);
         root.addView(aiCard, AppUi.cardParams(this));
-        aiCard.addView(AppUi.sectionTitle(this, "AI"));
-        Button connection = AppUi.menuButton(this, "AI 연결", "GPT·Gemini, API 키, 모델 선택");
+        aiCard.addView(AppUi.sectionTitle(this, "AI 사용 설정"));
+        Button connection = AppUi.menuButton(this, "1. AI 연결", "GPT·Gemini 선택, API 키, 사용 모델");
         connection.setOnClickListener(v -> startActivity(new Intent(this, AiSettingsActivity.class)));
         AppUi.addMenu(aiCard, this, connection);
 
-        Button cost = AppUi.menuButton(this, "비용·데이터", "월간 한도, Wi-Fi 전용, 비용 알림");
+        Button cost = AppUi.menuButton(this, "2. 비용과 데이터", "월간 한도, Wi-Fi 전용, 비용 알림");
         cost.setOnClickListener(v -> startActivity(new Intent(this, AiBudgetActivity.class)));
         AppUi.addMenu(aiCard, this, cost);
 
-        Button compare = AppUi.menuButton(this, "모델 비교", "실제 속도, 성공률, 예상 비용 비교");
+        Button compare = AppUi.menuButton(this, "3. 모델 비교", "내 사용 기록 기준 속도·성공률·예상 비용");
         compare.setOnClickListener(v -> startActivity(new Intent(this, AiModelComparisonActivity.class)));
         AppUi.addMenu(aiCard, this, compare);
 
         LinearLayout dataCard = AppUi.card(this);
         root.addView(dataCard, AppUi.cardParams(this));
-        dataCard.addView(AppUi.sectionTitle(this, "데이터와 앱"));
-        Button backup = AppUi.menuButton(this, "백업·복원·업데이트", "암호화 백업, 복원, APK 업데이트");
+        dataCard.addView(AppUi.sectionTitle(this, "데이터 보호"));
+        Button backup = AppUi.menuButton(this, "백업·복원·업데이트", "암호화 백업을 만들고 새 APK를 안전하게 설치");
         backup.setOnClickListener(v -> startActivity(new Intent(this, BackupRestoreActivity.class)));
         AppUi.addMenu(dataCard, this, backup);
 
-        Button diagnostics = AppUi.menuButton(this, "배포·복구 진단", "앱 서명, 백업 리허설, 업데이트 준비 상태");
+        LinearLayout advancedCard = AppUi.card(this);
+        root.addView(advancedCard, AppUi.cardParams(this));
+        advancedCard.addView(AppUi.sectionTitle(this, "고급 관리"));
+        TextView advancedNote = AppUi.body(this, "일반 사용 중에는 변경할 필요가 없습니다.");
+        advancedCard.addView(advancedNote);
+        Button diagnostics = AppUi.menuButton(this, "배포·복구 진단", "앱 서명과 백업 복원 가능 상태 확인");
         diagnostics.setOnClickListener(v -> startActivity(new Intent(this, ReleaseRecoveryDiagnosticsActivity.class)));
-        AppUi.addMenu(dataCard, this, diagnostics);
+        AppUi.addMenu(advancedCard, this, diagnostics);
 
         TextView version = AppUi.body(this, "MyBrain AI " + currentVersion());
         version.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
@@ -89,11 +94,11 @@ public class SettingsHubActivity extends AppCompatActivity {
         AiUsageStore.CombinedSummary usage = AiUsageStore.loadCombined(this);
         String budgetText = budget.budgetEnabled
                 ? formatWon(usage.monthlyEstimatedCostWon) + " / " + formatWon(budget.monthlyLimitWon)
-                : formatWon(usage.monthlyEstimatedCostWon) + " · 한도 사용 안 함";
+                : formatWon(usage.monthlyEstimatedCostWon) + " · 한도 꺼짐";
         summaryText.setText("AI  " + ai.providerLabel() + " · " + ai.selectedModel()
                 + "\n이번 달  요청 " + usage.monthlyRequests + "회 · " + usage.monthlyTotalTokens + "토큰"
                 + "\n예상 비용  " + budgetText
-                + "\n데이터 사용  " + (budget.wifiOnly ? "Wi-Fi에서만 AI 사용" : "모든 네트워크 허용"));
+                + "\n네트워크  " + (budget.wifiOnly ? "Wi-Fi에서만 AI 사용" : "모바일 데이터 사용 가능"));
     }
 
     private String currentVersion() {
