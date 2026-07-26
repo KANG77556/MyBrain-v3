@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.MyBrain" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.MyBrain" parent="Theme.Material3.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:statusBarColor">#F7F9FD</item>
         <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:windowActionModeOverlay">true</item>
+
+        <!-- 흰색 입력창에서도 글자가 흐려지지 않도록 밝은 테마와 글자색을 고정합니다. -->
+        <item name="android:textColorPrimary">#1C2634</item>
+        <item name="android:textColorSecondary">#66748A</item>
+        <item name="android:textColorHint">#7A8798</item>
+        <item name="colorOnSurface">#1C2634</item>
+        <item name="colorOnSurfaceVariant">#66748A</item>
+        <item name="colorPrimary">#3559C7</item>
     </style>
 </resources>
