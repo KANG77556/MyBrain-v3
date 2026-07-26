@@ -18,6 +18,10 @@ public interface WorkItemDao {
     @Query("SELECT * FROM work_items WHERE deletedAt IS NULL ORDER BY createdAt DESC")
     List<WorkItemEntity> getAllActive();
 
+    /** 백업에는 휴지통 항목도 포함해 사용자가 완전한 상태를 복원할 수 있게 합니다. */
+    @Query("SELECT * FROM work_items ORDER BY createdAt ASC, id ASC")
+    List<WorkItemEntity> getAllIncludingDeleted();
+
     @Query("SELECT * FROM work_items WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
     List<WorkItemEntity> getDeleted();
 
@@ -47,6 +51,9 @@ public interface WorkItemDao {
 
     @Query("UPDATE work_items SET deletedAt = NULL, updatedAt = :updatedAt WHERE id = :id")
     int restore(long id, long updatedAt);
+
+    @Query("DELETE FROM work_items")
+    int deleteAllForRestore();
 
     @Query("SELECT COUNT(*) FROM work_items WHERE deletedAt IS NULL")
     int countActive();
