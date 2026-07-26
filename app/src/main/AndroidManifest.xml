@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <queries>
         <intent>
@@ -17,17 +18,18 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MyBrain">
 
-        <activity
-            android:name=".CalendarActivity"
-            android:exported="false" />
+        <receiver android:name=".reminder.ReminderReceiver" android:exported="false" />
+        <receiver android:name=".reminder.ReminderActionReceiver" android:exported="false" />
+        <receiver android:name=".reminder.BootReceiver" android:enabled="true" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
-        <activity
-            android:name=".WorkItemListActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
+        <activity android:name=".ScheduleActivity" android:exported="false" />
+        <activity android:name=".WorkItemListActivity" android:exported="false" />
+        <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
