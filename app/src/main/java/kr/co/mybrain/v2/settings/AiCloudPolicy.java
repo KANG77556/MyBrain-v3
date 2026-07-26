@@ -24,14 +24,14 @@ public final class AiCloudPolicy {
         long average = summary.monthlyPricedRequests <= 0L
                 ? 1L : Math.max(1L, spent / summary.monthlyPricedRequests);
         long projected = spent + average;
-        if (budget.budgetEnabled && budget.blockAtLimit && projected > budget.monthlyLimitWon) {
+        if (budget.budgetEnabled && budget.blockAtLimit && spent >= budget.monthlyLimitWon) {
             return Decision.blocked(
                     "월간 AI 비용 한도에 도달해 기기 분석으로 전환했습니다.", budget, spent, projected);
         }
 
-        boolean warning = budget.budgetEnabled && projected >= budget.warningAmountWon();
+        boolean warning = budget.budgetEnabled && spent >= budget.warningAmountWon();
         String message = warning
-                ? "월간 AI 비용이 경고 기준에 가까워졌습니다."
+                ? "월간 AI 비용이 경고 기준에 도달했습니다."
                 : "";
         return new Decision(true, warning, message, budget, spent, projected);
     }
