@@ -1,6 +1,7 @@
 package kr.co.mybrain.v2;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -92,15 +93,22 @@ public class MainActivity extends AppCompatActivity {
         root.setBackgroundColor(Color.rgb(247, 249, 253));
         root.setPadding(dp(18), dp(12), dp(18), dp(16));
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
-            int mask = WindowInsetsCompat.Type.systemBars();
-            androidx.core.graphics.Insets bars = insets.getInsets(mask);
+            androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             view.setPadding(dp(18), bars.top + dp(12), dp(18), bars.bottom + dp(16));
             return insets;
         });
 
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = text("MyBrain AI", 28, Color.rgb(28, 38, 52));
         title.setTypeface(null, android.graphics.Typeface.BOLD);
-        root.addView(title, new LinearLayout.LayoutParams(-1, dp(54)));
+        header.addView(title, new LinearLayout.LayoutParams(0, dp(54), 1f));
+        Button listButton = button("저장 목록");
+        listButton.setTextSize(14);
+        listButton.setOnClickListener(v -> startActivity(new Intent(this, WorkItemListActivity.class)));
+        header.addView(listButton, new LinearLayout.LayoutParams(dp(104), dp(48)));
+        root.addView(header);
+
         root.addView(text("말하거나 입력하면 일정·할 일·메모로 자동 정리합니다.", 15, Color.rgb(102, 116, 138)));
 
         inputText = new EditText(this);
@@ -146,7 +154,7 @@ public class MainActivity extends AppCompatActivity {
         saveParams.setMargins(0, dp(6), 0, 0);
         root.addView(saveButton, saveParams);
 
-        statusText = text("5단계 · 분석 결과 확인 및 수정", 13, Color.rgb(102, 116, 138));
+        statusText = text("6단계 · 저장 항목 관리 화면 연결", 13, Color.rgb(102, 116, 138));
         statusText.setPadding(0, dp(10), 0, 0);
         root.addView(statusText);
         return root;
@@ -219,9 +227,9 @@ public class MainActivity extends AppCompatActivity {
         if (parsedItem == null) analyzeInput();
         if (parsedItem == null) return;
         repository.insert(parsedItem.toEntity(), id -> runOnUiThread(() -> {
-            statusText.setText("저장 완료 · 항목 번호 " + id);
             Toast.makeText(this, "MyBrain에 저장했습니다.", Toast.LENGTH_SHORT).show();
             clearInput();
+            statusText.setText("저장 완료 · 저장 목록에서 확인할 수 있습니다.");
         }));
     }
 
