@@ -11,7 +11,6 @@ import android.os.Build;
 import androidx.core.app.NotificationCompat;
 
 import kr.co.mybrain.v2.MainActivity;
-import kr.co.mybrain.v2.R;
 import kr.co.mybrain.v2.data.WorkItemEntity;
 
 /** 예약 시각에 알림을 표시합니다. */
@@ -21,12 +20,14 @@ public final class ReminderReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         long itemId = intent.getLongExtra("item_id", -1L);
+        if (itemId < 0) return;
         String title = intent.getStringExtra("title");
         String type = intent.getStringExtra("type");
         ensureChannel(context);
 
-        PendingIntent open = PendingIntent.getActivity(context, (int) itemId,
-                new Intent(context, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent open = PendingIntent.getActivity(context, requestCode(itemId, 0),
+                new Intent(context, MainActivity.class),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         PendingIntent complete = action(context, itemId, ReminderActionReceiver.ACTION_COMPLETE, 10000);
         PendingIntent snooze = action(context, itemId, ReminderActionReceiver.ACTION_SNOOZE, 20000);
 
@@ -42,19 +43,27 @@ public final class ReminderReceiver extends BroadcastReceiver {
                 .addAction(0, "10분 미루기", snooze);
 
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager != null) manager.notify((int) itemId, builder.build());
+        if (manager != null) manager.notify(requestCode(itemId, 0), builder.build());
     }
 
-    private PendingIntent action(Context context, long itemId, String action, int offset) {
-        Intent intent = new Intent(context, ReminderActionReceiver.class).setAction(action).putExtra("item_id", itemId);
-        return PendingIntent.getBroadcast(context, (int) itemId + offset, intent,
+    private static PendingIntent action(Context context, long itemId, String action, int offset) {
+        Intent actionIntent = new Intent(context, ReminderActionReceiver.class)
+                .setAction(action)
+                .putExtra("item_id", itemId);
+        return PendingIntent.getBroadcast(context, requestCode(itemId, offset), actionIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
-    private void ensureChannel(Context context) {
+    private static int requestCode(long itemId, int offset) {
+        return (int) (itemId ^ (itemId >>> 32)) + offset;
+    }
+
+    private static void ensureChannel(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager != null) manager.createNotificationChannel(new NotificationChannel(
-                CHANNEL_ID, "일정 및 할 일 알림", NotificationManager.IMPORTANCE_HIGH));
+        if (manager != null) {
+            manager.createNotificationChannel(new NotificationChannel(
+                    CHANNEL_ID, "일정 및 할 일 알림", NotificationManager.IMPORTANCE_HIGH));
+        }
     }
 }
