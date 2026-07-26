@@ -34,6 +34,11 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import kr.co.mybrain.v2.assistant.CloudAiWorkItemAnalyzer;
+import kr.co.mybrain.v2.assistant.KoreanNaturalLanguageParser;
+import kr.co.mybrain.v2.assistant.ParsedWorkItem;
+import kr.co.mybrain.v2.data.WorkItemEntity;
+
 public class AiSettingsActivity extends AppCompatActivity {
     private static final int BG = Color.rgb(246, 248, 252);
     private static final int TEXT = Color.rgb(24, 34, 48);
@@ -41,6 +46,7 @@ public class AiSettingsActivity extends AppCompatActivity {
     private static final int PRIMARY = Color.rgb(45, 91, 255);
     private static final int BORDER = Color.rgb(218, 224, 234);
     private static final int DANGER = Color.rgb(218, 53, 69);
+    private static final int SUCCESS = Color.rgb(29, 128, 75);
     private static final String CUSTOM_MODEL = "직접 입력";
 
     private static final String[] OPENAI_MODELS = {
@@ -60,7 +66,9 @@ public class AiSettingsActivity extends AppCompatActivity {
     private TextView connectionStatus;
     private TextView credentialStatus;
     private TextView providerSummary;
+    private TextView usageStatus;
     private Button testButton;
+    private Button analysisTestButton;
     private boolean refreshing;
 
     @Override protected void onCreate(Bundle state) {
@@ -68,6 +76,11 @@ public class AiSettingsActivity extends AppCompatActivity {
         settings = AiSettings.load(this);
         setContentView(buildScreen());
         refreshProviderUi();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (usageStatus != null) updateUsageStatus();
     }
 
     private View buildScreen() {
@@ -91,7 +104,7 @@ public class AiSettingsActivity extends AppCompatActivity {
         TextView title = text("AI 연결 관리", 28, TEXT, true);
         title.setPadding(0, dp(18), 0, dp(4));
         root.addView(title);
-        TextView subtitle = text("GPT 또는 Gemini를 선택하고 연결 상태를 확인합니다.", 15, SUBTEXT, false);
+        TextView subtitle = text("GPT 또는 Gemini를 선택하고 실제 분석 상태를 확인합니다.", 15, SUBTEXT, false);
         subtitle.setPadding(0, 0, 0, dp(14));
         root.addView(subtitle);
 
@@ -169,18 +182,37 @@ public class AiSettingsActivity extends AppCompatActivity {
 
         LinearLayout statusCard = card();
         root.addView(statusCard, cardParams());
-        statusCard.addView(sectionTitle("4. 연결 상태"));
+        statusCard.addView(sectionTitle("4. 연결·실제 분석 검증"));
         connectionStatus = text("연결 테스트 기록이 없습니다.", 14, SUBTEXT, false);
         connectionStatus.setLineSpacing(dp(3), 1f);
         statusCard.addView(connectionStatus);
-        TextView usage = text("사용량과 결제 내역은 각 공급자 콘솔에서 확인합니다.", 13, SUBTEXT, false);
-        usage.setPadding(0, dp(10), 0, 0);
-        statusCard.addView(usage);
+
         testButton = primaryButton("연결 테스트");
         testButton.setOnClickListener(v -> testConnection());
         LinearLayout.LayoutParams testParams = new LinearLayout.LayoutParams(-1, dp(54));
         testParams.setMargins(0, dp(12), 0, 0);
         statusCard.addView(testButton, testParams);
+
+        analysisTestButton = secondaryButton("실제 일정 분석 테스트");
+        analysisTestButton.setOnClickListener(v -> testRealAnalysis());
+        LinearLayout.LayoutParams analysisTestParams = new LinearLayout.LayoutParams(-1, dp(52));
+        analysisTestParams.setMargins(0, dp(9), 0, 0);
+        statusCard.addView(analysisTestButton, analysisTestParams);
+
+        LinearLayout usageCard = card();
+        root.addView(usageCard, cardParams());
+        usageCard.addView(sectionTitle("5. 기기 내 AI 사용 기록"));
+        usageStatus = text("사용 기록이 없습니다.", 14, SUBTEXT, false);
+        usageStatus.setLineSpacing(dp(3), 1f);
+        usageCard.addView(usageStatus);
+        TextView usageNote = text("토큰 수와 응답시간만 저장하며 입력 문장·응답 원문·API 키는 기록하지 않습니다.", 12, SUBTEXT, false);
+        usageNote.setPadding(0, dp(10), 0, 0);
+        usageCard.addView(usageNote);
+        Button resetUsage = secondaryButton("선택한 AI 사용 기록 초기화");
+        resetUsage.setOnClickListener(v -> confirmResetUsage());
+        LinearLayout.LayoutParams resetParams = new LinearLayout.LayoutParams(-1, dp(48));
+        resetParams.setMargins(0, dp(10), 0, 0);
+        usageCard.addView(resetUsage, resetParams);
 
         Button saveAll = primaryButton("✓  AI 설정 저장");
         saveAll.setOnClickListener(v -> saveSettings(false));
@@ -188,7 +220,7 @@ public class AiSettingsActivity extends AppCompatActivity {
         saveParams.setMargins(0, dp(14), 0, 0);
         root.addView(saveAll, saveParams);
 
-        TextView security = text("입력한 값은 Android Keystore 기반 AES-GCM으로 기기 안에 암호화 저장됩니다.", 13, SUBTEXT, false);
+        TextView security = text("연결 정보는 Android Keystore 기반 AES-GCM으로 기기 안에 암호화 저장됩니다.", 13, SUBTEXT, false);
         security.setGravity(Gravity.CENTER);
         security.setPadding(dp(8), dp(12), dp(8), 0);
         root.addView(security);
@@ -216,12 +248,13 @@ public class AiSettingsActivity extends AppCompatActivity {
         }
         modelSpinner.setSelection(index);
         providerSummary.setText(gemini
-                ? "빠른 문서 정리와 멀티모달 분석에 사용할 Gemini 연결입니다."
-                : "일정·할 일·메모의 고급 문장 분석에 사용할 GPT 연결입니다.");
+                ? "빠른 문서 정리와 구조화 분석에 사용할 Gemini 연결입니다."
+                : "일정·할 일·메모의 구조화 분석에 사용할 GPT 연결입니다.");
         credentialInput.setText("");
         boolean has = EncryptedValueStore.has(this, credentialName());
         credentialStatus.setText(has ? "등록 상태: 저장됨" : "등록 상태: 미등록");
         updateConnectionStatus();
+        updateUsageStatus();
         refreshing = false;
     }
 
@@ -238,8 +271,7 @@ public class AiSettingsActivity extends AppCompatActivity {
 
     private boolean saveSettings(boolean requireCredentialInput) {
         captureSelectedModel();
-        String model = settings.selectedModel();
-        if (model.trim().isEmpty()) {
+        if (settings.selectedModel().trim().isEmpty()) {
             Toast.makeText(this, "모델 이름을 입력하세요.", Toast.LENGTH_SHORT).show();
             return false;
         }
@@ -271,28 +303,108 @@ public class AiSettingsActivity extends AppCompatActivity {
         }
         final String provider = settings.provider;
         final String model = settings.selectedModel();
-        testButton.setEnabled(false);
-        testButton.setText("연결 확인 중…");
+        setTestsBusy(true, "연결 확인 중…");
         connectionStatus.setText("서버와 모델 접근 권한을 확인하고 있습니다.");
         networkExecutor.execute(() -> {
             boolean success = false;
             String message;
+            long startedAt = System.nanoTime();
             try {
                 message = CloudConnectionTester.test(provider, model, credential);
                 success = true;
             } catch (Exception error) {
-                message = error.getMessage() == null ? "연결 확인 중 오류가 발생했습니다." : error.getMessage();
+                message = safeMessage(error);
             }
-            long testedAt = System.currentTimeMillis();
-            AiSettings.saveConnectionResult(this, provider, success, message, testedAt);
+            long elapsedMs = Math.max(1L, (System.nanoTime() - startedAt) / 1_000_000L);
+            message = message + " · " + formatElapsed(elapsedMs);
+            AiSettings.saveConnectionResult(this, provider, success, message, System.currentTimeMillis());
             boolean result = success;
             runOnUiThread(() -> {
-                testButton.setEnabled(true);
-                testButton.setText("연결 테스트");
+                setTestsBusy(false, null);
                 updateConnectionStatus();
                 Toast.makeText(this, result ? "연결에 성공했습니다." : "연결에 실패했습니다.", Toast.LENGTH_SHORT).show();
             });
         });
+    }
+
+    private void testRealAnalysis() {
+        if (!saveSettings(false)) return;
+        String credential = EncryptedValueStore.read(this, credentialName());
+        if (credential.isEmpty()) {
+            Toast.makeText(this, "먼저 연결 정보를 등록하세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final String provider = settings.provider;
+        final String model = settings.selectedModel();
+        final String providerLabel = settings.providerLabel();
+        final String sample = "내일 오전 9시 교무회의 30분 전에 알려줘";
+        final ZoneId zoneId = ZoneId.systemDefault();
+        final ParsedWorkItem baseline = KoreanNaturalLanguageParser.parse(sample, zoneId);
+        setTestsBusy(true, "실제 분석 중…");
+        connectionStatus.setText("예제 문장으로 날짜·시간·알림 구조화 분석을 검증하고 있습니다.");
+
+        networkExecutor.execute(() -> {
+            CloudAiWorkItemAnalyzer.AnalysisResult result = null;
+            String errorMessage = null;
+            long startedAt = System.nanoTime();
+            try {
+                result = CloudAiWorkItemAnalyzer.analyze(
+                        provider, model, credential, sample, zoneId, baseline);
+                if (!WorkItemEntity.TYPE_SCHEDULE.equals(result.item.type)
+                        || result.item.startAt == null || result.item.reminderAt == null) {
+                    throw new IllegalStateException("응답은 도착했지만 일정·시간·알림 구조 검증을 통과하지 못했습니다.");
+                }
+            } catch (Exception error) {
+                errorMessage = safeMessage(error);
+            }
+            long failedElapsedMs = Math.max(1L, (System.nanoTime() - startedAt) / 1_000_000L);
+            CloudAiWorkItemAnalyzer.AnalysisResult finalResult = result;
+            String finalErrorMessage = errorMessage;
+            runOnUiThread(() -> {
+                setTestsBusy(false, null);
+                if (finalResult != null && finalErrorMessage == null) {
+                    AiUsageStore.record(
+                            this,
+                            provider,
+                            finalResult.modelVersion.isEmpty() ? model : finalResult.modelVersion,
+                            true,
+                            finalResult.inputTokens,
+                            finalResult.outputTokens,
+                            finalResult.totalTokens,
+                            finalResult.elapsedMs,
+                            finalResult.privacyMasked,
+                            finalResult.corrections,
+                            "실제 분석 테스트 · " + finalResult.validationSummary);
+                    String message = providerLabel + " 실제 분석 성공 · "
+                            + formatElapsed(finalResult.elapsedMs)
+                            + " · 전체 " + finalResult.totalTokens + "토큰"
+                            + " · " + finalResult.validationSummary;
+                    AiSettings.saveConnectionResult(this, provider, true, message, System.currentTimeMillis());
+                    Toast.makeText(this, "실제 일정 분석에 성공했습니다.", Toast.LENGTH_SHORT).show();
+                } else {
+                    AiUsageStore.record(
+                            this, provider, model, false, 0, 0, 0,
+                            failedElapsedMs, false, 0, "실제 분석 테스트 · " + finalErrorMessage);
+                    AiSettings.saveConnectionResult(
+                            this, provider, false,
+                            providerLabel + " 실제 분석 실패 · " + formatElapsed(failedElapsedMs)
+                                    + " · " + finalErrorMessage,
+                            System.currentTimeMillis());
+                    Toast.makeText(this, "실제 분석 테스트에 실패했습니다.", Toast.LENGTH_SHORT).show();
+                }
+                updateConnectionStatus();
+                updateUsageStatus();
+            });
+        });
+    }
+
+    private void setTestsBusy(boolean busy, String activeText) {
+        testButton.setEnabled(!busy);
+        analysisTestButton.setEnabled(!busy);
+        testButton.setAlpha(busy ? .55f : 1f);
+        analysisTestButton.setAlpha(busy ? .55f : 1f);
+        testButton.setText(busy && activeText != null ? activeText : "연결 테스트");
+        analysisTestButton.setText(busy ? "검증 작업 진행 중…" : "실제 일정 분석 테스트");
     }
 
     private void updateConnectionStatus() {
@@ -303,11 +415,33 @@ public class AiSettingsActivity extends AppCompatActivity {
             connectionStatus.setTextColor(SUBTEXT);
             return;
         }
-        String time = Instant.ofEpochMilli(record.testedAt).atZone(ZoneId.systemDefault())
-                .format(DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm", Locale.KOREA));
+        String time = formatDateTime(record.testedAt);
         connectionStatus.setText((record.success ? "● 연결됨" : "● 연결 실패")
                 + "\n마지막 확인: " + time + "\n" + record.message);
-        connectionStatus.setTextColor(record.success ? Color.rgb(29, 128, 75) : DANGER);
+        connectionStatus.setTextColor(record.success ? SUCCESS : DANGER);
+    }
+
+    private void updateUsageStatus() {
+        if (usageStatus == null) return;
+        AiUsageStore.Summary summary = AiUsageStore.load(this, settings.provider);
+        if (summary.requests <= 0L) {
+            usageStatus.setText(settings.providerLabel() + " 사용 기록이 없습니다.");
+            usageStatus.setTextColor(SUBTEXT);
+            return;
+        }
+        String lastTime = summary.lastAt <= 0L ? "없음" : formatDateTime(summary.lastAt);
+        String lastModel = summary.lastModel.isEmpty() ? settings.selectedModel() : summary.lastModel;
+        usageStatus.setText("요청 " + summary.requests + "회 · 성공 " + summary.successes
+                + " · 실패 " + summary.failures
+                + "\n누적 토큰: 입력 " + summary.inputTokens + " / 출력 " + summary.outputTokens
+                + " / 전체 " + summary.totalTokens
+                + "\n평균 응답: " + formatElapsed(summary.averageElapsedMs())
+                + "\n마지막 요청: " + lastTime + " · " + lastModel
+                + "\n마지막 사용: " + formatElapsed(summary.lastElapsedMs)
+                + " · " + summary.lastTotalTokens + "토큰"
+                + (summary.lastCorrections > 0 ? " · 자동 보정 " + summary.lastCorrections + "건" : " · 검증 통과")
+                + (summary.lastPrivacyMasked ? " · 개인정보 마스킹" : ""));
+        usageStatus.setTextColor(summary.lastSuccess ? TEXT : DANGER);
     }
 
     private void confirmDeleteCredential() {
@@ -323,25 +457,59 @@ public class AiSettingsActivity extends AppCompatActivity {
                 }).show();
     }
 
+    private void confirmResetUsage() {
+        new AlertDialog.Builder(this)
+                .setTitle(settings.providerLabel() + " 사용 기록 초기화")
+                .setMessage("기기에 저장된 요청 횟수, 토큰 수, 응답시간 기록을 삭제합니다.")
+                .setNegativeButton("취소", null)
+                .setPositiveButton("초기화", (dialog, which) -> {
+                    AiUsageStore.clear(this, settings.provider);
+                    updateUsageStatus();
+                    Toast.makeText(this, "사용 기록을 초기화했습니다.", Toast.LENGTH_SHORT).show();
+                }).show();
+    }
+
     private void showIssueGuide() {
         boolean gemini = AiSettings.PROVIDER_GEMINI.equals(settings.provider);
         String message = gemini
                 ? "1. Google AI Studio에 로그인합니다.\n2. API 키 만들기를 선택합니다.\n3. 발급된 값을 복사해 이 화면에 등록합니다."
                 : "1. OpenAI Platform에 로그인합니다.\n2. API Keys에서 새 키를 만듭니다.\n3. 발급된 값을 복사해 이 화면에 등록합니다.";
-        String url = gemini ? "https://aistudio.google.com/app/apikey" : "https://platform.openai.com/api-keys";
+        String url = gemini
+                ? "https://aistudio.google.com/app/apikey"
+                : "https://platform.openai.com/api-keys";
         new AlertDialog.Builder(this)
                 .setTitle(settings.providerLabel() + " 발급 안내")
                 .setMessage(message)
                 .setNegativeButton("닫기", null)
                 .setPositiveButton("발급 페이지 열기", (dialog, which) -> {
-                    try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
-                    catch (Exception error) { Toast.makeText(this, "브라우저를 열 수 없습니다.", Toast.LENGTH_SHORT).show(); }
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                    } catch (Exception error) {
+                        Toast.makeText(this, "브라우저를 열 수 없습니다.", Toast.LENGTH_SHORT).show();
+                    }
                 }).show();
     }
 
     private String credentialName() {
         return AiSettings.PROVIDER_GEMINI.equals(settings.provider)
                 ? EncryptedValueStore.GEMINI_CREDENTIAL : EncryptedValueStore.OPENAI_CREDENTIAL;
+    }
+
+    private String formatDateTime(long millis) {
+        return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
+                .format(DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm", Locale.KOREA));
+    }
+
+    private String formatElapsed(long elapsedMs) {
+        if (elapsedMs < 1000L) return elapsedMs + "ms";
+        return String.format(Locale.KOREA, "%.1f초", elapsedMs / 1000.0);
+    }
+
+    private String safeMessage(Throwable error) {
+        String value = error == null ? "알 수 없는 오류" : error.getMessage();
+        if (value == null || value.trim().isEmpty()) return "알 수 없는 오류";
+        String text = value.replaceAll("\\s+", " ").trim();
+        return text.length() <= 180 ? text : text.substring(0, 180) + "…";
     }
 
     private LinearLayout card() {

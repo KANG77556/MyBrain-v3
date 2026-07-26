@@ -44,6 +44,7 @@ import kr.co.mybrain.v2.assistant.ParsedWorkItem;
 import kr.co.mybrain.v2.data.WorkItemEntity;
 import kr.co.mybrain.v2.data.WorkItemRepository;
 import kr.co.mybrain.v2.settings.AiSettings;
+import kr.co.mybrain.v2.settings.AiUsageStore;
 import kr.co.mybrain.v2.settings.EncryptedValueStore;
 import kr.co.mybrain.v2.ui.WorkItemEditorDialog;
 import kr.co.mybrain.v2.voice.ContinuousSpeechRecognizer;
@@ -58,6 +59,7 @@ public class MainActivity extends AppCompatActivity {
 
     private EditText inputText;
     private TextView previewText;
+    private TextView analysisMetaText;
     private TextView statusText;
     private TextView resultLabel;
     private TextView waveText;
@@ -104,15 +106,18 @@ public class MainActivity extends AppCompatActivity {
                     statusText.setText(active ? "듣는 중입니다. 자연스럽게 말씀하세요." : "음성 입력을 마쳤습니다.");
                 });
             }
+
             @Override public void onPartialText(String committed, String partial) {
                 runOnUiThread(() -> setInputText(joinSpeech(committed, partial)));
             }
+
             @Override public void onFinalText(String committed) {
                 runOnUiThread(() -> {
                     setInputText(committed);
                     if (listening) statusText.setText("문장을 기록했습니다. 계속 말씀하셔도 됩니다.");
                 });
             }
+
             @Override public void onRecoverableError(String message) {
                 runOnUiThread(() -> statusText.setText(message));
             }
@@ -147,7 +152,9 @@ public class MainActivity extends AppCompatActivity {
         n1.setMargins(0, 0, dp(5), 0);
         LinearLayout.LayoutParams n2 = new LinearLayout.LayoutParams(0, dp(50), 1f);
         n2.setMargins(dp(5), 0, 0, 0);
-        nav.addView(calendar, n1); nav.addView(list, n2); root.addView(nav);
+        nav.addView(calendar, n1);
+        nav.addView(list, n2);
+        root.addView(nav);
 
         LinearLayout inputCard = card();
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
@@ -204,7 +211,9 @@ public class MainActivity extends AppCompatActivity {
         a1.setMargins(0, dp(9), dp(5), 0);
         LinearLayout.LayoutParams a2 = new LinearLayout.LayoutParams(0, dp(48), 1f);
         a2.setMargins(dp(5), dp(9), 0, 0);
-        actions.addView(clear, a1); actions.addView(analyzeButton, a2); inputCard.addView(actions);
+        actions.addView(clear, a1);
+        actions.addView(analyzeButton, a2);
+        inputCard.addView(actions);
 
         LinearLayout resultCard = card();
         LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
@@ -218,6 +227,12 @@ public class MainActivity extends AppCompatActivity {
         previewText.setBackground(rounded(Color.rgb(250, 251, 253), 12, BORDER));
         previewText.setMinHeight(dp(112));
         resultCard.addView(previewText, new LinearLayout.LayoutParams(-1, -2));
+
+        analysisMetaText = text("기기 분석은 토큰을 사용하지 않습니다.", 13, SUBTEXT, false);
+        analysisMetaText.setLineSpacing(dp(2), 1f);
+        analysisMetaText.setPadding(dp(4), dp(10), dp(4), 0);
+        resultCard.addView(analysisMetaText);
+
         editButton = secondaryButton("✏️  결과 확인·수정");
         editButton.setOnClickListener(v -> openEditor());
         LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, dp(50));
@@ -229,6 +244,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(56));
         sp.setMargins(0, dp(10), 0, 0);
         root.addView(saveButton, sp);
+
         Button quick = primaryButton("＋  빠른 추가");
         quick.setOnClickListener(v -> showQuickAdd());
         LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1, dp(52));
@@ -245,7 +261,10 @@ public class MainActivity extends AppCompatActivity {
     private void showQuickAdd() {
         String[] items = {"새 일정", "새 할 일", "새 메모", "음성으로 입력"};
         new AlertDialog.Builder(this).setTitle("빠른 추가").setItems(items, (d, which) -> {
-            if (which == 3) { toggleVoiceInput(); return; }
+            if (which == 3) {
+                toggleVoiceInput();
+                return;
+            }
             setInputText(which == 0 ? "일정: " : which == 1 ? "할 일: " : "메모: ");
             inputText.requestFocus();
             InputMethodManager manager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
@@ -264,6 +283,7 @@ public class MainActivity extends AppCompatActivity {
         parsedItem = null;
         previewText.setText("내용을 입력하면 자동으로 분석됩니다.");
         previewText.setTextColor(SUBTEXT);
+        analysisMetaText.setText("기기 분석은 토큰을 사용하지 않습니다.");
         resultLabel.setText("AI 분석 결과");
         statusText.setText("입력 내용을 지웠습니다.");
         updateActionState(false);
@@ -271,14 +291,21 @@ public class MainActivity extends AppCompatActivity {
 
     private void toggleVoiceInput() {
         hideKeyboard();
-        if (listening) { speechRecognizer.stop(); analyzeInput(true); return; }
+        if (listening) {
+            speechRecognizer.stop();
+            analyzeInput(true);
+            return;
+        }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             Toast.makeText(this, "이 기기에서 음성인식 서비스를 사용할 수 없습니다.", Toast.LENGTH_LONG).show();
             return;
         }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED) {
             startContinuousVoice();
-        else microphonePermission.launch(Manifest.permission.RECORD_AUDIO);
+        } else {
+            microphonePermission.launch(Manifest.permission.RECORD_AUDIO);
+        }
     }
 
     private void startContinuousVoice() {
@@ -292,6 +319,7 @@ public class MainActivity extends AppCompatActivity {
         setInputText("");
         previewText.setText("말을 마치면 등록된 AI로 정밀 분석합니다.");
         previewText.setTextColor(SUBTEXT);
+        analysisMetaText.setText("음성 입력 대기 중");
         speechRecognizer.start();
     }
 
@@ -325,8 +353,10 @@ public class MainActivity extends AppCompatActivity {
         localResult.aiProvider = "LOCAL";
 
         if (!cloudRequested) {
-            applyAnalysisResult(localResult,
-                    "기기 분석 완료 · 더 정확한 분류가 필요하면 AI로 정밀 분석하세요.");
+            applyAnalysisResult(
+                    localResult,
+                    "기기 분석 완료 · 더 정확한 분류가 필요하면 AI로 정밀 분석하세요.",
+                    "기기 분석 · 응답 즉시 · 토큰 0 · 네트워크 미사용");
             return;
         }
 
@@ -336,8 +366,10 @@ public class MainActivity extends AppCompatActivity {
                 ? EncryptedValueStore.GEMINI_CREDENTIAL : EncryptedValueStore.OPENAI_CREDENTIAL;
         String credential = EncryptedValueStore.read(this, credentialName);
         if (credential.isEmpty()) {
-            applyAnalysisResult(localResult,
-                    "AI 연결 정보가 없어 기기 분석 결과를 사용했습니다. AI 설정에서 연결 정보를 등록하세요.");
+            applyAnalysisResult(
+                    localResult,
+                    "AI 연결 정보가 없어 기기 분석 결과를 사용했습니다. AI 설정에서 연결 정보를 등록하세요.",
+                    "기기 분석으로 전환 · 토큰 0 · 연결 정보 미등록");
             Toast.makeText(this, "AI 설정에서 연결 정보를 먼저 등록하세요.", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -347,8 +379,10 @@ public class MainActivity extends AppCompatActivity {
         updateActionState(false);
         String providerLabel = settings.providerLabel();
         statusText.setText("개인정보 형식을 마스킹한 뒤 " + providerLabel + "로 정밀 분석 중입니다…");
+        analysisMetaText.setText(providerLabel + " 요청 중 · 토큰과 응답시간을 계산합니다.");
         final String provider = settings.provider;
         final String model = settings.selectedModel();
+        final long startedAt = System.nanoTime();
 
         analysisExecutor.execute(() -> {
             CloudAiWorkItemAnalyzer.AnalysisResult cloudResult = null;
@@ -359,6 +393,7 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception error) {
                 errorMessage = safeErrorMessage(error);
             }
+            long failedElapsedMs = Math.max(1L, (System.nanoTime() - startedAt) / 1_000_000L);
             CloudAiWorkItemAnalyzer.AnalysisResult finalCloudResult = cloudResult;
             String finalErrorMessage = errorMessage;
             runOnUiThread(() -> {
@@ -366,22 +401,57 @@ public class MainActivity extends AppCompatActivity {
                 analysisRunning = false;
                 setAnalyzeButtonBusy(false);
                 if (finalCloudResult != null) {
-                    String message = providerLabel + " 정밀 분석 완료"
-                            + (finalCloudResult.privacyMasked ? " · 개인정보 형식 마스킹 적용" : "")
+                    AiUsageStore.record(
+                            this,
+                            provider,
+                            finalCloudResult.modelVersion.isEmpty() ? model : finalCloudResult.modelVersion,
+                            true,
+                            finalCloudResult.inputTokens,
+                            finalCloudResult.outputTokens,
+                            finalCloudResult.totalTokens,
+                            finalCloudResult.elapsedMs,
+                            finalCloudResult.privacyMasked,
+                            finalCloudResult.corrections,
+                            finalCloudResult.validationSummary);
+                    String status = providerLabel + " 정밀 분석 완료 · "
+                            + formatElapsed(finalCloudResult.elapsedMs)
+                            + tokenStatus(finalCloudResult.totalTokens)
+                            + (finalCloudResult.privacyMasked ? " · 개인정보 마스킹" : "")
                             + " · 확인 후 저장하세요.";
-                    applyAnalysisResult(finalCloudResult.item, message);
+                    String meta = providerLabel + " · " + formatElapsed(finalCloudResult.elapsedMs)
+                            + " · 입력 " + finalCloudResult.inputTokens
+                            + " / 출력 " + finalCloudResult.outputTokens
+                            + " / 전체 " + finalCloudResult.totalTokens + " 토큰"
+                            + "\n결과 검증: " + finalCloudResult.validationSummary;
+                    applyAnalysisResult(finalCloudResult.item, status, meta);
                 } else {
-                    applyAnalysisResult(localResult,
-                            providerLabel + " 연결 실패 · 기기 분석 결과로 자동 전환했습니다. " + finalErrorMessage);
+                    AiUsageStore.record(
+                            this,
+                            provider,
+                            model,
+                            false,
+                            0,
+                            0,
+                            0,
+                            failedElapsedMs,
+                            false,
+                            0,
+                            finalErrorMessage);
+                    applyAnalysisResult(
+                            localResult,
+                            providerLabel + " 연결 실패 · 기기 분석 결과로 자동 전환했습니다. " + finalErrorMessage,
+                            providerLabel + " 실패 · " + formatElapsed(failedElapsedMs)
+                                    + " · 토큰 확인 불가\n기기 분석 결과로 안전하게 전환");
                 }
             });
         });
     }
 
-    private void applyAnalysisResult(ParsedWorkItem item, String status) {
+    private void applyAnalysisResult(ParsedWorkItem item, String status, String meta) {
         parsedItem = item;
         previewText.setText(formatResult(item));
         previewText.setTextColor(TEXT);
+        analysisMetaText.setText(meta == null ? "" : meta);
         resultLabel.setText("AI 분석 결과 · " + typeLabel(item.type) + " · " + providerLabel(item.aiProvider));
         statusText.setText(status);
         updateActionState(true);
@@ -423,8 +493,10 @@ public class MainActivity extends AppCompatActivity {
     private void updateActionState(boolean ready) {
         if (editButton == null || saveButton == null) return;
         boolean enabled = ready && !analysisRunning;
-        editButton.setEnabled(enabled); saveButton.setEnabled(enabled);
-        editButton.setAlpha(enabled ? 1f : .45f); saveButton.setAlpha(enabled ? 1f : .45f);
+        editButton.setEnabled(enabled);
+        saveButton.setEnabled(enabled);
+        editButton.setAlpha(enabled ? 1f : .45f);
+        saveButton.setAlpha(enabled ? 1f : .45f);
     }
 
     private void setAnalyzeButtonBusy(boolean busy) {
@@ -444,16 +516,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void stopWaveAnimation() {
-        if (waveAnimator != null) { waveAnimator.cancel(); waveAnimator = null; }
+        if (waveAnimator != null) {
+            waveAnimator.cancel();
+            waveAnimator = null;
+        }
         if (waveText != null) waveText.setAlpha(1f);
     }
 
-    private String formatResult(ParsedWorkItem i) {
-        return "제목  " + i.title + "\n분류  " + typeLabel(i.type)
-                + "\n시작  " + formatTime(i.startAt) + "\n종료  " + formatTime(i.endAt)
-                + "\n반복  " + repeatLabel(i.repeatRule) + "\n중요도  " + priorityLabel(i.priority)
-                + "\n분석  " + providerLabel(i.aiProvider)
-                + "\n신뢰도  " + Math.round(i.confidence * 100) + "%";
+    private String formatResult(ParsedWorkItem item) {
+        return "제목  " + item.title + "\n분류  " + typeLabel(item.type)
+                + "\n시작  " + formatTime(item.startAt) + "\n종료  " + formatTime(item.endAt)
+                + "\n반복  " + repeatLabel(item.repeatRule) + "\n중요도  " + priorityLabel(item.priority)
+                + "\n분석  " + providerLabel(item.aiProvider)
+                + "\n신뢰도  " + Math.round(item.confidence * 100) + "%";
     }
 
     private String typeLabel(String type) {
@@ -461,28 +536,43 @@ public class MainActivity extends AppCompatActivity {
         if (WorkItemEntity.TYPE_TASK.equals(type)) return "할 일";
         return "메모";
     }
+
     private String providerLabel(String provider) {
         if (AiSettings.PROVIDER_OPENAI.equals(provider)) return "GPT";
         if (AiSettings.PROVIDER_GEMINI.equals(provider)) return "Gemini";
         return "기기 분석";
     }
-    private String repeatLabel(String v) {
-        if ("DAILY".equals(v)) return "매일";
-        if ("WEEKDAYS".equals(v)) return "평일";
-        if ("WEEKLY".equals(v)) return "매주";
-        if ("MONTHLY".equals(v)) return "매월";
-        if (v != null && (v.startsWith("RANGE_DAILY|") || v.startsWith("RANGE_DAYS|"))) return "기간 반복";
+
+    private String repeatLabel(String value) {
+        if ("DAILY".equals(value)) return "매일";
+        if ("WEEKDAYS".equals(value)) return "평일";
+        if ("WEEKLY".equals(value)) return "매주";
+        if ("MONTHLY".equals(value)) return "매월";
+        if (value != null && (value.startsWith("RANGE_DAILY|") || value.startsWith("RANGE_DAYS|"))) {
+            return "기간 반복";
+        }
         return "없음";
     }
-    private String priorityLabel(String v) {
-        if ("LOW".equals(v)) return "낮음";
-        if ("HIGH".equals(v)) return "높음";
+
+    private String priorityLabel(String value) {
+        if ("LOW".equals(value)) return "낮음";
+        if ("HIGH".equals(value)) return "높음";
         return "보통";
     }
+
     private String formatTime(Long millis) {
         if (millis == null) return "없음";
         return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("yyyy.MM.dd (E) HH:mm", Locale.KOREA));
+    }
+
+    private String formatElapsed(long elapsedMs) {
+        if (elapsedMs < 1000L) return elapsedMs + "ms";
+        return String.format(Locale.KOREA, "%.1f초", elapsedMs / 1000.0);
+    }
+
+    private String tokenStatus(int totalTokens) {
+        return totalTokens > 0 ? " · " + totalTokens + "토큰" : " · 토큰 정보 없음";
     }
 
     private String safeErrorMessage(Throwable error) {
@@ -493,45 +583,78 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private LinearLayout card() {
-        LinearLayout v = new LinearLayout(this);
-        v.setOrientation(LinearLayout.VERTICAL);
-        v.setPadding(dp(14), dp(14), dp(14), dp(14));
-        v.setBackground(rounded(Color.WHITE, 18, BORDER));
-        return v;
+        LinearLayout view = new LinearLayout(this);
+        view.setOrientation(LinearLayout.VERTICAL);
+        view.setPadding(dp(14), dp(14), dp(14), dp(14));
+        view.setBackground(rounded(Color.WHITE, 18, BORDER));
+        return view;
     }
+
     private TextView sectionTitle(String value) {
-        TextView v = text(value, 17, TEXT, true);
-        v.setPadding(0, 0, 0, dp(10)); return v;
+        TextView view = text(value, 17, TEXT, true);
+        view.setPadding(0, 0, 0, dp(10));
+        return view;
     }
+
     private Button primaryButton(String value) {
-        Button b = new Button(this); b.setText(value); b.setTextSize(16); b.setTextColor(Color.WHITE);
-        b.setTypeface(null, Typeface.BOLD); b.setAllCaps(false); b.setGravity(Gravity.CENTER);
-        b.setBackground(rounded(PRIMARY, 14, 0)); b.setStateListAnimator(null); return b;
+        Button button = new Button(this);
+        button.setText(value);
+        button.setTextSize(16);
+        button.setTextColor(Color.WHITE);
+        button.setTypeface(null, Typeface.BOLD);
+        button.setAllCaps(false);
+        button.setGravity(Gravity.CENTER);
+        button.setBackground(rounded(PRIMARY, 14, 0));
+        button.setStateListAnimator(null);
+        return button;
     }
+
     private Button secondaryButton(String value) {
-        Button b = new Button(this); b.setText(value); b.setTextSize(15); b.setTextColor(TEXT);
-        b.setAllCaps(false); b.setGravity(Gravity.CENTER); b.setBackground(rounded(Color.WHITE, 14, BORDER));
-        b.setStateListAnimator(null); return b;
+        Button button = new Button(this);
+        button.setText(value);
+        button.setTextSize(15);
+        button.setTextColor(TEXT);
+        button.setAllCaps(false);
+        button.setGravity(Gravity.CENTER);
+        button.setBackground(rounded(Color.WHITE, 14, BORDER));
+        button.setStateListAnimator(null);
+        return button;
     }
+
     private TextView text(String value, int size, int color, boolean bold) {
-        TextView v = new TextView(this); v.setText(value); v.setTextSize(size); v.setTextColor(color);
-        if (bold) v.setTypeface(null, Typeface.BOLD); return v;
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        if (bold) view.setTypeface(null, Typeface.BOLD);
+        return view;
     }
+
     private GradientDrawable rounded(int fill, int radius, int stroke) {
-        GradientDrawable d = new GradientDrawable(); d.setColor(fill); d.setCornerRadius(dp(radius));
-        if (stroke != 0) d.setStroke(dp(1), stroke); return d;
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fill);
+        drawable.setCornerRadius(dp(radius));
+        if (stroke != 0) drawable.setStroke(dp(1), stroke);
+        return drawable;
     }
+
     private void hideKeyboard() {
-        View focused = getCurrentFocus(); if (focused == null) return;
-        InputMethodManager m = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-        if (m != null) m.hideSoftInputFromWindow(focused.getWindowToken(), 0);
+        View focused = getCurrentFocus();
+        if (focused == null) return;
+        InputMethodManager manager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (manager != null) manager.hideSoftInputFromWindow(focused.getWindowToken(), 0);
     }
-    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
 
     @Override protected void onStop() {
-        super.onStop(); autoAnalyzeHandler.removeCallbacks(autoAnalyzeRunnable);
+        super.onStop();
+        autoAnalyzeHandler.removeCallbacks(autoAnalyzeRunnable);
         if (listening && speechRecognizer != null) speechRecognizer.stop();
     }
+
     @Override protected void onDestroy() {
         analysisRequestId++;
         autoAnalyzeHandler.removeCallbacksAndMessages(null);
