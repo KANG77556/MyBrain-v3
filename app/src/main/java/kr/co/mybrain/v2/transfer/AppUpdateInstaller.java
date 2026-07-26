@@ -19,8 +19,6 @@ import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.Set;
 
-import kr.co.mybrain.v2.BuildConfig;
-
 /** 선택한 APK가 현재 MyBrain 앱의 안전한 업데이트인지 확인한 뒤 설치 화면을 엽니다. */
 public final class AppUpdateInstaller {
     private static final long MAX_APK_BYTES = 300L * 1024L * 1024L;
@@ -41,7 +39,7 @@ public final class AppUpdateInstaller {
             target.delete();
             throw new IllegalArgumentException("Android APK 파일을 읽지 못했습니다.");
         }
-        if (!BuildConfig.APPLICATION_ID.equals(archive.packageName)) {
+        if (!context.getPackageName().equals(archive.packageName)) {
             target.delete();
             throw new IllegalArgumentException("다른 앱의 APK입니다. MyBrain AI 업데이트만 설치할 수 있습니다.");
         }
