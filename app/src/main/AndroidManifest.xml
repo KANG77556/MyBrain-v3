@@ -70,6 +70,7 @@
         <activity android:name=".settings.AiBudgetActivity" android:exported="false" />
         <activity android:name=".settings.AiModelComparisonActivity" android:exported="false" />
         <activity android:name=".transfer.BackupRestoreActivity" android:exported="false" />
+        <activity android:name=".transfer.ReleaseRecoveryDiagnosticsActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="false" />
         <activity
             android:name=".AdaptiveMainActivity"
