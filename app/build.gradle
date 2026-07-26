@@ -10,8 +10,8 @@ android {
         applicationId 'kr.co.mybrain.v2'
         minSdk 26
         targetSdk 35
-        versionCode 4
-        versionName '2.0.0-alpha04'
+        versionCode 5
+        versionName '2.0.0-alpha05'
     }
 
     buildTypes {
