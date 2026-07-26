@@ -53,12 +53,33 @@ public final class WorkItemRepository {
         });
     }
 
-    public void getAll(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getAllActive())); }
-    public void getDeleted(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getDeleted())); }
-    public void getByType(String type, ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getByType(type))); }
-    public void getById(long id, ResultCallback<WorkItemEntity> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getById(id))); }
-    public void getOpenTasks(ResultCallback<List<WorkItemEntity>> callback) { databaseExecutor.execute(() -> callback.onResult(dao.getOpenTasks())); }
-    public void findDuplicate(String sourceText, ResultCallback<WorkItemEntity> callback) { databaseExecutor.execute(() -> callback.onResult(dao.findActiveBySourceText(sourceText))); }
+    public void getAll(ResultCallback<List<WorkItemEntity>> callback) {
+        databaseExecutor.execute(() -> callback.onResult(dao.getAllActive()));
+    }
+
+    public void getDeleted(ResultCallback<List<WorkItemEntity>> callback) {
+        databaseExecutor.execute(() -> callback.onResult(dao.getDeleted()));
+    }
+
+    public void getByType(String type, ResultCallback<List<WorkItemEntity>> callback) {
+        databaseExecutor.execute(() -> callback.onResult(dao.getByType(type)));
+    }
+
+    public void getById(long id, ResultCallback<WorkItemEntity> callback) {
+        databaseExecutor.execute(() -> callback.onResult(dao.getById(id)));
+    }
+
+    public void getBetween(long from, long to, ResultCallback<List<WorkItemEntity>> callback) {
+        databaseExecutor.execute(() -> callback.onResult(dao.getBetween(from, to)));
+    }
+
+    public void getOpenTasks(ResultCallback<List<WorkItemEntity>> callback) {
+        databaseExecutor.execute(() -> callback.onResult(dao.getOpenTasks()));
+    }
+
+    public void findDuplicate(String sourceText, ResultCallback<WorkItemEntity> callback) {
+        databaseExecutor.execute(() -> callback.onResult(dao.findActiveBySourceText(sourceText)));
+    }
 
     public void setCompleted(long id, boolean completed, ResultCallback<Integer> callback) {
         databaseExecutor.execute(() -> {
