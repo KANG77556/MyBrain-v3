@@ -18,8 +18,8 @@ android {
         applicationId 'kr.co.mybrain.v2'
         minSdk 26
         targetSdk 35
-        versionCode 29
-        versionName '2.0.0-alpha29'
+        versionCode 30
+        versionName '2.0.0-alpha30'
     }
 
     signingConfigs {

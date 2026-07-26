@@ -5,9 +5,11 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -80,9 +82,29 @@ public final class AppUi {
         return card;
     }
 
+    public static LinearLayout emptyState(Context context, String title, String description) {
+        LinearLayout empty = card(context);
+        empty.setGravity(Gravity.CENTER_HORIZONTAL);
+        empty.setPadding(dp(context, 20), dp(context, 28), dp(context, 20), dp(context, 28));
+        TextView titleView = text(context, title, 17, TEXT, true);
+        titleView.setGravity(Gravity.CENTER);
+        empty.addView(titleView);
+        TextView descriptionView = body(context, description);
+        descriptionView.setGravity(Gravity.CENTER);
+        descriptionView.setPadding(0, dp(context, 7), 0, 0);
+        empty.addView(descriptionView);
+        return empty;
+    }
+
     public static LinearLayout.LayoutParams cardParams(Context context) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.setMargins(0, dp(context, 10), 0, 0);
+        return params;
+    }
+
+    public static LinearLayout.LayoutParams actionParams(Context context) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(context, 54));
+        params.setMargins(0, dp(context, 12), 0, 0);
         return params;
     }
 
@@ -120,6 +142,20 @@ public final class AppUi {
         return button;
     }
 
+    public static EditText input(Context context, String hint) {
+        EditText input = new EditText(context);
+        input.setHint(hint);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setTextSize(16);
+        input.setTextColor(TEXT);
+        input.setHintTextColor(SUBTEXT);
+        input.setPadding(dp(context, 14), 0, dp(context, 14), 0);
+        input.setBackground(round(context, SURFACE, 14, BORDER));
+        input.setMinHeight(dp(context, 52));
+        return input;
+    }
+
     public static TextView text(Context context, String value, int size, int color, boolean bold) {
         TextView view = new TextView(context);
         view.setText(value);
@@ -141,6 +177,11 @@ public final class AppUi {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.setMargins(0, dp(context, 8), 0, 0);
         root.addView(button, params);
+    }
+
+    public static void setEnabled(Button button, boolean enabled) {
+        button.setEnabled(enabled);
+        button.setAlpha(enabled ? 1f : .45f);
     }
 
     public static int dp(Context context, int value) {
