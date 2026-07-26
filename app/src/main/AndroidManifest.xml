@@ -7,9 +7,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <queries>
-        <intent>
-            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
-        </intent>
+        <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent>
     </queries>
 
     <application
@@ -27,7 +25,7 @@
             </intent-filter>
         </receiver>
 
-        <activity android:name=".ScheduleActivity" android:exported="false" />
+        <activity android:name=".CalendarActivity" android:exported="false" />
         <activity android:name=".WorkItemListActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
