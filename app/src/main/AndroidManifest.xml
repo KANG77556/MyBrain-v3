@@ -49,7 +49,12 @@
 
         <activity android:name=".CalendarActivity" android:exported="false" />
         <activity android:name=".WorkItemListActivity" android:exported="false" />
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name=".MainActivity" android:exported="false" />
+        <activity
+            android:name=".AdaptiveMainActivity"
+            android:exported="true"
+            android:screenOrientation="unspecified"
+            android:resizeableActivity="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
