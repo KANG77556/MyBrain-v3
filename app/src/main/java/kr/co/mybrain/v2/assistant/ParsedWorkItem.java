@@ -23,7 +23,8 @@ public final class ParsedWorkItem {
         item.sourceText = sourceText;
         item.startAt = startAt;
         item.endAt = endAt;
-        item.reminderAt = reminderAt;
+        item.reminderAt = reminderAt != null ? reminderAt
+                : (startAt != null && startAt > System.currentTimeMillis() ? startAt : null);
         item.allDay = allDay;
         item.repeatRule = repeatRule;
         item.priority = priority;
