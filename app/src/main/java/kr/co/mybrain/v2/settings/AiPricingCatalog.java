@@ -24,8 +24,8 @@ public final class AiPricingCatalog {
         if (value.startsWith("gpt-5.4-mini")) return new Price(0.75, 4.50, true);
         if (value.startsWith("gpt-5.4-nano")) return new Price(0.20, 1.25, true);
         if (value.startsWith("gpt-5-mini")) return new Price(0.25, 2.00, true);
-        if (value.startsWith("gpt-5.1") || value.startsWith("gpt-5-")) return new Price(1.25, 10.00, true);
         if (value.startsWith("gpt-5-nano")) return new Price(0.05, 0.40, true);
+        if (value.startsWith("gpt-5.1") || value.startsWith("gpt-5-")) return new Price(1.25, 10.00, true);
         return Price.unknown();
     }
 
