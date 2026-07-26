@@ -28,8 +28,8 @@ android {
         applicationId 'kr.co.mybrain.v2'
         minSdk 26
         targetSdk 35
-        versionCode 32
-        versionName '2.0.0-alpha32'
+        versionCode 33
+        versionName '2.0.0-alpha33'
     }
 
     signingConfigs {
@@ -83,4 +83,5 @@ dependencies {
     implementation 'androidx.room:room-runtime:2.6.1'
     annotationProcessor 'androidx.room:room-compiler:2.6.1'
     implementation 'com.google.mlkit:text-recognition-korean:16.0.1'
+    testImplementation 'junit:junit:4.13.2'
 }
