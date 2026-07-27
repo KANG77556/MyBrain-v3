@@ -50,6 +50,16 @@ jobs:
       - name: AI JSON 복구 단위 테스트
         run: gradle --stacktrace testDebugUnitTest
 
+      - name: 단위 테스트 보고서 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrainAI-v2-unit-test-report
+          path: |
+            app/build/reports/tests/testDebugUnitTest
+            app/build/test-results/testDebugUnitTest
+          if-no-files-found: warn
+
       - name: 디버그 APK 빌드
         run: |
           set -o pipefail
