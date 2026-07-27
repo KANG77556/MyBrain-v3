@@ -39,19 +39,83 @@ public final class WorkItemRepository {
         return instance;
     }
 
+    /** 기존 호출 호환용 저장입니다. 실패하면 -1을 반환합니다. */
     public void insert(WorkItemEntity item, ResultCallback<Long> callback) {
         databaseExecutor.execute(() -> {
-            if (item.repeatRule != null && (item.repeatRule.startsWith("RANGE_DAILY|") || item.repeatRule.startsWith("RANGE_DAYS|"))) {
-                long firstId = insertBoundedRange(item);
-                if (callback != null) callback.onResult(firstId);
-                return;
+            long id = -1L;
+            try {
+                id = insertInternal(item);
+            } catch (Exception ignored) {
+                // 기존 화면이 멈추지 않도록 실패 값을 콜백으로 전달합니다.
             }
-            item.updatedAt = System.currentTimeMillis();
-            long id = dao.insert(item);
-            item.id = id;
-            ReminderScheduler.schedule(appContext, item);
             if (callback != null) callback.onResult(id);
         });
+    }
+
+    /**
+     * 동일 항목을 확인한 뒤 저장하고, 삽입된 행을 다시 읽어 실제 저장 여부를 검증합니다.
+     */
+    public void insertVerified(WorkItemEntity item, ResultCallback<SaveResult> callback) {
+        databaseExecutor.execute(() -> {
+            SaveResult result;
+            try {
+                if (item == null) throw new IllegalArgumentException("저장할 항목이 없습니다.");
+                normalizeNewItem(item);
+                WorkItemEntity duplicate = dao.findEquivalentActive(
+                        item.type, item.title, item.sourceText, item.startAt);
+                if (duplicate != null) {
+                    result = SaveResult.duplicate(duplicate);
+                } else {
+                    long id = insertInternal(item);
+                    WorkItemEntity stored = id > 0L ? dao.getById(id) : null;
+                    if (stored == null) {
+                        result = SaveResult.failure(new IllegalStateException(
+                                "저장 후 데이터베이스에서 항목을 다시 찾지 못했습니다."));
+                    } else {
+                        result = SaveResult.success(stored);
+                    }
+                }
+            } catch (Exception error) {
+                result = SaveResult.failure(error);
+            }
+            if (callback != null) callback.onResult(result);
+        });
+    }
+
+    private long insertInternal(WorkItemEntity item) {
+        if (item == null) throw new IllegalArgumentException("저장할 항목이 없습니다.");
+        if (item.repeatRule != null && (item.repeatRule.startsWith("RANGE_DAILY|")
+                || item.repeatRule.startsWith("RANGE_DAYS|"))) {
+            return insertBoundedRange(item);
+        }
+        item.updatedAt = System.currentTimeMillis();
+        long id = dao.insert(item);
+        item.id = id;
+        scheduleSafely(item);
+        return id;
+    }
+
+    private void normalizeNewItem(WorkItemEntity item) {
+        item.type = WorkItemEntity.TYPE_SCHEDULE.equals(item.type)
+                || WorkItemEntity.TYPE_TASK.equals(item.type)
+                ? item.type : WorkItemEntity.TYPE_MEMO;
+        item.title = SaveIntegrityPolicy.normalizedTitle(item.title);
+        item.sourceText = SaveIntegrityPolicy.normalizedSource(item.sourceText);
+        if (item.content == null || item.content.trim().isEmpty()) item.content = item.sourceText;
+        if (item.externalId == null || item.externalId.trim().isEmpty()) {
+            item.externalId = UUID.randomUUID().toString();
+        }
+        if (item.priority == null || !("LOW".equals(item.priority)
+                || "NORMAL".equals(item.priority) || "HIGH".equals(item.priority))) {
+            item.priority = "NORMAL";
+        }
+        if (item.repeatRule == null || item.repeatRule.trim().isEmpty()) item.repeatRule = "NONE";
+        if (item.color == null || item.color.trim().isEmpty()) item.color = "DEFAULT";
+        if (item.aiProvider == null || item.aiProvider.trim().isEmpty()) item.aiProvider = "LOCAL";
+        item.aiConfidence = Math.max(0f, Math.min(1f, item.aiConfidence));
+        long now = System.currentTimeMillis();
+        if (item.createdAt <= 0L) item.createdAt = now;
+        item.updatedAt = now;
     }
 
     /** 기간 제한 반복을 실제 개별 일정으로 확장합니다. */
@@ -92,8 +156,9 @@ public final class WorkItemRepository {
             long id = dao.insert(item);
             item.id = id;
             if (firstId < 0) firstId = id;
-            ReminderScheduler.schedule(appContext, item);
+            scheduleSafely(item);
         }
+        if (firstId < 0L) return insertSingleFallback(source);
         return firstId;
     }
 
@@ -102,8 +167,16 @@ public final class WorkItemRepository {
         source.updatedAt = System.currentTimeMillis();
         long id = dao.insert(source);
         source.id = id;
-        ReminderScheduler.schedule(appContext, source);
+        scheduleSafely(source);
         return id;
+    }
+
+    private void scheduleSafely(WorkItemEntity item) {
+        try {
+            ReminderScheduler.schedule(appContext, item);
+        } catch (Exception ignored) {
+            // 알림 예약 실패가 데이터 저장 성공을 되돌리지는 않도록 합니다.
+        }
     }
 
     private WorkItemEntity copyOf(WorkItemEntity source) {
@@ -118,7 +191,7 @@ public final class WorkItemRepository {
     public void update(WorkItemEntity item, ResultCallback<Integer> callback) {
         databaseExecutor.execute(() -> {
             item.updatedAt = System.currentTimeMillis(); int count = dao.update(item);
-            ReminderScheduler.cancel(appContext, item.id); ReminderScheduler.schedule(appContext, item);
+            ReminderScheduler.cancel(appContext, item.id); scheduleSafely(item);
             if (callback != null) callback.onResult(count);
         });
     }
@@ -167,7 +240,7 @@ public final class WorkItemRepository {
                 if (!replaceAll) {
                     for (WorkItemEntity item : activeAfterRestore) ReminderScheduler.cancel(appContext, item.id);
                 }
-                for (WorkItemEntity item : activeAfterRestore) ReminderScheduler.schedule(appContext, item);
+                for (WorkItemEntity item : activeAfterRestore) scheduleSafely(item);
                 if (callback != null) callback.onResult(new RestoreResult(true, inserted[0], updated[0], null));
             } catch (Exception error) {
                 if (callback != null) callback.onResult(new RestoreResult(false, inserted[0], updated[0], error));
@@ -201,7 +274,7 @@ public final class WorkItemRepository {
     public void setCompleted(long id, boolean completed, ResultCallback<Integer> callback) {
         databaseExecutor.execute(() -> {
             int count = dao.setCompleted(id, completed, System.currentTimeMillis());
-            if (completed) ReminderScheduler.cancel(appContext, id); else ReminderScheduler.schedule(appContext, dao.getById(id));
+            if (completed) ReminderScheduler.cancel(appContext, id); else scheduleSafely(dao.getById(id));
             if (callback != null) callback.onResult(count);
         });
     }
@@ -209,7 +282,7 @@ public final class WorkItemRepository {
     public void advanceRecurrence(long id, ResultCallback<Boolean> callback) {
         databaseExecutor.execute(() -> {
             WorkItemEntity item = dao.getById(id); boolean advanced = RecurrenceCalculator.moveToNext(item, ZoneId.systemDefault());
-            if (advanced) { item.updatedAt = System.currentTimeMillis(); dao.update(item); ReminderScheduler.cancel(appContext, id); ReminderScheduler.schedule(appContext, item); }
+            if (advanced) { item.updatedAt = System.currentTimeMillis(); dao.update(item); ReminderScheduler.cancel(appContext, id); scheduleSafely(item); }
             if (callback != null) callback.onResult(advanced);
         });
     }
@@ -218,7 +291,36 @@ public final class WorkItemRepository {
         databaseExecutor.execute(() -> { int count = dao.softDelete(id, System.currentTimeMillis()); ReminderScheduler.cancel(appContext, id); if (callback != null) callback.onResult(count); });
     }
     public void restore(long id, ResultCallback<Integer> callback) {
-        databaseExecutor.execute(() -> { int count = dao.restore(id, System.currentTimeMillis()); ReminderScheduler.schedule(appContext, dao.getById(id)); if (callback != null) callback.onResult(count); });
+        databaseExecutor.execute(() -> { int count = dao.restore(id, System.currentTimeMillis()); scheduleSafely(dao.getById(id)); if (callback != null) callback.onResult(count); });
+    }
+
+    public static final class SaveResult {
+        public final boolean success;
+        public final boolean duplicate;
+        public final long id;
+        public final WorkItemEntity item;
+        public final Exception error;
+
+        private SaveResult(boolean success, boolean duplicate, long id,
+                           WorkItemEntity item, Exception error) {
+            this.success = success;
+            this.duplicate = duplicate;
+            this.id = id;
+            this.item = item;
+            this.error = error;
+        }
+
+        static SaveResult success(WorkItemEntity item) {
+            return new SaveResult(true, false, item == null ? -1L : item.id, item, null);
+        }
+
+        static SaveResult duplicate(WorkItemEntity item) {
+            return new SaveResult(false, true, item == null ? -1L : item.id, item, null);
+        }
+
+        static SaveResult failure(Exception error) {
+            return new SaveResult(false, false, -1L, null, error);
+        }
     }
 
     public static final class RestoreResult {
