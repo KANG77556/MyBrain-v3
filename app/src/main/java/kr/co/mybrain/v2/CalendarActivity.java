@@ -6,6 +6,7 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewParent;
 import android.widget.Button;
 import android.widget.CalendarView;
 import android.widget.CheckBox;
@@ -29,9 +30,11 @@ import java.util.Locale;
 import kr.co.mybrain.v2.data.WorkItemEntity;
 import kr.co.mybrain.v2.data.WorkItemRepository;
 import kr.co.mybrain.v2.ui.AppUi;
+import kr.co.mybrain.v2.ui.CalendarDetailLayoutPolicy;
+import kr.co.mybrain.v2.ui.UiPreferences;
 import kr.co.mybrain.v2.ui.UiSelection;
 
-/** 월간 달력, 주간 일정, 오늘 할 일을 일관된 한 화면에서 보여줍니다. */
+/** 월간 달력부터 선택 날짜 상세 목록까지 화면 전체를 한 번에 스크롤합니다. */
 public class CalendarActivity extends AppCompatActivity {
     public static final String EXTRA_FOCUS_AT = "kr.co.mybrain.v2.extra.FOCUS_AT";
     public static final String EXTRA_HIGHLIGHT_ID = "kr.co.mybrain.v2.extra.HIGHLIGHT_ID";
@@ -44,8 +47,11 @@ public class CalendarActivity extends AppCompatActivity {
     private final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd (E)", Locale.KOREA);
 
     private WorkItemRepository repository;
+    private ScrollView screenScroll;
     private CalendarView calendarView;
     private LinearLayout itemContainer;
+    private View detailAnchor;
+    private View highlightedCard;
     private TextView rangeTitle;
     private TextView countText;
     private Button dayButton;
@@ -55,6 +61,7 @@ public class CalendarActivity extends AppCompatActivity {
     private String currentMode = MODE_DAY;
     private long highlightId = -1L;
     private boolean screenReady;
+    private boolean moveToDetailsAfterRender;
 
     public static Intent focusIntent(Context context, WorkItemEntity item) {
         Intent intent = new Intent(context, CalendarActivity.class);
@@ -71,6 +78,7 @@ public class CalendarActivity extends AppCompatActivity {
         readNavigationTarget();
         setContentView(buildScreen());
         screenReady = true;
+        moveToDetailsAfterRender = highlightId > 0L;
         showDay(selectedDate);
     }
 
@@ -84,9 +92,7 @@ public class CalendarActivity extends AppCompatActivity {
         if (intent == null) return;
         long focusAt = intent.getLongExtra(EXTRA_FOCUS_AT, -1L);
         highlightId = intent.getLongExtra(EXTRA_HIGHLIGHT_ID, -1L);
-        if (focusAt > 0L) {
-            selectedDate = Instant.ofEpochMilli(focusAt).atZone(zoneId).toLocalDate();
-        }
+        if (focusAt > 0L) selectedDate = Instant.ofEpochMilli(focusAt).atZone(zoneId).toLocalDate();
     }
 
     private void refreshCurrentMode() {
@@ -96,16 +102,29 @@ public class CalendarActivity extends AppCompatActivity {
     }
 
     private View buildScreen() {
+        screenScroll = new ScrollView(this);
+        screenScroll.setFillViewport(true);
+        screenScroll.setClipToPadding(false);
+        screenScroll.setBackgroundColor(AppUi.BG);
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(AppUi.BG);
         int side = AppUi.isTablet(this) ? AppUi.dp(this, 28) : AppUi.dp(this, 16);
-        root.setPadding(side, AppUi.dp(this, 10), side, AppUi.dp(this, 14));
-        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+        UiPreferences preferences = UiPreferences.load(this);
+        int bottomExtra = CalendarDetailLayoutPolicy.bottomContentPaddingDp(
+                preferences.oneHandMode, preferences.textScalePercent);
+        root.setPadding(side, AppUi.dp(this, 10), side, AppUi.dp(this, bottomExtra));
+        screenScroll.addView(root, new ScrollView.LayoutParams(-1, -2));
+
+        ViewCompat.setOnApplyWindowInsetsListener(screenScroll, (view, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             int horizontal = AppUi.isTablet(this) ? AppUi.dp(this, 28) : AppUi.dp(this, 16);
-            view.setPadding(horizontal, bars.top + AppUi.dp(this, 10), horizontal,
-                    bars.bottom + AppUi.dp(this, 14));
+            UiPreferences current = UiPreferences.load(this);
+            int contentGap = CalendarDetailLayoutPolicy.bottomContentPaddingDp(
+                    current.oneHandMode, current.textScalePercent);
+            root.setPadding(horizontal, bars.top + AppUi.dp(this, 10), horizontal,
+                    bars.bottom + AppUi.dp(this, contentGap));
             return insets;
         });
 
@@ -131,52 +150,64 @@ public class CalendarActivity extends AppCompatActivity {
         dayButton = UiSelection.button(this, "날짜");
         weekButton = UiSelection.button(this, "주간");
         todayButton = UiSelection.button(this, "오늘 할 일");
-        dayButton.setOnClickListener(v -> showDay(selectedDate));
-        weekButton.setOnClickListener(v -> showWeek(selectedDate));
-        todayButton.setOnClickListener(v -> showTodayTasks());
+        dayButton.setOnClickListener(v -> {
+            moveToDetailsAfterRender = true;
+            showDay(selectedDate);
+        });
+        weekButton.setOnClickListener(v -> {
+            moveToDetailsAfterRender = true;
+            showWeek(selectedDate);
+        });
+        todayButton.setOnClickListener(v -> {
+            moveToDetailsAfterRender = true;
+            showTodayTasks();
+        });
         addTab(tabs, dayButton, true, false);
         addTab(tabs, weekButton, false, false);
         addTab(tabs, todayButton, false, true);
         root.addView(tabs, new LinearLayout.LayoutParams(-1, AppUi.dp(this, 48)));
 
         calendarView = new CalendarView(this);
+        calendarView.setNestedScrollingEnabled(false);
         long calendarMillis = selectedDate.atStartOfDay(zoneId).toInstant().toEpochMilli();
         calendarView.setDate(calendarMillis, false, true);
         calendarView.setOnDateChangeListener((view, year, monthValue, dayOfMonth) -> {
             selectedDate = LocalDate.of(year, monthValue + 1, dayOfMonth);
             highlightId = -1L;
+            moveToDetailsAfterRender = true;
             showDay(selectedDate);
         });
-        int calendarHeight = AppUi.isTablet(this) ? 320 : 286;
+        int calendarHeight = CalendarDetailLayoutPolicy.calendarHeightDp(AppUi.isTablet(this));
         LinearLayout.LayoutParams calendarParams = new LinearLayout.LayoutParams(-1, AppUi.dp(this, calendarHeight));
         calendarParams.setMargins(0, AppUi.dp(this, 8), 0, 0);
         root.addView(calendarView, calendarParams);
 
         LinearLayout rangeRow = new LinearLayout(this);
         rangeRow.setGravity(Gravity.CENTER_VERTICAL);
+        detailAnchor = rangeRow;
         rangeTitle = AppUi.text(this, "", 17, AppUi.TEXT, true);
         rangeTitle.setGravity(Gravity.CENTER_VERTICAL);
         countText = AppUi.text(this, "", 13, AppUi.SUBTEXT, false);
         countText.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams rangeParams = new LinearLayout.LayoutParams(0, AppUi.dp(this, 48), 1f);
-        rangeParams.setMargins(0, AppUi.dp(this, 4), 0, 0);
+        LinearLayout.LayoutParams rangeParams = new LinearLayout.LayoutParams(0, AppUi.dp(this, 52), 1f);
+        rangeParams.setMargins(0, AppUi.dp(this, 8), 0, 0);
         rangeRow.addView(rangeTitle, rangeParams);
-        rangeRow.addView(countText, new LinearLayout.LayoutParams(-2, AppUi.dp(this, 48)));
+        rangeRow.addView(countText, new LinearLayout.LayoutParams(-2, AppUi.dp(this, 52)));
         root.addView(rangeRow);
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
         itemContainer = new LinearLayout(this);
         itemContainer.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(itemContainer, new ScrollView.LayoutParams(-1, -2));
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        itemContainer.setPadding(0, 0, 0, AppUi.dp(this, 8));
+        root.addView(itemContainer, new LinearLayout.LayoutParams(-1, -2));
 
         Button add = AppUi.primaryButton(this, "＋  새 항목 추가");
         add.setOnClickListener(v -> openHomeForAdd());
-        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(-1, AppUi.dp(this, 54));
-        addParams.setMargins(0, AppUi.dp(this, 10), 0, 0);
+        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(-1, AppUi.dp(this, 56));
+        addParams.setMargins(0, AppUi.dp(this, 14), 0, 0);
         root.addView(add, addParams);
-        return root;
+
+        ViewCompat.requestApplyInsets(screenScroll);
+        return screenScroll;
     }
 
     private void addTab(LinearLayout parent, Button button, boolean first, boolean last) {
@@ -239,6 +270,7 @@ public class CalendarActivity extends AppCompatActivity {
 
     private void renderItems(List<WorkItemEntity> items, boolean taskMode) {
         itemContainer.removeAllViews();
+        highlightedCard = null;
         int count = items == null ? 0 : items.size();
         countText.setText(count + "개");
         if (count == 0) {
@@ -247,18 +279,19 @@ public class CalendarActivity extends AppCompatActivity {
                     ? "새 할 일을 추가하면 오늘 목록에서 바로 확인할 수 있습니다."
                     : "아래 버튼으로 일정·할 일·메모를 추가해 보세요.";
             itemContainer.addView(AppUi.emptyState(this, title, description), AppUi.cardParams(this));
-            return;
+        } else {
+            for (WorkItemEntity item : items) itemContainer.addView(buildCard(item));
         }
-        for (WorkItemEntity item : items) itemContainer.addView(buildCard(item));
+        moveToDetailSectionIfNeeded();
     }
 
     private View buildCard(WorkItemEntity item) {
         LinearLayout card = AppUi.card(this);
-        LinearLayout.LayoutParams cardParams = AppUi.cardParams(this);
-        card.setLayoutParams(cardParams);
+        card.setLayoutParams(AppUi.cardParams(this));
         if (item.id == highlightId) {
             card.setBackground(AppUi.round(this, AppUi.SURFACE, 18, AppUi.PRIMARY));
             card.setContentDescription("방금 저장한 항목 " + item.title);
+            highlightedCard = card;
         }
 
         if (WorkItemEntity.TYPE_TASK.equals(item.type)) {
@@ -282,6 +315,30 @@ public class CalendarActivity extends AppCompatActivity {
         detail.setPadding(0, AppUi.dp(this, 6), 0, 0);
         card.addView(detail);
         return card;
+    }
+
+    private void moveToDetailSectionIfNeeded() {
+        if (!moveToDetailsAfterRender || screenScroll == null || detailAnchor == null) return;
+        moveToDetailsAfterRender = false;
+        screenScroll.postDelayed(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            View target = highlightedCard == null ? detailAnchor : highlightedCard;
+            int top = topInsideScroll(target);
+            UiPreferences preferences = UiPreferences.load(this);
+            int offsetDp = CalendarDetailLayoutPolicy.detailTopOffsetDp(preferences.textScalePercent);
+            screenScroll.smoothScrollTo(0, Math.max(0, top - AppUi.dp(this, offsetDp)));
+        }, 90L);
+    }
+
+    private int topInsideScroll(View target) {
+        int top = 0;
+        View current = target;
+        while (current != null && current != screenScroll) {
+            top += current.getTop();
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return top;
     }
 
     private void openHomeForAdd() {
