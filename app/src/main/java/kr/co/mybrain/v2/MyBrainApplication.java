@@ -8,6 +8,7 @@ import kr.co.mybrain.v2.reminder.ReminderRescheduler;
 import kr.co.mybrain.v2.settings.AiBudgetNotifier;
 import kr.co.mybrain.v2.ui.AiRunUiController;
 import kr.co.mybrain.v2.ui.BottomSafeAreaController;
+import kr.co.mybrain.v2.ui.CalendarCompactController;
 import kr.co.mybrain.v2.ui.SaveIntegrityController;
 import kr.co.mybrain.v2.ui.UiConsistencyController;
 
@@ -22,6 +23,7 @@ public class MyBrainApplication extends Application {
         ReminderNotifications.ensureChannel(this);
         UiConsistencyController.install(this);
         BottomSafeAreaController.install(this);
+        CalendarCompactController.install(this);
         AiRunUiController.install(this);
         SaveIntegrityController.install(this);
         ReminderRescheduler.rescheduleAll(this, "APP_START", null);
