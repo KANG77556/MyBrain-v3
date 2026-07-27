@@ -4,21 +4,17 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 
-import kr.co.mybrain.v2.data.WorkItemRepository;
-
-/** 기기 재부팅 또는 앱 교체 후 저장된 미래 알림을 다시 등록합니다. */
+/** 기기 재부팅·앱 업데이트·시간대 변경 후 미래 알림을 다시 등록합니다. */
 public final class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        String action = intent.getAction();
-        if (!Intent.ACTION_BOOT_COMPLETED.equals(action) && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) return;
-        WorkItemRepository.getInstance(context).getAll(items -> {
-            long now = System.currentTimeMillis();
-            for (kr.co.mybrain.v2.data.WorkItemEntity item : items) {
-                if (item.reminderAt != null && item.reminderAt > now && !item.completed) {
-                    ReminderScheduler.schedule(context, item);
-                }
-            }
-        });
+        String action = intent == null ? null : intent.getAction();
+        if (!Intent.ACTION_BOOT_COMPLETED.equals(action)
+                && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)
+                && !Intent.ACTION_TIME_CHANGED.equals(action)
+                && !Intent.ACTION_TIMEZONE_CHANGED.equals(action)) return;
+
+        PendingResult pendingResult = goAsync();
+        ReminderRescheduler.rescheduleAll(context, action, ignored -> pendingResult.finish());
     }
 }
