@@ -9,7 +9,9 @@ import kr.co.mybrain.v2.settings.AiBudgetNotifier;
 import kr.co.mybrain.v2.ui.AiRunUiController;
 import kr.co.mybrain.v2.ui.BottomSafeAreaController;
 import kr.co.mybrain.v2.ui.CalendarCompactController;
+import kr.co.mybrain.v2.ui.QuickEntryController;
 import kr.co.mybrain.v2.ui.SaveIntegrityController;
+import kr.co.mybrain.v2.ui.TodayProductivityController;
 import kr.co.mybrain.v2.ui.UiConsistencyController;
 
 /** 앱 전체 컨텍스트와 화면·AI·저장·알림 안정성 규칙을 초기화합니다. */
@@ -24,6 +26,8 @@ public class MyBrainApplication extends Application {
         UiConsistencyController.install(this);
         BottomSafeAreaController.install(this);
         CalendarCompactController.install(this);
+        TodayProductivityController.install(this);
+        QuickEntryController.install(this);
         AiRunUiController.install(this);
         SaveIntegrityController.install(this);
         ReminderRescheduler.rescheduleAll(this, "APP_START", null);
