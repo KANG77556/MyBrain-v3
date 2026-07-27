@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.text.NumberFormat;
 import java.util.Locale;
 
+import kr.co.mybrain.v2.reminder.ReminderPermissionState;
 import kr.co.mybrain.v2.transfer.BackupRestoreActivity;
 import kr.co.mybrain.v2.transfer.ReleaseRecoveryDiagnosticsActivity;
 import kr.co.mybrain.v2.ui.AppUi;
@@ -59,6 +60,10 @@ public class SettingsHubActivity extends AppCompatActivity {
         Button accessibility = AppUi.menuButton(this, "화면·접근성", "글자 크기, 큰 버튼, 고대비, 한 손 조작");
         accessibility.setOnClickListener(v -> startActivity(new Intent(this, AccessibilitySettingsActivity.class)));
         AppUi.addMenu(displayCard, this, accessibility);
+
+        Button reminders = AppUi.menuButton(this, "일정 알림", "알림 권한, 정확한 알람, 예약 상태와 테스트");
+        reminders.setOnClickListener(v -> startActivity(new Intent(this, ReminderSettingsActivity.class)));
+        AppUi.addMenu(displayCard, this, reminders);
 
         LinearLayout aiCard = AppUi.card(this);
         root.addView(aiCard, AppUi.cardParams(this));
@@ -109,7 +114,8 @@ public class SettingsHubActivity extends AppCompatActivity {
         summaryText.setText("AI  " + ai.providerLabel() + " · " + ai.selectedModel()
                 + "\n이번 달  요청 " + usage.monthlyRequests + "회 · " + usage.monthlyTotalTokens + "토큰"
                 + "\n예상 비용  " + budgetText
-                + "\n네트워크  " + (budget.wifiOnly ? "Wi-Fi에서만 AI 사용" : "모바일 데이터 사용 가능"));
+                + "\n네트워크  " + (budget.wifiOnly ? "Wi-Fi에서만 AI 사용" : "모바일 데이터 사용 가능")
+                + "\n알림  " + ReminderPermissionState.summary(this));
         if (displaySummary != null) displaySummary.setText(UiPreferences.load(this).summary());
     }
 
