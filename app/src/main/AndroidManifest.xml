@@ -74,8 +74,9 @@
         <activity android:name=".transfer.BackupRestoreActivity" android:exported="false" />
         <activity android:name=".transfer.ReleaseRecoveryDiagnosticsActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="false" />
+        <activity android:name=".AdaptiveMainActivity" android:exported="false" />
         <activity
-            android:name=".AdaptiveMainActivity"
+            android:name=".OptimizedMainActivity"
             android:exported="true"
             android:screenOrientation="unspecified"
             android:resizeableActivity="true">
