@@ -15,9 +15,10 @@ public final class AiAnalysisCache {
     static final long TTL_MS = 3L * 60L * 1000L;
     private static final int MAX_ENTRIES = 8;
 
-    private static final LinkedHashMap<String, Entry> CACHE =
-            new LinkedHashMap<String, Entry>(MAX_ENTRIES, 0.75f, true) {
-                @Override protected boolean removeEldestEntry(Map.Entry<String, Entry> eldest) {
+    private static final LinkedHashMap<String, AiAnalysisCache.Entry> CACHE =
+            new LinkedHashMap<String, AiAnalysisCache.Entry>(MAX_ENTRIES, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(
+                        Map.Entry<String, AiAnalysisCache.Entry> eldest) {
                     return size() > MAX_ENTRIES;
                 }
             };
