@@ -50,12 +50,45 @@ public final class CloudAiWorkItemAnalyzer {
         if (!policy.allowed) throw new AnalysisException(policy.message);
 
         CloudPrivacyFilter.FilteredText filtered = CloudPrivacyFilter.filter(originalText);
-        String prompt = buildPrompt(filtered.text, zoneId);
         String normalizedProvider = AiSettings.normalizeProvider(provider);
-        ProviderResponse response = AiSettings.PROVIDER_GEMINI.equals(normalizedProvider)
-                ? callGemini(model, credential, prompt)
-                : callOpenAi(model, credential, prompt);
-        MergeOutcome merge = mergeJson(response.jsonText, originalText, localBaseline, zoneId);
+        ProviderResponse response;
+        MergeOutcome merge;
+        int retryCount = 0;
+
+        try {
+            response = callProvider(normalizedProvider, model, credential,
+                    buildPrompt(filtered.text, zoneId), false);
+            try {
+                merge = mergeJson(response.jsonText, originalText, localBaseline, zoneId);
+            } catch (Exception firstFormatError) {
+                if (!AiAnalysisRetryPolicy.shouldRetry(
+                        normalizedProvider, retryCount, firstFormatError)) {
+                    throw firstFormatError;
+                }
+                retryCount++;
+                ProviderResponse retryResponse = callProvider(
+                        normalizedProvider,
+                        model,
+                        credential,
+                        buildRetryPrompt(filtered.text, zoneId),
+                        true);
+                response = ProviderResponse.combine(response, retryResponse, retryCount);
+                try {
+                    merge = mergeJson(retryResponse.jsonText, originalText, localBaseline, zoneId);
+                } catch (Exception secondFormatError) {
+                    throw new AnalysisException(
+                            "AI 응답을 두 번 확인했지만 형식이 불완전했습니다. 기기 분석 결과를 사용합니다.");
+                }
+            }
+        } catch (AnalysisException error) {
+            if (error.getMessage() != null && error.getMessage().startsWith("AI 응답을 두 번")) {
+                throw error;
+            }
+            throw new AnalysisException(AiAnalysisRetryPolicy.friendlyMessage(error));
+        } catch (Exception error) {
+            throw new AnalysisException(AiAnalysisRetryPolicy.friendlyMessage(error));
+        }
+
         merge.item.aiProvider = normalizedProvider;
         CloudResultValidator.ValidationResult validated = CloudResultValidator.validate(
                 originalText, merge.item, localBaseline, zoneId);
@@ -77,6 +110,7 @@ public final class CloudAiWorkItemAnalyzer {
                 : "예상 비용 " + estimatedCostWon + "원";
         String summary = validated.summary
                 + (merge.recovered ? " · 응답 자동 복구" : "")
+                + (retryCount > 0 ? " · 자동 재시도 " + retryCount + "회" : "")
                 + " · " + costSummary
                 + (budgetWarning ? " · 월간 한도 경고" : "");
 
@@ -92,7 +126,19 @@ public final class CloudAiWorkItemAnalyzer {
                 summary,
                 estimatedCostWon,
                 budgetWarning,
-                merge.recovered);
+                merge.recovered,
+                retryCount);
+    }
+
+    private static ProviderResponse callProvider(
+            String provider,
+            String model,
+            String credential,
+            String prompt,
+            boolean retry) throws Exception {
+        return AiSettings.PROVIDER_GEMINI.equals(provider)
+                ? callGemini(model, credential, prompt, retry)
+                : callOpenAi(model, credential, prompt);
     }
 
     private static ProviderResponse callOpenAi(String model, String credential, String prompt) throws Exception {
@@ -132,7 +178,8 @@ public final class CloudAiWorkItemAnalyzer {
                 inputTokens,
                 outputTokens,
                 totalTokens,
-                response.optString("model", model));
+                response.optString("model", model),
+                0);
     }
 
     private static String extractOpenAiOutput(JSONObject response) throws Exception {
@@ -154,20 +201,25 @@ public final class CloudAiWorkItemAnalyzer {
         throw new AnalysisException("GPT 분석 결과를 읽지 못했습니다.");
     }
 
-    private static ProviderResponse callGemini(String model, String credential, String prompt) throws Exception {
+    private static ProviderResponse callGemini(
+            String model,
+            String credential,
+            String prompt,
+            boolean retry) throws Exception {
         String normalizedModel = model.startsWith("models/") ? model.substring(7) : model;
         String endpoint = "https://generativelanguage.googleapis.com/v1beta/models/"
                 + URLEncoder.encode(normalizedModel, StandardCharsets.UTF_8.name()).replace("+", "%20")
                 + ":generateContent";
         JSONObject body = new JSONObject()
                 .put("systemInstruction", new JSONObject()
-                        .put("parts", new JSONArray().put(new JSONObject().put("text", systemInstruction()))))
+                        .put("parts", new JSONArray().put(new JSONObject().put(
+                                "text", retry ? retrySystemInstruction() : systemInstruction()))))
                 .put("contents", new JSONArray().put(new JSONObject()
                         .put("role", "user")
                         .put("parts", new JSONArray().put(new JSONObject().put("text", prompt)))))
                 .put("generationConfig", new JSONObject()
                         .put("candidateCount", 1)
-                        .put("maxOutputTokens", 1600)
+                        .put("maxOutputTokens", retry ? 900 : 1600)
                         .put("responseMimeType", "application/json"));
 
         HttpURLConnection connection = openPost(endpoint);
@@ -185,7 +237,8 @@ public final class CloudAiWorkItemAnalyzer {
                 inputTokens,
                 outputTokens,
                 totalTokens,
-                response.optString("modelVersion", model));
+                response.optString("modelVersion", model),
+                retry ? 1 : 0);
     }
 
     private static String extractGeminiOutput(JSONObject response) throws Exception {
@@ -209,7 +262,7 @@ public final class CloudAiWorkItemAnalyzer {
             }
             String finishReason = candidate == null ? "" : candidate.optString("finishReason", "");
             if (!finishReason.isEmpty()) {
-                throw new AnalysisException("Gemini 응답이 완료되지 않았습니다: " + finishReason);
+                throw new AnalysisException("Gemini 분석 결과를 읽지 못했습니다: " + finishReason);
             }
         }
         throw new AnalysisException("Gemini 분석 결과를 읽지 못했습니다.");
@@ -404,6 +457,12 @@ public final class CloudAiWorkItemAnalyzer {
                 + "명시되지 않은 정보는 null 또는 기본값으로 두고 제목은 핵심 행동이나 일정명만 짧게 작성한다.";
     }
 
+    private static String retrySystemInstruction() {
+        return "이전 응답의 JSON 형식이 불완전했다. 설명 없이 완전한 JSON 객체 하나만 반환한다. "
+                + "반드시 type, title, startAt, endAt, reminderAt, reminderExplicitlyDisabled, allDay, repeatRule, priority, confidence "
+                + "필드를 모두 포함하고 마지막 중괄호까지 작성한다. 400자 이내로 짧게 반환한다.";
+    }
+
     private static String buildPrompt(String text, ZoneId zoneId) {
         ZonedDateTime now = ZonedDateTime.now(zoneId);
         return "현재 시각: " + now + "\n시간대: " + zoneId.getId() + "\n"
@@ -413,6 +472,12 @@ public final class CloudAiWorkItemAnalyzer {
                 + "원문에 날짜나 시간이 없으면 startAt, endAt, reminderAt은 null로 둔다.\n"
                 + "원문에 반복 표현이 없으면 repeatRule은 NONE이다.\n"
                 + "사용자 입력:\n" + text;
+    }
+
+    private static String buildRetryPrompt(String text, ZoneId zoneId) {
+        ZonedDateTime now = ZonedDateTime.now(zoneId);
+        return "현재 시각=" + now + "\n시간대=" + zoneId.getId()
+                + "\n다음 입력을 완전한 JSON 객체 하나로만 다시 분석하세요.\n입력=" + text;
     }
 
     private static boolean isAllowedRepeat(String value) {
@@ -511,14 +576,26 @@ public final class CloudAiWorkItemAnalyzer {
         final int outputTokens;
         final int totalTokens;
         final String modelVersion;
+        final int retryCount;
 
         ProviderResponse(String jsonText, int inputTokens, int outputTokens,
-                         int totalTokens, String modelVersion) {
+                         int totalTokens, String modelVersion, int retryCount) {
             this.jsonText = jsonText;
             this.inputTokens = Math.max(0, inputTokens);
             this.outputTokens = Math.max(0, outputTokens);
             this.totalTokens = Math.max(0, totalTokens);
             this.modelVersion = modelVersion == null ? "" : modelVersion;
+            this.retryCount = Math.max(0, retryCount);
+        }
+
+        static ProviderResponse combine(ProviderResponse first, ProviderResponse second, int retryCount) {
+            return new ProviderResponse(
+                    second.jsonText,
+                    first.inputTokens + second.inputTokens,
+                    first.outputTokens + second.outputTokens,
+                    first.totalTokens + second.totalTokens,
+                    second.modelVersion.isEmpty() ? first.modelVersion : second.modelVersion,
+                    retryCount);
         }
     }
 
@@ -535,11 +612,13 @@ public final class CloudAiWorkItemAnalyzer {
         public final long estimatedCostWon;
         public final boolean budgetWarning;
         public final boolean responseRecovered;
+        public final int retryCount;
 
         AnalysisResult(ParsedWorkItem item, boolean privacyMasked, long elapsedMs,
                        int inputTokens, int outputTokens, int totalTokens,
                        String modelVersion, int corrections, String validationSummary,
-                       long estimatedCostWon, boolean budgetWarning, boolean responseRecovered) {
+                       long estimatedCostWon, boolean budgetWarning, boolean responseRecovered,
+                       int retryCount) {
             this.item = item;
             this.privacyMasked = privacyMasked;
             this.elapsedMs = elapsedMs;
@@ -552,6 +631,7 @@ public final class CloudAiWorkItemAnalyzer {
             this.estimatedCostWon = estimatedCostWon;
             this.budgetWarning = budgetWarning;
             this.responseRecovered = responseRecovered;
+            this.retryCount = Math.max(0, retryCount);
         }
     }
 
