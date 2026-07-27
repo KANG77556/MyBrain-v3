@@ -29,9 +29,12 @@ import kr.co.mybrain.v2.assistant.ParsedWorkItem;
 import kr.co.mybrain.v2.data.SaveIntegrityPolicy;
 import kr.co.mybrain.v2.data.WorkItemEntity;
 import kr.co.mybrain.v2.data.WorkItemRepository;
+import kr.co.mybrain.v2.reminder.ReminderScheduleResult;
+import kr.co.mybrain.v2.reminder.ReminderScheduler;
+import kr.co.mybrain.v2.settings.ReminderSettingsActivity;
 
 /**
- * 검증된 홈 런처를 변경하지 않고 저장 버튼에 DB 재조회·중복 차단·날짜 이동을 추가합니다.
+ * 검증된 홈 런처를 변경하지 않고 저장 버튼에 DB 재조회·중복 차단·날짜 이동·알림 검증을 추가합니다.
  * 보조 연결에 실패하면 기존 화면 동작을 그대로 유지합니다.
  */
 public final class SaveIntegrityController {
@@ -118,7 +121,7 @@ public final class SaveIntegrityController {
                 saveButton.setEnabled(false);
                 saveButton.setAlpha(.65f);
                 saveButton.setText("저장 확인 중…");
-                statusText.setText("데이터베이스에 저장하고 다시 확인하는 중입니다…");
+                statusText.setText("데이터베이스 저장과 알림 예약을 확인하는 중입니다…");
 
                 repository.insertVerified(entity, result -> activity.runOnUiThread(() -> {
                     if (activity.isFinishing() || activity.isDestroyed()) return;
@@ -129,10 +132,14 @@ public final class SaveIntegrityController {
                         showFailureDialog();
                         return;
                     }
+
+                    WorkItemEntity stored = result.item;
+                    ReminderScheduleResult reminder = ReminderScheduler.schedule(
+                            activity, stored, result.duplicate ? "DUPLICATE_RECHECK" : "SAVE_VERIFIED");
                     if (result.duplicate) {
                         restoreSaveButton(true);
-                        statusText.setText("중복 저장 차단 · 같은 항목이 이미 저장되어 있습니다.");
-                        showResultDialog(result.item, true);
+                        statusText.setText("중복 저장 차단 · " + reminder.userSummary());
+                        showResultDialog(stored, true, reminder);
                         return;
                     }
 
@@ -142,8 +149,8 @@ public final class SaveIntegrityController {
                         // 화면 초기화 실패가 이미 확인된 DB 저장을 실패로 바꾸지는 않습니다.
                     }
                     restoreSaveButton(false);
-                    statusText.setText("저장 확인 완료 · 데이터베이스에서 다시 확인했습니다.");
-                    showResultDialog(result.item, false);
+                    statusText.setText("저장 확인 완료 · " + reminder.userSummary());
+                    showResultDialog(stored, false, reminder);
                 }));
             } catch (Throwable error) {
                 saving = false;
@@ -177,12 +184,14 @@ public final class SaveIntegrityController {
                     .show();
         }
 
-        private void showResultDialog(WorkItemEntity item, boolean duplicate) {
+        private void showResultDialog(WorkItemEntity item, boolean duplicate,
+                                      ReminderScheduleResult reminder) {
             if (item == null) return;
             String message = duplicate
                     ? "같은 항목이 이미 저장되어 있어 새 항목을 만들지 않았습니다."
                     : "‘" + safeTitle(item.title) + "’을 저장하고 데이터베이스에서 다시 확인했습니다.";
             if (item.startAt != null) message += "\n\n" + formatDateTime(item.startAt);
+            if (reminder != null) message += "\n\n알림  " + reminder.userSummary();
 
             AlertDialog.Builder builder = new AlertDialog.Builder(activity)
                     .setTitle(duplicate ? "이미 저장된 항목" : "저장 완료")
@@ -191,16 +200,27 @@ public final class SaveIntegrityController {
                         if (!duplicate) focusInput();
                     });
 
+            boolean reminderAttention = reminder != null && reminder.needsAttention();
             if (SaveIntegrityPolicy.opensCalendar(item.type, item.startAt)) {
                 builder.setPositiveButton("저장한 날짜", (dialog, which) ->
-                                activity.startActivity(CalendarActivity.focusIntent(activity, item)))
-                        .setNeutralButton("저장 목록", (dialog, which) ->
-                                activity.startActivity(new Intent(activity, WorkItemListActivity.class)));
+                        activity.startActivity(CalendarActivity.focusIntent(activity, item)));
+                if (reminderAttention) {
+                    builder.setNeutralButton("알림 설정", (dialog, which) ->
+                            activity.startActivity(new Intent(activity, ReminderSettingsActivity.class)));
+                } else {
+                    builder.setNeutralButton("저장 목록", (dialog, which) ->
+                            activity.startActivity(new Intent(activity, WorkItemListActivity.class)));
+                }
             } else {
                 builder.setPositiveButton("저장 목록", (dialog, which) ->
-                                activity.startActivity(new Intent(activity, WorkItemListActivity.class)))
-                        .setNeutralButton("오늘 보기", (dialog, which) ->
-                                activity.startActivity(new Intent(activity, CalendarActivity.class)));
+                        activity.startActivity(new Intent(activity, WorkItemListActivity.class)));
+                if (reminderAttention) {
+                    builder.setNeutralButton("알림 설정", (dialog, which) ->
+                            activity.startActivity(new Intent(activity, ReminderSettingsActivity.class)));
+                } else {
+                    builder.setNeutralButton("오늘 보기", (dialog, which) ->
+                            activity.startActivity(new Intent(activity, CalendarActivity.class)));
+                }
             }
             builder.show();
         }

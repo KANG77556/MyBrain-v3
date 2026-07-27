@@ -1,22 +1,20 @@
 package kr.co.mybrain.v2.reminder;
 
-import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 
 import androidx.core.app.NotificationCompat;
 
-import kr.co.mybrain.v2.MainActivity;
+import kr.co.mybrain.v2.AdaptiveMainActivity;
 import kr.co.mybrain.v2.data.WorkItemEntity;
 import kr.co.mybrain.v2.data.WorkItemRepository;
 
 /** 예약 시각에 알림을 표시하고 반복 일정의 다음 회차를 준비합니다. */
 public final class ReminderReceiver extends BroadcastReceiver {
-    public static final String CHANNEL_ID = "mybrain_reminders";
+    public static final String CHANNEL_ID = ReminderNotifications.CHANNEL_ID;
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -25,12 +23,13 @@ public final class ReminderReceiver extends BroadcastReceiver {
 
         String title = intent.getStringExtra("title");
         String type = intent.getStringExtra("type");
-        ensureChannel(context);
+        ReminderNotifications.ensureChannel(context);
 
         PendingIntent open = PendingIntent.getActivity(
                 context,
                 requestCode(itemId, 0),
-                new Intent(context, MainActivity.class),
+                new Intent(context, AdaptiveMainActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
         PendingIntent complete = action(context, itemId, ReminderActionReceiver.ACTION_COMPLETE, 1);
@@ -47,8 +46,14 @@ public final class ReminderReceiver extends BroadcastReceiver {
                 .addAction(0, "완료", complete)
                 .addAction(0, "10분 미루기", snooze);
 
-        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager != null) manager.notify(notificationId(itemId), builder.build());
+        if (ReminderPermissionState.notificationsAllowed(context)) {
+            NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            try {
+                if (manager != null) manager.notify(notificationId(itemId), builder.build());
+            } catch (SecurityException ignored) {
+                // 권한이 실행 직전에 변경된 경우 알림 표시만 건너뜁니다.
+            }
+        }
 
         if (WorkItemEntity.TYPE_SCHEDULE.equals(type)) {
             WorkItemRepository.getInstance(context).advanceRecurrence(itemId, ignored -> { });
@@ -73,17 +78,5 @@ public final class ReminderReceiver extends BroadcastReceiver {
 
     private int notificationId(long itemId) {
         return (int) (itemId ^ (itemId >>> 32));
-    }
-
-    private void ensureChannel(Context context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
-        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager != null) {
-            manager.createNotificationChannel(new NotificationChannel(
-                    CHANNEL_ID,
-                    "일정 및 할 일 알림",
-                    NotificationManager.IMPORTANCE_HIGH
-            ));
-        }
     }
 }
