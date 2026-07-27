@@ -11,6 +11,7 @@ import kr.co.mybrain.v2.ui.BottomSafeAreaController;
 import kr.co.mybrain.v2.ui.CalendarCompactController;
 import kr.co.mybrain.v2.ui.QuickEntryController;
 import kr.co.mybrain.v2.ui.SaveIntegrityController;
+import kr.co.mybrain.v2.ui.ScheduleConflictController;
 import kr.co.mybrain.v2.ui.TodayProductivityController;
 import kr.co.mybrain.v2.ui.UiConsistencyController;
 
@@ -30,6 +31,7 @@ public class MyBrainApplication extends Application {
         QuickEntryController.install(this);
         AiRunUiController.install(this);
         SaveIntegrityController.install(this);
+        ScheduleConflictController.install(this);
         ReminderRescheduler.rescheduleAll(this, "APP_START", null);
     }
 
