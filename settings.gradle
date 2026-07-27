@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MyBrainAI"
+rootProject.name = "MyBrainV2"
 include ':app'

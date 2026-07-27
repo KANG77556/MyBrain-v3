@@ -2,88 +2,27 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries>
+        <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent>
         <intent>
-            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
-        </intent>
-        <intent>
-            <action android:name="android.media.action.IMAGE_CAPTURE" />
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
         </intent>
     </queries>
 
     <application
         android:name=".MyBrainApplication"
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
         android:label="MyBrain AI"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="true">
-
-        <activity
-            android:name=".NotificationPermissionActivity"
-            android:exported="true"
-            android:noHistory="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <activity
-            android:name=".MainWorkspaceActivityV2"
-            android:exported="false"
-            android:label="MyBrain AI" />
-
-        <activity
-            android:name=".MainWorkspaceActivity"
-            android:exported="false"
-            android:label="MyBrain AI" />
-
-        <activity android:name=".WorkspaceActivityV9" android:exported="false" android:label="MyBrain AI 이전 화면" />
-        <activity android:name=".UnifiedQuickInputActivityV4" android:exported="false" android:label="빠른 입력" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".DocumentCaptureActivityV2" android:exported="false" android:label="문서 품질 확인" />
-        <activity android:name=".VoiceCaptureActivityV3" android:exported="false" android:label="음성으로 입력" />
-        <activity android:name=".WorkspaceActivityV8" android:exported="false" android:label="MyBrain AI 1.9.0 화면" />
-        <activity android:name=".UnifiedQuickInputActivityV3" android:exported="false" android:label="안전한 빠른 입력 1.9.0" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".DocumentCaptureActivity" android:exported="false" android:label="문서 품질 확인 1.9.0" />
-        <activity android:name=".PrivacyReviewActivity" android:exported="false" android:label="개인정보 확인" />
-        <activity android:name=".VoiceCaptureActivityV2" android:exported="false" android:label="음성 이어 말하기 1.9.0" />
-        <activity android:name=".WorkspaceActivityV7" android:exported="false" android:label="MyBrain AI 1.8.9 화면" />
-        <activity android:name=".UnifiedQuickInputActivityV2" android:exported="false" android:label="안전한 빠른 입력 1.8.9" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".VoiceCaptureActivity" android:exported="false" android:label="음성으로 입력" />
-        <activity android:name=".WorkspaceActivityV6" android:exported="false" android:label="MyBrain AI 1.8.8 화면" />
-        <activity android:name=".UnifiedQuickInputActivity" android:exported="false" android:label="빠른 입력 1.8.8" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".WorkspaceActivityV5" android:exported="false" android:label="MyBrain AI 1.8.7 화면" />
-        <activity android:name=".QuickInputActivity" android:exported="false" android:label="새 기록" />
-        <activity android:name=".QuickCaptureReviewActivity" android:exported="false" android:label="추출 내용 확인" />
-        <activity android:name=".WorkspaceActivityV4" android:exported="false" android:label="MyBrain AI 1.8.5 화면" />
-        <activity android:name=".WorkItemEditorActivity" android:exported="false" android:label="항목 입력" />
-        <activity android:name=".WorkItemDetailActivity" android:exported="false" android:label="항목 상세" />
-        <activity android:name=".WorkItemManagerActivity" android:exported="false" android:label="항목 관리" />
-        <activity android:name=".WorkspaceActivityV3" android:exported="false" android:label="MyBrain AI 1.8.4 화면" />
-        <activity android:name=".WorkspaceActivityV2" android:exported="false" android:label="MyBrain AI 1.8.3 화면" />
-        <activity android:name=".WorkspaceActivity" android:exported="false" android:label="MyBrain AI 이전 화면" />
-        <activity android:name=".MainActivity" android:exported="false" />
-
-        <activity
-            android:name=".IntegratedMainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-            </intent-filter>
-        </activity>
-
-        <activity android:name=".AiSettingsActivity" android:exported="false" android:label="MyBrain AI 설정" />
-        <activity android:name=".AiInputActivityV2" android:exported="false" android:label="AI 메시지 분석" />
-        <activity-alias android:name=".AiInputActivity" android:exported="false" android:label="AI 메시지 분석" android:targetActivity=".AiInputActivityV2" />
-        <activity android:name=".BackupActivity" android:exported="false" android:label="MyBrain 백업" />
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MyBrain">
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -92,24 +31,23 @@
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/quick_capture_paths" />
+                android:resource="@xml/file_paths" />
         </provider>
 
-        <receiver android:name=".AlarmReceiver" android:exported="false" />
-
-        <receiver
-            android:name=".BootReceiver"
-            android:enabled="true"
-            android:exported="true">
+        <receiver android:name=".reminder.ReminderReceiver" android:exported="false" />
+        <receiver android:name=".reminder.ReminderActionReceiver" android:exported="false" />
+        <receiver android:name=".reminder.BootReceiver" android:enabled="true" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
-
         <receiver
-            android:name=".TodayWidgetProvider"
-            android:exported="false">
+            android:name=".widget.TodayWidgetProvider"
+            android:exported="true"
+            android:label="MyBrain 오늘">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -117,5 +55,49 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/today_widget_info" />
         </receiver>
+
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="MyBrain에 저장">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".CalendarActivity" android:exported="false" />
+        <activity android:name=".WorkItemListActivity" android:exported="false" />
+        <activity android:name=".settings.SettingsHubActivity" android:exported="false" />
+        <activity android:name=".settings.AccessibilitySettingsActivity" android:exported="false" />
+        <activity android:name=".settings.ReminderSettingsActivity" android:exported="false" />
+        <activity android:name=".settings.AiSettingsActivity" android:exported="false" />
+        <activity android:name=".settings.AiBudgetActivity" android:exported="false" />
+        <activity android:name=".settings.AiModelComparisonActivity" android:exported="false" />
+        <activity android:name=".transfer.BackupRestoreActivity" android:exported="false" />
+        <activity android:name=".transfer.ReleaseRecoveryDiagnosticsActivity" android:exported="false" />
+        <activity android:name=".MainActivity" android:exported="false" />
+        <activity
+            android:name=".AdaptiveMainActivity"
+            android:exported="true"
+            android:screenOrientation="unspecified"
+            android:resizeableActivity="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

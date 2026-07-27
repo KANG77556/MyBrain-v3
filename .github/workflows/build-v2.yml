@@ -1,0 +1,191 @@
+name: Build MyBrain AI V2
+
+on:
+  push:
+    branches: ["rebuild/v2", "rebuild/v2-*"]
+  pull_request:
+    branches: ["main", "rebuild/v2"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HAS_RELEASE_SIGNING: ${{ secrets.MYBRAIN_KEYSTORE_BASE64 != '' && secrets.MYBRAIN_KEYSTORE_PASSWORD != '' && secrets.MYBRAIN_KEY_ALIAS != '' && secrets.MYBRAIN_KEY_PASSWORD != '' }}
+      EXPECTED_CERT_SHA256: ee9b89627074c2708f7d91ae1a9fcf5ebd8f9611b4df0719e8aa4eef63765520
+      EXPECTED_DEBUG_CERT_SHA256: 49c3fde6dff9be797d506eade00bb660288efc83d385b6b8b930c5d8fe771b87
+
+    steps:
+      - name: 소스 내려받기
+        uses: actions/checkout@v4
+
+      - name: Java 17 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK 설치
+        uses: android-actions/setup-android@v3
+
+      - name: SDK 35 설치
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Gradle 8.9 설치
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: 앱 버전 확인
+        shell: bash
+        run: |
+          VERSION_NAME=$(sed -n "s/^[[:space:]]*versionName[[:space:]]*'\([^']*\)'.*/\1/p" app/build.gradle | head -n 1)
+          if [ -z "$VERSION_NAME" ]; then
+            echo "app/build.gradle에서 versionName을 찾지 못했습니다."
+            exit 1
+          fi
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "현재 앱 버전: $VERSION_NAME"
+
+      - name: AI JSON 복구 단위 테스트
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --stacktrace testDebugUnitTest 2>&1 | tee unit-test.log
+
+      - name: 단위 테스트 보고서 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrainAI-v2-unit-test-report
+          path: |
+            unit-test.log
+            app/build/reports/tests/testDebugUnitTest
+            app/build/test-results/testDebugUnitTest
+          if-no-files-found: error
+
+      - name: 디버그 APK 빌드
+        run: |
+          set -o pipefail
+          gradle --stacktrace assembleDebug 2>&1 | tee build.log
+
+      - name: 개발 APK 고정 서명 검증
+        shell: bash
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -f "$APK"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee debug-apk-signature-report.txt
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" debug-apk-signature-report.txt
+          ACTUAL_DEBUG_CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' debug-apk-signature-report.txt \
+            | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')
+          if [ "$ACTUAL_DEBUG_CERT" != "$EXPECTED_DEBUG_CERT_SHA256" ]; then
+            echo "개발 APK 서명이 고정 인증서와 다릅니다."
+            echo "예상: $EXPECTED_DEBUG_CERT_SHA256"
+            echo "실제: $ACTUAL_DEBUG_CERT"
+            exit 1
+          fi
+          sha256sum "$APK" > debug-apk.sha256
+
+      - name: 빌드 로그 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrainAI-v2-build-log
+          path: build.log
+          if-no-files-found: warn
+
+      - name: 디버그 APK 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrainAI-v2-debug
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            debug-apk.sha256
+            debug-apk-signature-report.txt
+          if-no-files-found: error
+
+      - name: 미서명 Release 컴파일 검증
+        if: env.HAS_RELEASE_SIGNING != 'true'
+        run: gradle --stacktrace assembleRelease
+
+      - name: 미서명 Release 안내 파일 생성
+        if: env.HAS_RELEASE_SIGNING != 'true'
+        shell: bash
+        run: |
+          cat > RELEASE-SIGNING-REQUIRED.txt <<'EOF'
+          이 APK는 Release 컴파일 검증용 미서명 파일입니다.
+          Android 기기에 설치하거나 기존 앱 업데이트에 사용할 수 없습니다.
+          scripts/register-v2-release-signing.bat로 고정 JKS를 GitHub Secrets에 등록한 뒤
+          MyBrainAI-v2-release 아티팩트를 사용하세요.
+          EOF
+          sha256sum app/build/outputs/apk/release/app-release-unsigned.apk > unsigned-release.sha256
+
+      - name: 미서명 Release 검증 결과 업로드
+        if: env.HAS_RELEASE_SIGNING != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrainAI-v2-unsigned-release-check
+          path: |
+            app/build/outputs/apk/release/app-release-unsigned.apk
+            unsigned-release.sha256
+            RELEASE-SIGNING-REQUIRED.txt
+          if-no-files-found: error
+
+      - name: 고정 서명키 복원
+        if: env.HAS_RELEASE_SIGNING == 'true'
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.MYBRAIN_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mybrain-release.jks"
+          test -s "$RUNNER_TEMP/mybrain-release.jks"
+
+      - name: 고정 서명 Release APK 빌드
+        if: env.HAS_RELEASE_SIGNING == 'true'
+        env:
+          MYBRAIN_KEYSTORE_FILE: ${{ runner.temp }}/mybrain-release.jks
+          MYBRAIN_KEYSTORE_PASSWORD: ${{ secrets.MYBRAIN_KEYSTORE_PASSWORD }}
+          MYBRAIN_KEY_ALIAS: ${{ secrets.MYBRAIN_KEY_ALIAS }}
+          MYBRAIN_KEY_PASSWORD: ${{ secrets.MYBRAIN_KEY_PASSWORD }}
+        run: gradle --stacktrace assembleRelease
+
+      - name: Release APK 서명 검증
+        if: env.HAS_RELEASE_SIGNING == 'true'
+        shell: bash
+        run: |
+          APK="app/build/outputs/apk/release/app-release.apk"
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -f "$APK"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee apk-signature-report.txt
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" apk-signature-report.txt
+          grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" apk-signature-report.txt
+          ACTUAL_CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' apk-signature-report.txt \
+            | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')
+          if [ "$ACTUAL_CERT" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "서명 인증서가 MyBrain AI 고정 인증서와 다릅니다."
+            echo "예상: $EXPECTED_CERT_SHA256"
+            echo "실제: $ACTUAL_CERT"
+            exit 1
+          fi
+
+      - name: Release 파일 이름과 검증값 생성
+        id: release_files
+        if: env.HAS_RELEASE_SIGNING == 'true'
+        shell: bash
+        run: |
+          RELEASE_APK="MyBrainAI-v${VERSION_NAME}-release.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$RELEASE_APK"
+          sha256sum "$RELEASE_APK" > "$RELEASE_APK.sha256"
+          echo "apk=$RELEASE_APK" >> "$GITHUB_OUTPUT"
+
+      - name: 고정 서명 Release APK 업로드
+        if: env.HAS_RELEASE_SIGNING == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrainAI-v2-release
+          path: |
+            ${{ steps.release_files.outputs.apk }}
+            ${{ steps.release_files.outputs.apk }}.sha256
+            apk-signature-report.txt
+          if-no-files-found: error

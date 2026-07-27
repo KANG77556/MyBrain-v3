@@ -1,24 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.MyBrain" parent="Theme.Material3.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#1D63D8</item>
-        <item name="android:statusBarColor">#FFFFFF</item>
-        <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:windowLightStatusBar">true</item>
-    </style>
-
-    <!-- 홈 화면 위젯의 각 일정·할 일 줄에 공통으로 적용합니다. -->
-    <style name="WidgetItemText">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">0dp</item>
-        <item name="android:layout_weight">1</item>
-        <item name="android:ellipsize">end</item>
-        <item name="android:gravity">center_vertical</item>
-        <item name="android:maxLines">1</item>
-        <item name="android:paddingLeft">2dp</item>
-        <item name="android:paddingRight">2dp</item>
-        <item name="android:textColor">#333333</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:statusBarColor">#F7F9FC</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowBackground">#F7F9FC</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:colorAccent">#3559C7</item>
+        <item name="android:textColorPrimary">#1F2937</item>
+        <item name="android:textColorSecondary">#64748B</item>
+        <item name="android:textColorHint">#94A3B8</item>
+        <item name="colorPrimary">#3559C7</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">#EEF2FF</item>
+        <item name="colorOnPrimaryContainer">#1E3A8A</item>
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#1F2937</item>
+        <item name="colorOnSurfaceVariant">#64748B</item>
+        <item name="colorOutline">#E2E8F0</item>
+        <item name="android:windowNoTitle">true</item>
     </style>
 </resources>
