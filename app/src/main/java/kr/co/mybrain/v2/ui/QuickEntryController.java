@@ -13,9 +13,10 @@ import androidx.annotation.Nullable;
 
 import kr.co.mybrain.v2.data.WorkItemEntity;
 
-/** 일정 화면의 빠른 입력 선택값을 홈 입력 화면에 전달합니다. */
+/** 일정 화면과 홈 위젯의 빠른 입력 선택값을 홈 입력 화면에 전달합니다. */
 public final class QuickEntryController {
     private static final String TARGET_ACTIVITY = "kr.co.mybrain.v2.AdaptiveMainActivity";
+    public static final String EXTRA_START_VOICE = "kr.co.mybrain.v2.extra.START_VOICE";
     private static volatile boolean installed;
 
     private QuickEntryController() {}
@@ -27,11 +28,11 @@ public final class QuickEntryController {
             installed = true;
             application.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
                 @Override public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle state) {
-                    activity.getWindow().getDecorView().postDelayed(() -> apply(activity), 140L);
+                    activity.getWindow().getDecorView().postDelayed(() -> apply(activity), 180L);
                 }
                 @Override public void onActivityStarted(@NonNull Activity activity) {}
                 @Override public void onActivityResumed(@NonNull Activity activity) {
-                    activity.getWindow().getDecorView().postDelayed(() -> apply(activity), 140L);
+                    activity.getWindow().getDecorView().postDelayed(() -> apply(activity), 180L);
                 }
                 @Override public void onActivityPaused(@NonNull Activity activity) {}
                 @Override public void onActivityStopped(@NonNull Activity activity) {}
@@ -46,6 +47,17 @@ public final class QuickEntryController {
         if (!TARGET_ACTIVITY.equals(activity.getClass().getName())) return;
         Intent intent = activity.getIntent();
         if (intent == null) return;
+
+        if (intent.getBooleanExtra(EXTRA_START_VOICE, false)) {
+            Button voice = findButtonContaining(activity.findViewById(android.R.id.content), "음성으로 입력");
+            if (voice != null && voice.isEnabled() && voice.getVisibility() == View.VISIBLE) {
+                intent.removeExtra(EXTRA_START_VOICE);
+                voice.performClick();
+                voice.requestFocus();
+                return;
+            }
+        }
+
         String type = intent.getStringExtra(TodayProductivityController.EXTRA_QUICK_TYPE);
         if (type == null || type.trim().isEmpty()) return;
         String label = labelFor(type);
@@ -69,6 +81,17 @@ public final class QuickEntryController {
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
             Button found = findExactButton(group.getChildAt(i), text);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static Button findButtonContaining(View view, String text) {
+        if (view instanceof Button && ((Button) view).getText().toString().contains(text)) return (Button) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            Button found = findButtonContaining(group.getChildAt(i), text);
             if (found != null) return found;
         }
         return null;
