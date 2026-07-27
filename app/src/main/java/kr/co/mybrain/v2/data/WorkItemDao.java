@@ -37,6 +37,13 @@ public interface WorkItemDao {
     @Query("SELECT * FROM work_items WHERE sourceText = :sourceText AND deletedAt IS NULL LIMIT 1")
     WorkItemEntity findActiveBySourceText(String sourceText);
 
+    /** 같은 분류·제목·원문·시각을 가진 활성 항목을 찾아 빠른 중복 저장을 막습니다. */
+    @Query("SELECT * FROM work_items WHERE deletedAt IS NULL "
+            + "AND type = :type AND title = :title AND sourceText = :sourceText "
+            + "AND ((startAt IS NULL AND :startAt IS NULL) OR startAt = :startAt) "
+            + "ORDER BY id DESC LIMIT 1")
+    WorkItemEntity findEquivalentActive(String type, String title, String sourceText, Long startAt);
+
     @Query("SELECT * FROM work_items WHERE deletedAt IS NULL AND startAt >= :from AND startAt < :to ORDER BY startAt ASC")
     List<WorkItemEntity> getBetween(long from, long to);
 

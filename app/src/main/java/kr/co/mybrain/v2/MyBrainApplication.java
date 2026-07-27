@@ -5,9 +5,10 @@ import android.content.Context;
 
 import kr.co.mybrain.v2.settings.AiBudgetNotifier;
 import kr.co.mybrain.v2.ui.AiRunUiController;
+import kr.co.mybrain.v2.ui.SaveIntegrityController;
 import kr.co.mybrain.v2.ui.UiConsistencyController;
 
-/** 앱 전체 컨텍스트와 알림 채널, 화면 접근성·AI 실행 규칙을 초기화합니다. */
+/** 앱 전체 컨텍스트와 알림 채널, 화면 접근성·AI 실행·저장 검증 규칙을 초기화합니다. */
 public class MyBrainApplication extends Application {
     private static Context appContext;
 
@@ -17,6 +18,7 @@ public class MyBrainApplication extends Application {
         AiBudgetNotifier.createChannel(this);
         UiConsistencyController.install(this);
         AiRunUiController.install(this);
+        SaveIntegrityController.install(this);
     }
 
     public static Context appContext() {

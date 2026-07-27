@@ -144,15 +144,31 @@ public final class ShareActivity extends AppCompatActivity {
     }
 
     private void openEditor() {
-        WorkItemEditorDialog dialog = new WorkItemEditorDialog(parsedItem, item ->
-                repository.insert(item.toEntity(), id -> runOnUiThread(() -> {
+        WorkItemEditorDialog dialog = new WorkItemEditorDialog(parsedItem, item -> {
+            showProgress("공유 내용을 저장하고 다시 확인하고 있습니다.");
+            repository.insertVerified(item.toEntity(), result -> runOnUiThread(() -> {
+                hideProgress();
+                if (result != null && result.success) {
                     Toast.makeText(this, "공유 내용을 저장했습니다.", Toast.LENGTH_SHORT).show();
                     finish();
-                })));
+                } else if (result != null && result.duplicate) {
+                    Toast.makeText(this, "같은 항목이 이미 저장되어 있습니다.", Toast.LENGTH_LONG).show();
+                    finish();
+                } else {
+                    new AlertDialog.Builder(this)
+                            .setTitle("저장하지 못했습니다")
+                            .setMessage("공유 내용은 아직 저장되지 않았습니다. 다시 시도해 주세요.")
+                            .setPositiveButton("다시 확인", (d, w) -> openEditor())
+                            .setNegativeButton("취소", (d, w) -> finish())
+                            .show();
+                }
+            }));
+        });
         dialog.show(getSupportFragmentManager(), "shared_item_editor");
     }
 
     private void showProgress(String message) {
+        hideProgress();
         progressDialog = new AlertDialog.Builder(this)
                 .setTitle("문서 분석")
                 .setMessage(message)
