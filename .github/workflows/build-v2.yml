@@ -48,7 +48,10 @@ jobs:
           echo "현재 앱 버전: $VERSION_NAME"
 
       - name: AI JSON 복구 단위 테스트
-        run: gradle --stacktrace testDebugUnitTest
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --stacktrace testDebugUnitTest 2>&1 | tee unit-test.log
 
       - name: 단위 테스트 보고서 업로드
         if: always()
@@ -56,9 +59,10 @@ jobs:
         with:
           name: MyBrainAI-v2-unit-test-report
           path: |
+            unit-test.log
             app/build/reports/tests/testDebugUnitTest
             app/build/test-results/testDebugUnitTest
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: 디버그 APK 빌드
         run: |
