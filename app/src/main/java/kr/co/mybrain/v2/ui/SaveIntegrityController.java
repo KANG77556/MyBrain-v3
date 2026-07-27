@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.Application;
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
@@ -137,7 +136,11 @@ public final class SaveIntegrityController {
                         return;
                     }
 
-                    invokeMainVoid("clearInput", new Class<?>[0]);
+                    try {
+                        invokeMainVoid("clearInput", new Class<?>[0]);
+                    } catch (Throwable ignored) {
+                        // 화면 초기화 실패가 이미 확인된 DB 저장을 실패로 바꾸지는 않습니다.
+                    }
                     restoreSaveButton(false);
                     statusText.setText("저장 확인 완료 · 데이터베이스에서 다시 확인했습니다.");
                     showResultDialog(result.item, false);
