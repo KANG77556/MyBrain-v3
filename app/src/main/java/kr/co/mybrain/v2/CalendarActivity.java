@@ -1,5 +1,6 @@
 package kr.co.mybrain.v2;
 
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -32,6 +33,9 @@ import kr.co.mybrain.v2.ui.UiSelection;
 
 /** 월간 달력, 주간 일정, 오늘 할 일을 일관된 한 화면에서 보여줍니다. */
 public class CalendarActivity extends AppCompatActivity {
+    public static final String EXTRA_FOCUS_AT = "kr.co.mybrain.v2.extra.FOCUS_AT";
+    public static final String EXTRA_HIGHLIGHT_ID = "kr.co.mybrain.v2.extra.HIGHLIGHT_ID";
+
     private static final String MODE_DAY = "DAY";
     private static final String MODE_WEEK = "WEEK";
     private static final String MODE_TODAY = "TODAY";
@@ -49,12 +53,46 @@ public class CalendarActivity extends AppCompatActivity {
     private Button todayButton;
     private LocalDate selectedDate = LocalDate.now();
     private String currentMode = MODE_DAY;
+    private long highlightId = -1L;
+    private boolean screenReady;
+
+    public static Intent focusIntent(Context context, WorkItemEntity item) {
+        Intent intent = new Intent(context, CalendarActivity.class);
+        if (item != null) {
+            if (item.startAt != null) intent.putExtra(EXTRA_FOCUS_AT, item.startAt);
+            if (item.id > 0L) intent.putExtra(EXTRA_HIGHLIGHT_ID, item.id);
+        }
+        return intent;
+    }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         repository = WorkItemRepository.getInstance(this);
+        readNavigationTarget();
         setContentView(buildScreen());
+        screenReady = true;
         showDay(selectedDate);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (screenReady) refreshCurrentMode();
+    }
+
+    private void readNavigationTarget() {
+        Intent intent = getIntent();
+        if (intent == null) return;
+        long focusAt = intent.getLongExtra(EXTRA_FOCUS_AT, -1L);
+        highlightId = intent.getLongExtra(EXTRA_HIGHLIGHT_ID, -1L);
+        if (focusAt > 0L) {
+            selectedDate = Instant.ofEpochMilli(focusAt).atZone(zoneId).toLocalDate();
+        }
+    }
+
+    private void refreshCurrentMode() {
+        if (MODE_WEEK.equals(currentMode)) showWeek(selectedDate);
+        else if (MODE_TODAY.equals(currentMode)) showTodayTasks();
+        else showDay(selectedDate);
     }
 
     private View buildScreen() {
@@ -102,9 +140,11 @@ public class CalendarActivity extends AppCompatActivity {
         root.addView(tabs, new LinearLayout.LayoutParams(-1, AppUi.dp(this, 48)));
 
         calendarView = new CalendarView(this);
-        calendarView.setDate(System.currentTimeMillis());
+        long calendarMillis = selectedDate.atStartOfDay(zoneId).toInstant().toEpochMilli();
+        calendarView.setDate(calendarMillis, false, true);
         calendarView.setOnDateChangeListener((view, year, monthValue, dayOfMonth) -> {
             selectedDate = LocalDate.of(year, monthValue + 1, dayOfMonth);
+            highlightId = -1L;
             showDay(selectedDate);
         });
         int calendarHeight = AppUi.isTablet(this) ? 320 : 286;
@@ -153,10 +193,15 @@ public class CalendarActivity extends AppCompatActivity {
     }
 
     private void showDay(LocalDate date) {
+        if (calendarView == null) return;
         currentMode = MODE_DAY;
         updateTabs();
         calendarView.setVisibility(View.VISIBLE);
         selectedDate = date;
+        long selectedMillis = date.atStartOfDay(zoneId).toInstant().toEpochMilli();
+        if (Math.abs(calendarView.getDate() - selectedMillis) >= 86_400_000L) {
+            calendarView.setDate(selectedMillis, false, true);
+        }
         rangeTitle.setText(date.format(dateFormat));
         long from = date.atStartOfDay(zoneId).toInstant().toEpochMilli();
         long to = date.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli();
@@ -211,6 +256,10 @@ public class CalendarActivity extends AppCompatActivity {
         LinearLayout card = AppUi.card(this);
         LinearLayout.LayoutParams cardParams = AppUi.cardParams(this);
         card.setLayoutParams(cardParams);
+        if (item.id == highlightId) {
+            card.setBackground(AppUi.round(this, AppUi.SURFACE, 18, AppUi.PRIMARY));
+            card.setContentDescription("방금 저장한 항목 " + item.title);
+        }
 
         if (WorkItemEntity.TYPE_TASK.equals(item.type)) {
             CheckBox completed = new CheckBox(this);
