@@ -1,49 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
     <queries>
-        <intent>
-            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
-        </intent>
-        <intent>
-            <action android:name="android.media.action.IMAGE_CAPTURE" />
-        </intent>
+        <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent>
+        <intent><action android:name="android.media.action.IMAGE_CAPTURE" /></intent>
     </queries>
-
-    <application
-        android:name=".MyBrainApplication"
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="MyBrain AI"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="true">
-
-        <activity
-            android:name=".NotificationPermissionActivity"
-            android:exported="true"
-            android:noHistory="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+    <application android:name=".MyBrainApplication" android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:label="MyBrain AI" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/AppTheme" android:usesCleartextTraffic="true">
+        <activity android:name=".NotificationPermissionActivity" android:exported="true" android:noHistory="true">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
-
-        <activity
-            android:name=".MainWorkspaceActivityV2"
-            android:exported="false"
-            android:label="MyBrain AI" />
-
-        <activity
-            android:name=".MainWorkspaceActivity"
-            android:exported="false"
-            android:label="MyBrain AI" />
-
+        <activity android:name=".MainWorkspaceActivityV3" android:exported="false" android:label="MyBrain AI" />
+        <activity android:name=".DiagnosticsActivity" android:exported="false" android:label="기기 진단·테스트" />
+        <activity android:name=".MainWorkspaceActivityV2" android:exported="false" android:label="MyBrain AI" />
+        <activity android:name=".MainWorkspaceActivity" android:exported="false" android:label="MyBrain AI" />
         <activity android:name=".WorkspaceActivityV9" android:exported="false" android:label="MyBrain AI 이전 화면" />
         <activity android:name=".UnifiedQuickInputActivityV4" android:exported="false" android:label="빠른 입력" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".DocumentCaptureActivityV2" android:exported="false" android:label="문서 품질 확인" />
@@ -69,53 +41,23 @@
         <activity android:name=".WorkspaceActivityV2" android:exported="false" android:label="MyBrain AI 1.8.3 화면" />
         <activity android:name=".WorkspaceActivity" android:exported="false" android:label="MyBrain AI 이전 화면" />
         <activity android:name=".MainActivity" android:exported="false" />
-
-        <activity
-            android:name=".IntegratedMainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-            </intent-filter>
+        <activity android:name=".IntegratedMainActivity" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="text/plain" /></intent-filter>
         </activity>
-
         <activity android:name=".AiSettingsActivity" android:exported="false" android:label="MyBrain AI 설정" />
         <activity android:name=".AiInputActivityV2" android:exported="false" android:label="AI 메시지 분석" />
         <activity-alias android:name=".AiInputActivity" android:exported="false" android:label="AI 메시지 분석" android:targetActivity=".AiInputActivityV2" />
         <activity android:name=".BackupActivity" android:exported="false" android:label="MyBrain 백업" />
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/quick_capture_paths" />
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.fileprovider" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/quick_capture_paths" />
         </provider>
-
         <receiver android:name=".AlarmReceiver" android:exported="false" />
-
-        <receiver
-            android:name=".BootReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
+        <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter>
         </receiver>
-
-        <receiver
-            android:name=".TodayWidgetProvider"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/today_widget_info" />
+        <receiver android:name=".TodayWidgetProvider" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/today_widget_info" />
         </receiver>
     </application>
 </manifest>
