@@ -1,0 +1,69 @@
+name: Android CalendarFix Chunk Build
+
+on:
+  push:
+    branches:
+      - android-calendarfix-build
+    paths:
+      - 'android-build/calendarfix-parts/READY'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct source ZIP
+        shell: bash
+        run: |
+          mkdir -p build-input build-source
+          cat android-build/calendarfix-parts/part-*.b64 | base64 --decode > build-input/CalendarFix.zip
+          echo '0bb3b55feb7d153d22c4d2389e2a7301c6832afefff5e1604560b3aef16ad51e  build-input/CalendarFix.zip' | sha256sum -c -
+          unzip -q build-input/CalendarFix.zip -d build-source
+          PROJECT_DIR=$(find build-source -name gradlew -type f -printf '%h\n' | head -n 1)
+          test -n "$PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+          chmod +x gradlew
+          ./gradlew --no-daemon clean testDebugUnitTest assembleDebug
+
+      - name: Collect and verify APK
+        shell: bash
+        run: |
+          APK=$(find "$PROJECT_DIR/app/build/outputs/apk/debug" -name '*.apk' -type f | head -n 1)
+          test -s "$APK"
+          mkdir -p out
+          cp "$APK" out/MyBrain-Android-v1.5.12-CalendarFix-debug.apk
+          sha256sum out/MyBrain-Android-v1.5.12-CalendarFix-debug.apk > out/MyBrain-Android-v1.5.12-CalendarFix-debug.apk.sha256
+          unzip -t out/MyBrain-Android-v1.5.12-CalendarFix-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrain-Android-v1.5.12-CalendarFix-debug
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
