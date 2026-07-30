@@ -25,7 +25,7 @@ jobs:
         run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
-      - name: Compile Kotlin and export missing Gradle cache files
+      - name: Compile Kotlin and export missing Gradle modules
         shell: bash
         run: |
           set -euo pipefail
@@ -70,17 +70,19 @@ jobs:
           ROOT="$HOME/.gradle/caches/modules-2/files-2.1"
           test -d "$ROOT/androidx.arch.core/core-runtime/2.1.0"
           test -d "$ROOT/androidx.collection/collection/1.1.0"
+          test -d "$ROOT/org.jetbrains.kotlin/kotlin-build-tools-impl/2.2.10"
           cd "$ROOT"
-          tar -cJf /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz \
+          tar -cJf /tmp/CalendarFix-Gradle-Cache-Delta-v2.tar.xz \
             androidx.arch.core/core-runtime/2.1.0 \
-            androidx.collection/collection/1.1.0
-          sha256sum /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz > /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz.sha256
-          ls -lh /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz
+            androidx.collection/collection/1.1.0 \
+            org.jetbrains.kotlin/kotlin-build-tools-impl/2.2.10
+          sha256sum /tmp/CalendarFix-Gradle-Cache-Delta-v2.tar.xz > /tmp/CalendarFix-Gradle-Cache-Delta-v2.tar.xz.sha256
+          ls -lh /tmp/CalendarFix-Gradle-Cache-Delta-v2.tar.xz
       - uses: actions/upload-artifact@v4
         with:
-          name: CalendarFix-Gradle-Cache-Delta
+          name: CalendarFix-Gradle-Cache-Delta-v2
           path: |
-            /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz
-            /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz.sha256
+            /tmp/CalendarFix-Gradle-Cache-Delta-v2.tar.xz
+            /tmp/CalendarFix-Gradle-Cache-Delta-v2.tar.xz.sha256
           if-no-files-found: error
           retention-days: 7
