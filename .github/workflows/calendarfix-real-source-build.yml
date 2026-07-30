@@ -1,12 +1,11 @@
 name: Build Real CalendarFix v1.5.12 APK
 
 on:
-  push:
-    branches:
-      - calendarfix-v1512-gradle-build
   pull_request:
     branches:
       - main
+    paths:
+      - 'android-build/calendarfix-v1512/READY'
   workflow_dispatch:
 
 jobs:
@@ -17,17 +16,17 @@ jobs:
       - name: Checkout build branch
         uses: actions/checkout@v4
 
-      - name: Decode and validate original Android source
+      - name: Reconstruct and validate original Android source
         shell: bash
         run: |
           set -euo pipefail
-          test -s android-build/calendarfix-v1512/source.zip.b64
+          test -f android-build/calendarfix-v1512/READY
+          test "$(find android-build/calendarfix-v1512 -name 'part-*.b64' -type f | wc -l)" -eq 9
           mkdir -p build-input build-source
-          base64 --decode android-build/calendarfix-v1512/source.zip.b64 > build-input/source.zip
-          ls -lh build-input/source.zip
-          sha256sum build-input/source.zip | tee source.sha256
-          unzip -t build-input/source.zip
-          unzip -q build-input/source.zip -d build-source
+          cat android-build/calendarfix-v1512/part-*.b64 | base64 --decode > build-input/source.tar.xz
+          echo 'be02a69fbb442df2771ac956493db833c005ee480901b4cbb0aba42c0c8d4b3b  build-input/source.tar.xz' | sha256sum -c -
+          tar -tJf build-input/source.tar.xz
+          tar -xJf build-input/source.tar.xz -C build-source
           PROJECT_DIR=$(find build-source -name settings.gradle.kts -type f -printf '%h\n' | head -n 1)
           test -n "$PROJECT_DIR"
           test -f "$PROJECT_DIR/app/build.gradle.kts"
@@ -77,7 +76,7 @@ jobs:
           mkdir -p out
           cp "$APK" out/MyBrain-Android-v1.5.12-CalendarFix-REAL-GRADLE-debug.apk
           sha256sum out/MyBrain-Android-v1.5.12-CalendarFix-REAL-GRADLE-debug.apk > out/MyBrain-Android-v1.5.12-CalendarFix-REAL-GRADLE-debug.apk.sha256
-          cp source.sha256 apksigner-report.txt aapt-badging.txt out/
+          cp apksigner-report.txt aapt-badging.txt out/
           unzip -t out/MyBrain-Android-v1.5.12-CalendarFix-REAL-GRADLE-debug.apk
 
       - name: Upload verified APK
