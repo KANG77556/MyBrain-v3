@@ -6,11 +6,7 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.Window;
 
-/**
- * 앱 전체 생명주기를 관리합니다.
- * 일정 데이터가 변경되면 알림과 홈 화면 위젯을 자동으로 갱신하고,
- * 모든 Activity에 키보드 닫기와 입력 화면 UI 보정을 공통 적용합니다.
- */
+/** 앱 전체 생명주기와 공통 UI 보정을 관리합니다. */
 public class MyBrainApplication extends Application {
     private static final String PREFS = "mybrain_data";
     private static final String KEY_ITEMS = "items";
@@ -29,29 +25,19 @@ public class MyBrainApplication extends Application {
         SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
         preferences.registerOnSharedPreferenceChangeListener(listener);
 
-        // AI 분석 버튼 재배치, 버튼 크기, 입력 화면 여백을 공통 보정합니다.
         UiUxEnhancer.install(this);
-
-        // 제스처 내비게이션 안전영역, 큰 글씨, 키보드 대응을 공통 보정합니다.
         UiSafeAreaEnhancer.install(this);
-
-        // 빠른 입력 화면의 세부 설정은 필요할 때만 펼치도록 유지합니다.
         SimpleUxEnhancer.install(this);
-
-        // 1.9.6부터 통합 입력 화면에 명시적인 분석 버튼과 개선된 음성 입력을 연결합니다.
         AnalysisButtonEnhancer.install(this);
-
-        // 1.9.7부터 홈 음성 입력으로 들어온 문장은 입력 화면에서 자동으로 한 번 분석합니다.
         VoiceAnalysisFlowEnhancer.install(this);
+        HomeLayoutPolishEnhancer.install(this);
 
-        // 1.9.5 통합 메인 화면은 처음부터 간단 홈으로 생성되므로
-        // 이전 홈 화면을 다시 탐색하고 재배치하는 HomeSimpleEnhancer는 실행하지 않습니다.
+        // 1.10.6부터 이번주·다음주 및 시작~종료 시간을 미리보기와 저장에 함께 반영합니다.
+        KoreanRangeAnalysisEnhancer.install(this);
 
-        // 앱 실행 시 기존 알림과 홈 화면 위젯을 다시 복구합니다.
         AlarmScheduler.rescheduleAll(this);
         TodayWidgetProvider.updateAll(this);
 
-        // 모든 화면에서 현재 입력칸 바깥을 누르면 키보드를 닫습니다.
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override public void onActivityCreated(Activity activity, Bundle savedInstanceState) { }
             @Override public void onActivityStarted(Activity activity) { }

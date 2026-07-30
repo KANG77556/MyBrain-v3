@@ -4,10 +4,14 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** '오전 9시부터 12시까지', '9:30~11:00' 형식의 시작·종료 시각을 분석합니다. */
+/** '오전 9시부터 12시까지', '오전 9:00~오후 12:00' 형식의 시작·종료 시각을 분석합니다. */
 public final class KoreanTimeRangeParser {
-    private static final Pattern COLON_RANGE = Pattern.compile("(?:(오전|오후)\\s*)?(\\d{1,2}):(\\d{2})\\s*(?:~|부터|-)\\s*(?:(오전|오후)\\s*)?(\\d{1,2}):(\\d{2})");
-    private static final Pattern HOUR_RANGE = Pattern.compile("(?:(오전|오후)\\s*)?(\\d{1,2})시(?:\\s*(\\d{1,2})분)?\\s*(?:부터|~|-)\\s*(?:(오전|오후)\\s*)?(\\d{1,2})시(?:\\s*(\\d{1,2})분)?(?:까지)?");
+    private static final Pattern COLON_RANGE = Pattern.compile(
+            "(?:(오전|오후)\\s*)?(\\d{1,2}):(\\d{2})\\s*(?:~|〜|–|—|부터|-)\\s*"
+                    + "(?:(오전|오후)\\s*)?(\\d{1,2}):(\\d{2})(?:\\s*까지)?");
+    private static final Pattern HOUR_RANGE = Pattern.compile(
+            "(?:(오전|오후)\\s*)?(\\d{1,2})시(?:\\s*(\\d{1,2})분)?\\s*(?:부터|~|〜|–|—|-)\\s*"
+                    + "(?:(오전|오후)\\s*)?(\\d{1,2})시(?:\\s*(\\d{1,2})분)?(?:\\s*까지)?");
 
     private KoreanTimeRangeParser() { }
 
@@ -49,8 +53,24 @@ public final class KoreanTimeRangeParser {
         }
     }
 
+    /** Android 저장소에 의존하지 않는 순수 파서 검증입니다. */
     private static Range valid(String start, String end) {
-        return WorkItemStore.isValidTimeRange(start, end) ? new Range(start, end) : new Range("", "");
+        int startMinute = minuteOfDay(start);
+        int endMinute = minuteOfDay(end);
+        return startMinute >= 0 && endMinute > startMinute
+                ? new Range(start, end) : new Range("", "");
+    }
+
+    private static int minuteOfDay(String value) {
+        if (value == null || !value.matches("\\d{2}:\\d{2}")) return -1;
+        try {
+            int hour = Integer.parseInt(value.substring(0, 2));
+            int minute = Integer.parseInt(value.substring(3, 5));
+            if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return -1;
+            return hour * 60 + minute;
+        } catch (Exception ignored) {
+            return -1;
+        }
     }
 
     public static final class Range {
