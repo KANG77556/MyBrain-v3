@@ -51,7 +51,7 @@ jobs:
         run: |
           python3 scripts/validate_redesigned_home_v1104.py
           grep -q 'KEY_THEME_MODE' app/src/main/java/kr/co/mybrain/ai/ThemeController.java
-          grep -q "versionName '1.10.3-theme-menu'" app/build.gradle
+          grep -q "versionName '1.10.4-redesigned-home'" app/build.gradle
 
       - name: Build debug APK
         shell: bash
