@@ -3,6 +3,8 @@ package kr.co.mybrain.ai;
 import android.app.AlertDialog;
 import android.app.TimePickerDialog;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,13 +18,13 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * 기존 통합 입력 기능을 유지하면서 일정 종료 시간과 실제 시간 구간 충돌 검사를 추가합니다.
- */
+/** 기존 통합 입력 기능에 일정 종료 시간과 실제 시간 구간 충돌 검사를 추가합니다. */
 public class UnifiedQuickInputActivityV5 extends UnifiedQuickInputActivityV2 {
     private EditText rangeInput;
     private Button endTimeButton;
     private String manualEndTime = "";
+    private boolean manualEndTimeSelected;
+    private boolean rangeWatcherInstalled;
     private boolean confirmedConflict;
 
     @Override
@@ -43,9 +45,10 @@ public class UnifiedQuickInputActivityV5 extends UnifiedQuickInputActivityV2 {
         View root = findViewById(android.R.id.content);
         rangeInput = findInput(root);
         if (rangeInput == null) return;
+        installRangeWatcher();
 
         KoreanTimeRangeParser.Range parsed = KoreanTimeRangeParser.parse(rangeInput.getText().toString());
-        if (manualEndTime.isEmpty() && parsed.isValid()) manualEndTime = parsed.endTime;
+        if (!manualEndTimeSelected) manualEndTime = parsed.isValid() ? parsed.endTime : "";
 
         if (endTimeButton == null || endTimeButton.getParent() == null) {
             ViewGroup parent = rangeInput.getParent() instanceof ViewGroup ? (ViewGroup) rangeInput.getParent() : null;
@@ -65,6 +68,23 @@ public class UnifiedQuickInputActivityV5 extends UnifiedQuickInputActivityV2 {
         connectSaveButton(root);
     }
 
+    /** 사용자가 문장을 수정할 때 종료 시간 표시도 즉시 다시 분석합니다. */
+    private void installRangeWatcher() {
+        if (rangeWatcherInstalled || rangeInput == null) return;
+        rangeWatcherInstalled = true;
+        rangeInput.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
+            @Override public void afterTextChanged(Editable s) {
+                if (!manualEndTimeSelected) {
+                    KoreanTimeRangeParser.Range parsed = KoreanTimeRangeParser.parse(s == null ? "" : s.toString());
+                    manualEndTime = parsed.isValid() ? parsed.endTime : "";
+                }
+                refreshEndTimeLabel();
+            }
+        });
+    }
+
     private void pickEndTime() {
         Calendar now = Calendar.getInstance();
         String value = currentEndTime();
@@ -75,6 +95,7 @@ public class UnifiedQuickInputActivityV5 extends UnifiedQuickInputActivityV2 {
             } catch (Exception ignored) { }
         }
         new TimePickerDialog(this, (view, hour, minute) -> {
+            manualEndTimeSelected = true;
             manualEndTime = String.format(Locale.KOREA, "%02d:%02d", hour, minute);
             refreshEndTimeLabel();
         }, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), true).show();
@@ -82,11 +103,11 @@ public class UnifiedQuickInputActivityV5 extends UnifiedQuickInputActivityV2 {
 
     private void refreshEndTimeLabel() {
         if (endTimeButton == null) return;
-        String end = currentEndTime();
         KoreanTimeRangeParser.Range parsed = KoreanTimeRangeParser.parse(
                 rangeInput == null ? "" : rangeInput.getText().toString());
         String start = parsed.isValid() ? parsed.startTime : QuickInputParser.parseSingle(
                 rangeInput == null ? "" : rangeInput.getText().toString()).time;
+        String end = currentEndTime();
         if (end.isEmpty()) {
             endTimeButton.setText("종료 시간 없음 · 눌러서 선택");
         } else if (!start.isEmpty()) {
@@ -97,10 +118,10 @@ public class UnifiedQuickInputActivityV5 extends UnifiedQuickInputActivityV2 {
     }
 
     private String currentEndTime() {
-        if (!manualEndTime.isEmpty()) return manualEndTime;
+        if (manualEndTimeSelected) return manualEndTime;
         KoreanTimeRangeParser.Range parsed = KoreanTimeRangeParser.parse(
                 rangeInput == null ? "" : rangeInput.getText().toString());
-        return parsed.endTime;
+        return parsed.isValid() ? parsed.endTime : "";
     }
 
     private void connectSaveButton(View root) {
@@ -134,27 +155,27 @@ public class UnifiedQuickInputActivityV5 extends UnifiedQuickInputActivityV2 {
         });
     }
 
+    /** 같은 원문으로 생성된 날짜별 일정 모두에 종료 시간을 기록합니다. */
     private void scheduleEndTimeWrite(String raw, String start, String end) {
         if (end.isEmpty()) return;
         View root = findViewById(android.R.id.content);
         if (root == null) return;
         root.postDelayed(() -> {
             List<WorkItemRecord> items = WorkItemStore.load(this);
-            boolean changed = false;
+            int changed = 0;
             for (WorkItemRecord item : items) {
                 if (!"일정".equals(item.type)) continue;
                 if (!raw.equals(item.original)) continue;
-                if (!start.isEmpty() && !start.equals(item.time)) item.time = start;
+                if (!start.isEmpty()) item.time = start;
                 item.endTime = end;
-                changed = true;
-                break;
+                changed++;
             }
-            if (changed) {
+            if (changed > 0) {
                 WorkItemStore.save(this, items);
-                Toast.makeText(this, "종료 시간을 함께 저장했습니다.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, changed + "건에 종료 시간을 함께 저장했습니다.", Toast.LENGTH_SHORT).show();
             }
             confirmedConflict = false;
-        }, 320L);
+        }, 420L);
     }
 
     private EditText findInput(View view) {
