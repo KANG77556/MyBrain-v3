@@ -8,6 +8,12 @@ on:
     paths:
       - 'app/**'
       - '.github/workflows/android-theme-direct-apk.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - '.github/workflows/android-theme-direct-apk.yml'
 
 jobs:
   build:
