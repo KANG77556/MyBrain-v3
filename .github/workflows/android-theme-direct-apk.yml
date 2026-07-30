@@ -7,12 +7,14 @@ on:
       - android-theme-menu-v1103
     paths:
       - 'app/**'
+      - 'scripts/**'
       - '.github/workflows/android-theme-direct-apk.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'app/**'
+      - 'scripts/**'
       - '.github/workflows/android-theme-direct-apk.yml'
 
 jobs:
@@ -44,12 +46,10 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Validate theme implementation
+      - name: Validate redesigned home and theme
         shell: bash
         run: |
-          grep -q '시스템 설정 따르기' app/src/main/java/kr/co/mybrain/ai/MainWorkspaceActivityV3.java
-          grep -q '밝은 모드' app/src/main/java/kr/co/mybrain/ai/MainWorkspaceActivityV3.java
-          grep -q '어두운 모드' app/src/main/java/kr/co/mybrain/ai/MainWorkspaceActivityV3.java
+          python3 scripts/validate_redesigned_home_v1104.py
           grep -q 'KEY_THEME_MODE' app/src/main/java/kr/co/mybrain/ai/ThemeController.java
           grep -q "versionName '1.10.3-theme-menu'" app/build.gradle
 
@@ -62,16 +62,16 @@ jobs:
         run: |
           APK=$(find app/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)
           test -s "$APK"
-          cp "$APK" MyBrain-Android-v1.10.3-Theme-Menu-debug.apk
-          unzip -t MyBrain-Android-v1.10.3-Theme-Menu-debug.apk >/dev/null
-          sha256sum MyBrain-Android-v1.10.3-Theme-Menu-debug.apk > MyBrain-Android-v1.10.3-Theme-Menu-debug.apk.sha256
+          cp "$APK" MyBrain-Android-v1.10.4-Redesigned-Home-debug.apk
+          unzip -t MyBrain-Android-v1.10.4-Redesigned-Home-debug.apk >/dev/null
+          sha256sum MyBrain-Android-v1.10.4-Redesigned-Home-debug.apk > MyBrain-Android-v1.10.4-Redesigned-Home-debug.apk.sha256
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MyBrain-Android-v1.10.3-Theme-Menu-debug
+          name: MyBrain-Android-v1.10.4-Redesigned-Home-debug
           path: |
-            MyBrain-Android-v1.10.3-Theme-Menu-debug.apk
-            MyBrain-Android-v1.10.3-Theme-Menu-debug.apk.sha256
+            MyBrain-Android-v1.10.4-Redesigned-Home-debug.apk
+            MyBrain-Android-v1.10.4-Redesigned-Home-debug.apk.sha256
           if-no-files-found: error
           retention-days: 30
