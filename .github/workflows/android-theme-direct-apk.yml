@@ -32,6 +32,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Run Korean parser regression test
+        shell: bash
+        run: |
+          rm -rf build/parser-regression
+          mkdir -p build/parser-regression
+          javac -encoding UTF-8 -d build/parser-regression \
+            app/src/main/java/kr/co/mybrain/ai/AiAnalysisResult.java \
+            app/src/main/java/kr/co/mybrain/ai/KoreanTimeRangeParser.java \
+            app/src/main/java/kr/co/mybrain/ai/KoreanScheduleRangeParser.java \
+            app/src/main/java/kr/co/mybrain/ai/QuickInputParser.java \
+            scripts/ParserRegressionTest.java
+          java -cp build/parser-regression ParserRegressionTest
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
