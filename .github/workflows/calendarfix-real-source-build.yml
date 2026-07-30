@@ -1,42 +1,34 @@
-name: CalendarFix v1.5.12 Gradle APK
+name: Build Real CalendarFix v1.5.12 APK
 
 on:
   push:
     branches:
       - calendarfix-v1512-gradle-build
-    paths:
-      - 'android-build/calendarfix-v1512/source.zip'
-      - '.github/workflows/calendarfix-v1512-gradle.yml'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
     steps:
-      - name: Checkout
+      - name: Checkout build branch
         uses: actions/checkout@v4
 
-      - name: Validate and extract attached source
+      - name: Decode and validate original Android source
         shell: bash
         run: |
           set -euo pipefail
-          SOURCE=android-build/calendarfix-v1512/source.zip
-          test -s "$SOURCE"
-          ls -lh "$SOURCE"
-          file "$SOURCE"
-          sha256sum "$SOURCE" | tee source.sha256
-          unzip -t "$SOURCE"
-          rm -rf build-source
-          mkdir build-source
-          unzip -q "$SOURCE" -d build-source
+          test -s android-build/calendarfix-v1512/source.zip.b64
+          mkdir -p build-input build-source
+          base64 --decode android-build/calendarfix-v1512/source.zip.b64 > build-input/source.zip
+          ls -lh build-input/source.zip
+          sha256sum build-input/source.zip | tee source.sha256
+          unzip -t build-input/source.zip
+          unzip -q build-input/source.zip -d build-source
           PROJECT_DIR=$(find build-source -name settings.gradle.kts -type f -printf '%h\n' | head -n 1)
           test -n "$PROJECT_DIR"
           test -f "$PROJECT_DIR/app/build.gradle.kts"
+          test -f "$PROJECT_DIR/app/src/main/res/layout/activity_calendar.xml"
           grep -q 'versionName = "1.5.12"' "$PROJECT_DIR/app/build.gradle.kts"
           grep -q 'android:layout_height="344dp"' "$PROJECT_DIR/app/src/main/res/layout/activity_calendar.xml"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
@@ -58,15 +50,16 @@ jobs:
       - name: Install Android API 36
         shell: bash
         run: |
+          set -euo pipefail
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
 
-      - name: Run tests and build APK
+      - name: Run unit tests and build real debug APK
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          gradle --no-daemon --stacktrace testDebugUnitTest assembleDebug
+          gradle --no-daemon --stacktrace clean testDebugUnitTest assembleDebug
 
       - name: Verify APK signature and manifest
         shell: bash
@@ -74,19 +67,20 @@ jobs:
           set -euo pipefail
           APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apksigner.txt
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep -q "package: name='com.mybrain.app.debug'" apk-badging.txt
-          grep -q "versionName='1.5.12-debug'" apk-badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apksigner-report.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee aapt-badging.txt
+          grep -q "package: name='com.mybrain.app.debug'" aapt-badging.txt
+          grep -q "versionName='1.5.12-debug'" aapt-badging.txt
           mkdir -p out
-          cp "$APK" out/MyBrain-Android-v1.5.12-CalendarFix-debug.apk
-          sha256sum out/MyBrain-Android-v1.5.12-CalendarFix-debug.apk > out/MyBrain-Android-v1.5.12-CalendarFix-debug.apk.sha256
-          cp apksigner.txt apk-badging.txt source.sha256 out/
+          cp "$APK" out/MyBrain-Android-v1.5.12-CalendarFix-REAL-GRADLE-debug.apk
+          sha256sum out/MyBrain-Android-v1.5.12-CalendarFix-REAL-GRADLE-debug.apk > out/MyBrain-Android-v1.5.12-CalendarFix-REAL-GRADLE-debug.apk.sha256
+          cp source.sha256 apksigner-report.txt aapt-badging.txt out/
+          unzip -t out/MyBrain-Android-v1.5.12-CalendarFix-REAL-GRADLE-debug.apk
 
       - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: MyBrain-Android-v1.5.12-CalendarFix-debug
+          name: MyBrain-Android-v1.5.12-CalendarFix-REAL-GRADLE-debug
           path: out/*
           if-no-files-found: error
           retention-days: 30
