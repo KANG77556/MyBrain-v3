@@ -82,14 +82,12 @@ jobs:
           gradle --no-daemon :app:dependencies --configuration debugRuntimeClasspath
           gradle --no-daemon :app:dependencies --configuration debugUnitTestRuntimeClasspath
 
-      - name: Package offline build toolchain
+      - name: Package and split offline build toolchain
         shell: bash
         run: |
           set -euo pipefail
           GRADLE_BIN=$(readlink -f "$(command -v gradle)")
           GRADLE_HOME=$(dirname "$(dirname "$GRADLE_BIN")")
-          echo "GRADLE_HOME=$GRADLE_HOME"
-          du -sh "$GRADLE_HOME" "$HOME/.gradle/caches" "$ANDROID_HOME/build-tools/36.0.0" "$ANDROID_HOME/platforms/android-36" "$ANDROID_HOME/platform-tools"
           mkdir -p /tmp/calendarfix-toolchain/gradle /tmp/calendarfix-toolchain/android-sdk /tmp/calendarfix-toolchain/gradle-user-home
           cp -a "$GRADLE_HOME" /tmp/calendarfix-toolchain/gradle/home
           cp -a "$HOME/.gradle/caches" /tmp/calendarfix-toolchain/gradle-user-home/caches
@@ -100,14 +98,33 @@ jobs:
           cd /tmp
           tar --zstd -cf CalendarFix-Android-Offline-Toolchain.tar.zst calendarfix-toolchain
           sha256sum CalendarFix-Android-Offline-Toolchain.tar.zst > CalendarFix-Android-Offline-Toolchain.tar.zst.sha256
-          ls -lh CalendarFix-Android-Offline-Toolchain.tar.zst
+          split -b 300M -d -a 2 CalendarFix-Android-Offline-Toolchain.tar.zst CalendarFix-Android-Offline-Toolchain.part-
+          ls -lh CalendarFix-Android-Offline-Toolchain.tar.zst CalendarFix-Android-Offline-Toolchain.part-*
 
-      - name: Upload offline toolchain
+      - name: Upload toolchain part 00
         uses: actions/upload-artifact@v4
         with:
-          name: CalendarFix-Android-Offline-Toolchain
+          name: CalendarFix-Toolchain-Part-00
+          path: /tmp/CalendarFix-Android-Offline-Toolchain.part-00
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload toolchain part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: CalendarFix-Toolchain-Part-01
+          path: /tmp/CalendarFix-Android-Offline-Toolchain.part-01
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload toolchain part 02 and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: CalendarFix-Toolchain-Part-02
           path: |
-            /tmp/CalendarFix-Android-Offline-Toolchain.tar.zst
+            /tmp/CalendarFix-Android-Offline-Toolchain.part-02
             /tmp/CalendarFix-Android-Offline-Toolchain.tar.zst.sha256
           if-no-files-found: error
           compression-level: 0
