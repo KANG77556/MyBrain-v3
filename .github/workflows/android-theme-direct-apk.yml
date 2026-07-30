@@ -1,4 +1,4 @@
-name: Android Redesigned Home APK
+name: Android Range Analysis APK
 
 on:
   workflow_dispatch:
@@ -40,6 +40,7 @@ jobs:
           javac -encoding UTF-8 -d build/parser-regression \
             app/src/main/java/kr/co/mybrain/ai/AiAnalysisResult.java \
             app/src/main/java/kr/co/mybrain/ai/KoreanTimeRangeParser.java \
+            app/src/main/java/kr/co/mybrain/ai/KoreanWeekRangeParser.java \
             app/src/main/java/kr/co/mybrain/ai/KoreanScheduleRangeParser.java \
             app/src/main/java/kr/co/mybrain/ai/QuickInputParser.java \
             scripts/ParserRegressionTest.java
@@ -59,15 +60,17 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Validate redesigned home, theme and overlap fix
+      - name: Validate redesigned home and range analysis
         shell: bash
         run: |
           python3 scripts/validate_redesigned_home_v1104.py
           grep -q 'KEY_THEME_MODE' app/src/main/java/kr/co/mybrain/ai/ThemeController.java
-          grep -q 'bottomMargin = dp(activity, 80)' app/src/main/java/kr/co/mybrain/ai/HomeLayoutPolishEnhancer.java
-          grep -q 'dp(activity, 176)' app/src/main/java/kr/co/mybrain/ai/HomeLayoutPolishEnhancer.java
           grep -q 'HomeLayoutPolishEnhancer.install' app/src/main/java/kr/co/mybrain/ai/MyBrainApplication.java
-          grep -q "versionName '1.10.5-layout-polish'" app/build.gradle
+          grep -q 'KoreanRangeAnalysisEnhancer.install' app/src/main/java/kr/co/mybrain/ai/MyBrainApplication.java
+          grep -q '이번주' app/src/main/java/kr/co/mybrain/ai/KoreanWeekRangeParser.java
+          grep -q 'item.endTime = time.endTime' app/src/main/java/kr/co/mybrain/ai/KoreanWeekRangeParser.java
+          grep -q 'changed + "건에 종료 시간을 함께 저장했습니다."' app/src/main/java/kr/co/mybrain/ai/UnifiedQuickInputActivityV5.java
+          grep -q "versionName '1.10.6-range-analysis'" app/build.gradle
 
       - name: Build debug APK
         shell: bash
@@ -78,16 +81,16 @@ jobs:
         run: |
           APK=$(find app/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)
           test -s "$APK"
-          cp "$APK" MyBrain-Android-v1.10.5-Layout-Polish-debug.apk
-          unzip -t MyBrain-Android-v1.10.5-Layout-Polish-debug.apk >/dev/null
-          sha256sum MyBrain-Android-v1.10.5-Layout-Polish-debug.apk > MyBrain-Android-v1.10.5-Layout-Polish-debug.apk.sha256
+          cp "$APK" MyBrain-Android-v1.10.6-Range-Analysis-debug.apk
+          unzip -t MyBrain-Android-v1.10.6-Range-Analysis-debug.apk >/dev/null
+          sha256sum MyBrain-Android-v1.10.6-Range-Analysis-debug.apk > MyBrain-Android-v1.10.6-Range-Analysis-debug.apk.sha256
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MyBrain-Android-v1.10.5-Layout-Polish-debug
+          name: MyBrain-Android-v1.10.6-Range-Analysis-debug
           path: |
-            MyBrain-Android-v1.10.5-Layout-Polish-debug.apk
-            MyBrain-Android-v1.10.5-Layout-Polish-debug.apk.sha256
+            MyBrain-Android-v1.10.6-Range-Analysis-debug.apk
+            MyBrain-Android-v1.10.6-Range-Analysis-debug.apk.sha256
           if-no-files-found: error
           retention-days: 30
