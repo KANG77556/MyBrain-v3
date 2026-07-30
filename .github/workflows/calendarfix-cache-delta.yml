@@ -1,0 +1,86 @@
+name: Export CalendarFix Cache Delta
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/calendarfix-cache-delta.yml'
+  workflow_dispatch:
+
+jobs:
+  cache-delta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - uses: android-actions/setup-android@v3
+      - name: Install API 36
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Compile Kotlin dummy app and collect missing cache files
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=/tmp/calendarfix-kotlin-prefetch
+          rm -rf "$P"
+          mkdir -p "$P/app/src/main/kotlin/com/mybrain/prefetch"
+          cat > "$P/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "CalendarFixKotlinPrefetch"
+          include(":app")
+          EOF
+          cat > "$P/build.gradle.kts" <<'EOF'
+          plugins { id("com.android.application") version "9.1.1" apply false }
+          EOF
+          cat > "$P/app/build.gradle.kts" <<'EOF'
+          plugins { id("com.android.application") }
+          android {
+              namespace = "com.mybrain.prefetch"
+              compileSdk = 36
+              defaultConfig { applicationId = "com.mybrain.prefetch"; minSdk = 26; targetSdk = 36; versionCode = 1; versionName = "1" }
+              compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+          }
+          dependencies {
+              implementation("androidx.core:core-ktx:1.16.0")
+              implementation("androidx.biometric:biometric:1.1.0")
+              implementation("net.zetetic:sqlcipher-android:4.17.0@aar")
+              implementation("androidx.sqlite:sqlite:2.6.2")
+              implementation("com.google.mlkit:text-recognition-korean:16.0.1")
+              implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+          }
+          EOF
+          cat > "$P/app/src/main/AndroidManifest.xml" <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application /></manifest>
+          EOF
+          cat > "$P/app/src/main/kotlin/com/mybrain/prefetch/Dummy.kt" <<'EOF'
+          package com.mybrain.prefetch
+          object Dummy { fun value(): String = "calendarfix" }
+          EOF
+          cd "$P"
+          gradle --no-daemon :app:assembleDebug
+          ROOT="$HOME/.gradle/caches/modules-2/files-2.1"
+          test -d "$ROOT/androidx.arch.core/core-runtime/2.1.0"
+          test -d "$ROOT/androidx.collection/collection/1.1.0"
+          cd "$ROOT"
+          tar -cJf /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz \
+            androidx.arch.core/core-runtime/2.1.0 \
+            androidx.collection/collection/1.1.0
+          sha256sum /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz > /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz.sha256
+          ls -lh /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CalendarFix-Gradle-Cache-Delta
+          path: |
+            /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz
+            /tmp/CalendarFix-Gradle-Cache-Delta.tar.xz.sha256
+          if-no-files-found: error
+          retention-days: 7
