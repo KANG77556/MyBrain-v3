@@ -1,0 +1,77 @@
+name: Android Theme Menu APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android-build/MyBrain-Android-v1.9.0-Theme-Menu-BuildReady.zip'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Extract source
+        shell: bash
+        run: |
+          SOURCE='android-build/MyBrain-Android-v1.9.0-Theme-Menu-BuildReady.zip'
+          test -s "$SOURCE"
+          rm -rf build-source
+          mkdir build-source
+          unzip -q "$SOURCE" -d build-source
+          PROJECT_DIR=$(find build-source -name gradlew -type f -printf '%h\n' | head -n 1)
+          test -n "$PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Validate source
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+          chmod +x gradlew scripts/run_core_tests.sh
+          ./scripts/run_core_tests.sh
+          python3 scripts/validate_theme_menu_v190.py
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+          ./gradlew --no-daemon clean testDebugUnitTest assembleDebug
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK=$(find "$PROJECT_DIR/app/build/outputs/apk/debug" -name '*.apk' -type f | head -n 1)
+          test -s "$APK"
+          cp "$APK" "$PROJECT_DIR/MyBrain-Android-v1.9.0-Theme-Menu-debug.apk"
+          sha256sum "$PROJECT_DIR/MyBrain-Android-v1.9.0-Theme-Menu-debug.apk" > "$PROJECT_DIR/MyBrain-Android-v1.9.0-Theme-Menu-debug.apk.sha256"
+          unzip -t "$PROJECT_DIR/MyBrain-Android-v1.9.0-Theme-Menu-debug.apk" >/dev/null
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyBrain-Android-v1.9.0-Theme-Menu-debug
+          path: |
+            ${{ env.PROJECT_DIR }}/MyBrain-Android-v1.9.0-Theme-Menu-debug.apk
+            ${{ env.PROJECT_DIR }}/MyBrain-Android-v1.9.0-Theme-Menu-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
