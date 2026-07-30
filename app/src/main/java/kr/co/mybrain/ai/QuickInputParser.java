@@ -8,11 +8,7 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 음성 인식 또는 OCR 원문을 한 건의 편집 초안으로 바꾸는 기기 내부 분석기입니다.
- * 여러 날짜 범위와 복합 업무는 AI 메시지 분석 화면에서 다시 확인하도록 하고,
- * 이 클래스는 사용자가 곧바로 직접 편집하려는 경우의 기본값만 안전하게 제안합니다.
- */
+/** 음성·OCR·직접 입력 원문을 기기 내부에서 안전하게 구조화합니다. */
 public final class QuickInputParser {
     private static final Pattern EXPLICIT_DATE = Pattern.compile(
             "(?:(\\d{4})[년./-]\\s*)?(\\d{1,2})[월./-]\\s*(\\d{1,2})일?");
@@ -24,6 +20,11 @@ public final class QuickInputParser {
     private QuickInputParser() { }
 
     public static AiAnalysisResult parseSingle(String rawText) {
+        return parseSingle(rawText, new Date());
+    }
+
+    /** 테스트와 과거·미래 기준 시각 분석을 위해 기준 날짜를 명시할 수 있습니다. */
+    public static AiAnalysisResult parseSingle(String rawText, Date referenceTime) {
         String raw = rawText == null ? "" : rawText.trim();
         AiAnalysisResult result = new AiAnalysisResult();
         result.content = raw;
@@ -32,14 +33,14 @@ public final class QuickInputParser {
             return result;
         }
 
-        List<AiAnalysisResult> range = KoreanScheduleRangeParser.parse(raw, new Date());
+        List<AiAnalysisResult> range = KoreanScheduleRangeParser.parse(raw, referenceTime);
         if (!range.isEmpty()) {
             AiAnalysisResult first = range.get(0);
             first.content = raw;
             return first;
         }
 
-        result.date = parseDate(raw);
+        result.date = parseDate(raw, referenceTime);
         result.time = parseTime(raw);
         result.repeatType = parseRepeat(raw);
         result.type = classify(raw, result.date, result.time);
@@ -61,8 +62,9 @@ public final class QuickInputParser {
         return "메모";
     }
 
-    private static String parseDate(String text) {
+    private static String parseDate(String text, Date referenceTime) {
         Calendar calendar = Calendar.getInstance();
+        calendar.setTime(referenceTime == null ? new Date() : referenceTime);
         if (text.contains("모레")) {
             calendar.add(Calendar.DAY_OF_MONTH, 2);
             return formatDate(calendar);
