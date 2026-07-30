@@ -1,0 +1,93 @@
+name: Export CalendarFix Kotlin Maven Cache
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/calendarfix-kotlin-maven-export.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android API 36
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Compile Kotlin dummy project
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=/tmp/kotlin-prefetch
+          rm -rf "$P"
+          mkdir -p "$P/app/src/main/kotlin/com/mybrain/prefetch"
+          cat > "$P/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "KotlinPrefetch"
+          include(":app")
+          EOF
+          cat > "$P/build.gradle.kts" <<'EOF'
+          plugins { id("com.android.application") version "9.1.1" apply false }
+          EOF
+          cat > "$P/app/build.gradle.kts" <<'EOF'
+          plugins { id("com.android.application") }
+          android {
+              namespace = "com.mybrain.prefetch"
+              compileSdk = 36
+              defaultConfig { applicationId = "com.mybrain.prefetch"; minSdk = 26; targetSdk = 36; versionCode = 1; versionName = "1" }
+              compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+          }
+          EOF
+          cat > "$P/app/src/main/AndroidManifest.xml" <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application /></manifest>
+          EOF
+          cat > "$P/app/src/main/kotlin/com/mybrain/prefetch/Dummy.kt" <<'EOF'
+          package com.mybrain.prefetch
+          object Dummy { fun value(): String = "calendarfix" }
+          EOF
+          cd "$P"
+          gradle --no-daemon :app:compileDebugKotlin
+      - name: Convert Gradle Kotlin cache to local Maven repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$HOME/.gradle/caches/modules-2/files-2.1"
+          OUT=/tmp/calendarfix-kotlin-maven
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          for GROUP in org.jetbrains.kotlin org.jetbrains.kotlinx; do
+            GROUP_DIR="$ROOT/$GROUP"
+            test -d "$GROUP_DIR"
+            find "$GROUP_DIR" -mindepth 2 -maxdepth 2 -type d | while read -r VERSION_DIR; do
+              ARTIFACT=$(basename "$(dirname "$VERSION_DIR")")
+              VERSION=$(basename "$VERSION_DIR")
+              DEST="$OUT/${GROUP//./\/}/$ARTIFACT/$VERSION"
+              mkdir -p "$DEST"
+              find "$VERSION_DIR" -mindepth 2 -maxdepth 2 -type f -exec cp -f {} "$DEST/" \;
+            done
+          done
+          find "$OUT" -type f | sort
+          tar -C /tmp -cJf /tmp/CalendarFix-Kotlin-Local-Maven.tar.xz calendarfix-kotlin-maven
+          sha256sum /tmp/CalendarFix-Kotlin-Local-Maven.tar.xz > /tmp/CalendarFix-Kotlin-Local-Maven.tar.xz.sha256
+          ls -lh /tmp/CalendarFix-Kotlin-Local-Maven.tar.xz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CalendarFix-Kotlin-Local-Maven
+          path: |
+            /tmp/CalendarFix-Kotlin-Local-Maven.tar.xz
+            /tmp/CalendarFix-Kotlin-Local-Maven.tar.xz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
