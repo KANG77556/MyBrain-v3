@@ -80,7 +80,7 @@ jobs:
           EOF
           cd /tmp/calendarfix-prefetch
           gradle --no-daemon :app:dependencies --configuration debugRuntimeClasspath
-          gradle --no-daemon :app:dependencies --configuration testDebugRuntimeClasspath
+          gradle --no-daemon :app:dependencies --configuration debugUnitTestRuntimeClasspath
 
       - name: Package offline build toolchain
         shell: bash
