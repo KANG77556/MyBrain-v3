@@ -12,7 +12,8 @@
         <activity android:name=".NotificationPermissionActivity" android:exported="true" android:noHistory="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
-        <activity android:name=".MainWorkspaceActivityV3" android:exported="false" android:label="MyBrain AI" />
+        <activity android:name=".RedesignedMainActivity" android:exported="false" android:label="MyBrain AI" />
+        <activity android:name=".MainWorkspaceActivityV3" android:exported="false" android:label="MyBrain AI 이전 화면" />
         <activity android:name=".DiagnosticsActivity" android:exported="false" android:label="기기 진단·테스트" />
         <activity android:name=".MainWorkspaceActivityV2" android:exported="false" android:label="MyBrain AI" />
         <activity android:name=".MainWorkspaceActivity" android:exported="false" android:label="MyBrain AI" />
