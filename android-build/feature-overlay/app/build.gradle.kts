@@ -51,6 +51,7 @@ android {
         "META-INF/NOTICE*",
     )
 
+    sourceSets["androidTest"].assets.srcDir("$projectDir/schemas")
     testOptions.unitTests.isIncludeAndroidResources = true
 
     buildTypes {
