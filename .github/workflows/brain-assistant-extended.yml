@@ -21,7 +21,7 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
 
     steps:
       - name: Checkout source carrier
@@ -116,7 +116,19 @@ jobs:
           AI_GATEWAY_BASE_URL=https://example.invalid/
           EOF
 
-      - name: Compile Android tests
+      - name: Compile tests and build debug APK
         working-directory: brain-assistant
         shell: bash
-        run: ./gradlew --no-daemon --stacktrace :app:assembleDebugAndroidTest
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            :app:assembleDebugAndroidTest \
+            :app:assembleDebug
+
+      - name: Run Room migration test on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: cd brain-assistant && ./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.seongho.brainassistant.core.database.Migration1To2Test
