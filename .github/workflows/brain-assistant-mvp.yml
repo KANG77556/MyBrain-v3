@@ -1,0 +1,107 @@
+name: Brain Assistant MVP Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/brain-assistant-mvp
+    paths:
+      - 'android-build/brain-assistant-source.part*'
+      - '.github/workflows/brain-assistant-mvp.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout source carrier
+        uses: actions/checkout@v4
+
+      - name: Reconstruct project source
+        shell: bash
+        run: |
+          cat android-build/brain-assistant-source.part* > brain-assistant-source.b64
+          base64 --decode brain-assistant-source.b64 > brain-assistant-source.tar.xz
+          echo '624b49911a8c2f3690898801cdf74d2ec8fc0765788ebdb19032389fd1cb4acf  brain-assistant-source.tar.xz' | sha256sum --check
+          tar -xJf brain-assistant-source.tar.xz
+          test -x brain-assistant/gradlew || chmod +x brain-assistant/gradlew
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 37
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-37' 'build-tools;36.0.0'
+
+      - name: Configure non-secret build values
+        shell: bash
+        run: |
+          cat > brain-assistant/local.properties <<'EOF'
+          GOOGLE_WEB_CLIENT_ID=1234567890-example.apps.googleusercontent.com
+          AI_GATEWAY_BASE_URL=https://example.invalid/
+          EOF
+
+      - name: Run Android tests, lint, and APK builds
+        working-directory: brain-assistant
+        shell: bash
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleDebug \
+            :app:assembleRelease \
+            :app:assembleDebugAndroidTest
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: brain-assistant/server/pyproject.toml
+
+      - name: Run AI gateway tests
+        working-directory: brain-assistant
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e 'server[test]'
+          python -m pytest -q server/tests
+
+      - name: Prepare artifacts
+        if: success()
+        working-directory: brain-assistant
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/Brain-Assistant-MVP-debug.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk dist/Brain-Assistant-MVP-release-unsigned.apk
+          cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk dist/Brain-Assistant-MVP-androidTest.apk
+          sha256sum dist/*.apk > dist/SHA256SUMS.txt
+          unzip -t dist/Brain-Assistant-MVP-debug.apk >/dev/null
+
+      - name: Upload APKs and reports
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brain-Assistant-MVP-${{ github.sha }}
+          path: |
+            brain-assistant/dist/*
+            brain-assistant/app/build/reports/tests/**
+            brain-assistant/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
+          retention-days: 30
