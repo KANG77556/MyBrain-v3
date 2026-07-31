@@ -7,17 +7,18 @@ on:
       - feature/brain-assistant-mvp
     paths:
       - 'android-build/brain-assistant-source.part*'
+      - 'android-build/device-calendar.patch'
       - '.github/workflows/brain-assistant-mvp.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'android-build/brain-assistant-source.part*'
+      - 'android-build/device-calendar.patch'
       - '.github/workflows/brain-assistant-mvp.yml'
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   build-and-test:
@@ -58,7 +59,10 @@ jobs:
 
           scheduler = Path('brain-assistant/app/src/main/java/com/seongho/brainassistant/core/notification/NotificationScheduler.kt')
           text = scheduler.read_text()
-          text = text.replace('import android.Manifest\nimport android.content.Context\n', 'import android.Manifest\nimport android.app.Notification\nimport android.content.Context\n')
+          text = text.replace(
+              'import android.Manifest\nimport android.content.Context\n',
+              'import android.Manifest\nimport android.app.Notification\nimport android.content.Context\n',
+          )
           text = text.replace(
               '        NotificationManagerCompat.from(applicationContext)\n            .notify(inputData.getInt(KEY_NOTIFICATION_ID, title.hashCode()), notification)\n',
               '        applicationContext.postNotificationIfAllowed(\n            inputData.getInt(KEY_NOTIFICATION_ID, title.hashCode()),\n            notification,\n        )\n',
@@ -82,9 +86,8 @@ jobs:
           )
           scheduler.write_text(text)
           PY
-          grep -n 'compileSdk = 36' brain-assistant/app/build.gradle.kts
-          grep -E '^(lifecycle|core) = ' brain-assistant/gradle/libs.versions.toml
-          grep -R 'postNotificationIfAllowed' -n brain-assistant/app/src/main/java/com/seongho/brainassistant/core/notification
+          patch -d brain-assistant -p1 < android-build/device-calendar.patch
+          grep -R '기기 캘린더 연결' -n brain-assistant/app/src/main/java
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -113,59 +116,15 @@ jobs:
           EOF
 
       - name: Run Android tests, lint, and APK builds
-        id: android_build
         working-directory: brain-assistant
         shell: bash
         run: |
-          set +e
           ./gradlew --no-daemon --stacktrace \
             :app:testDebugUnitTest \
             :app:lintDebug \
             :app:assembleDebug \
             :app:assembleRelease \
-            :app:assembleDebugAndroidTest 2>&1 | tee gradle-build.log
-          status=${PIPESTATUS[0]}
-          tail -n 220 gradle-build.log > gradle-build-tail.log
-          find app/build -name 'lint-results-debug.txt' -print -exec cat {} \; > lint-results-debug.txt 2>/dev/null || true
-          exit "$status"
-
-      - name: Comment Android failure diagnostics
-        if: failure() && github.event_name == 'pull_request'
-        working-directory: brain-assistant
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        shell: bash
-        run: |
-          {
-            echo '## Android CI 실패 진단'
-            echo
-            echo '<details><summary>Lint 결과</summary>'
-            echo
-            echo '```text'
-            cat lint-results-debug.txt 2>/dev/null || echo 'Lint 결과 파일이 없습니다.'
-            echo '```'
-            echo '</details>'
-            echo
-            echo '<details><summary>Gradle 로그 마지막 220줄</summary>'
-            echo
-            echo '```text'
-            cat gradle-build-tail.log 2>/dev/null || echo 'Gradle 로그 파일을 생성하지 못했습니다.'
-            echo '```'
-            echo '</details>'
-          } > pr-diagnostic.md
-          gh pr comment "$PR_NUMBER" --body-file pr-diagnostic.md
-
-      - name: Upload failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Brain-Assistant-MVP-failure-${{ github.sha }}
-          path: |
-            brain-assistant/gradle-build*.log
-            brain-assistant/lint-results-debug.txt
-          if-no-files-found: warn
-          retention-days: 7
+            :app:assembleDebugAndroidTest
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
@@ -183,7 +142,6 @@ jobs:
           python -m pytest -q server/tests
 
       - name: Prepare artifacts
-        if: success()
         working-directory: brain-assistant
         shell: bash
         run: |
@@ -195,7 +153,6 @@ jobs:
           unzip -t dist/Brain-Assistant-MVP-debug.apk >/dev/null
 
       - name: Upload APKs and reports
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Brain-Assistant-MVP-${{ github.sha }}
