@@ -8,6 +8,12 @@ on:
     paths:
       - 'android-build/brain-assistant-source.part*'
       - '.github/workflows/brain-assistant-mvp.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'android-build/brain-assistant-source.part*'
+      - '.github/workflows/brain-assistant-mvp.yml'
 
 permissions:
   contents: read
