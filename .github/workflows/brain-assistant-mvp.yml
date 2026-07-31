@@ -37,15 +37,54 @@ jobs:
           tar -xJf brain-assistant-source.tar.xz
           test -x brain-assistant/gradlew || chmod +x brain-assistant/gradlew
 
-      - name: Apply Android SDK 36 compatibility patch
+      - name: Apply verified source fixes
         shell: bash
         run: |
           sed -i 's/compileSdk = 37/compileSdk = 36/g' brain-assistant/app/build.gradle.kts
           sed -i 's/lifecycle = "2.11.0"/lifecycle = "2.10.0"/g' brain-assistant/gradle/libs.versions.toml
           sed -i 's/core = "1.19.0"/core = "1.17.0"/g' brain-assistant/gradle/libs.versions.toml
           sed -i '/import androidx.compose.ui.test.assertDoesNotExist/d' brain-assistant/app/src/androidTest/java/com/seongho/brainassistant/feature/review/ReviewScreenTest.kt
+          python - <<'PY'
+          from pathlib import Path
+
+          briefing = Path('brain-assistant/app/src/main/java/com/seongho/brainassistant/core/notification/BriefingWorker.kt')
+          text = briefing.read_text()
+          text = text.replace('import androidx.core.app.NotificationManagerCompat\n', '')
+          text = text.replace(
+              '        NotificationManagerCompat.from(applicationContext).notify(730, notification)\n',
+              '        applicationContext.postNotificationIfAllowed(730, notification)\n',
+          )
+          briefing.write_text(text)
+
+          scheduler = Path('brain-assistant/app/src/main/java/com/seongho/brainassistant/core/notification/NotificationScheduler.kt')
+          text = scheduler.read_text()
+          text = text.replace('import android.Manifest\nimport android.content.Context\n', 'import android.Manifest\nimport android.app.Notification\nimport android.content.Context\n')
+          text = text.replace(
+              '        NotificationManagerCompat.from(applicationContext)\n            .notify(inputData.getInt(KEY_NOTIFICATION_ID, title.hashCode()), notification)\n',
+              '        applicationContext.postNotificationIfAllowed(\n            inputData.getInt(KEY_NOTIFICATION_ID, title.hashCode()),\n            notification,\n        )\n',
+          )
+          text = text.replace(
+              'internal fun Context.canPostNotifications(): Boolean =\n    android.os.Build.VERSION.SDK_INT < 33 ||\n        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED\n',
+              '''internal fun Context.canPostNotifications(): Boolean =
+              android.os.Build.VERSION.SDK_INT < 33 ||
+                  ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+          internal fun Context.postNotificationIfAllowed(id: Int, notification: Notification): Boolean {
+              if (!canPostNotifications()) return false
+              return try {
+                  NotificationManagerCompat.from(this).notify(id, notification)
+                  true
+              } catch (_: SecurityException) {
+                  false
+              }
+          }
+          ''',
+          )
+          scheduler.write_text(text)
+          PY
           grep -n 'compileSdk = 36' brain-assistant/app/build.gradle.kts
           grep -E '^(lifecycle|core) = ' brain-assistant/gradle/libs.versions.toml
+          grep -R 'postNotificationIfAllowed' -n brain-assistant/app/src/main/java/com/seongho/brainassistant/core/notification
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -87,6 +126,7 @@ jobs:
             :app:assembleDebugAndroidTest 2>&1 | tee gradle-build.log
           status=${PIPESTATUS[0]}
           tail -n 220 gradle-build.log > gradle-build-tail.log
+          find app/build -name 'lint-results-debug.txt' -print -exec cat {} \; > lint-results-debug.txt 2>/dev/null || true
           exit "$status"
 
       - name: Comment Android failure diagnostics
@@ -99,6 +139,13 @@ jobs:
         run: |
           {
             echo '## Android CI 실패 진단'
+            echo
+            echo '<details><summary>Lint 결과</summary>'
+            echo
+            echo '```text'
+            cat lint-results-debug.txt 2>/dev/null || echo 'Lint 결과 파일이 없습니다.'
+            echo '```'
+            echo '</details>'
             echo
             echo '<details><summary>Gradle 로그 마지막 220줄</summary>'
             echo
@@ -114,7 +161,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Brain-Assistant-MVP-failure-${{ github.sha }}
-          path: brain-assistant/gradle-build*.log
+          path: |
+            brain-assistant/gradle-build*.log
+            brain-assistant/lint-results-debug.txt
           if-no-files-found: warn
           retention-days: 7
 
