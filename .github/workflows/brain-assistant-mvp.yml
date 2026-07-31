@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   build-and-test:
@@ -69,15 +70,49 @@ jobs:
           EOF
 
       - name: Run Android tests, lint, and APK builds
+        id: android_build
         working-directory: brain-assistant
         shell: bash
         run: |
+          set +e
           ./gradlew --no-daemon --stacktrace \
             :app:testDebugUnitTest \
             :app:lintDebug \
             :app:assembleDebug \
             :app:assembleRelease \
-            :app:assembleDebugAndroidTest
+            :app:assembleDebugAndroidTest 2>&1 | tee gradle-build.log
+          status=${PIPESTATUS[0]}
+          tail -n 220 gradle-build.log > gradle-build-tail.log
+          exit "$status"
+
+      - name: Comment Android failure diagnostics
+        if: failure() && github.event_name == 'pull_request'
+        working-directory: brain-assistant
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          {
+            echo '## Android CI 실패 진단'
+            echo
+            echo '<details><summary>Gradle 로그 마지막 220줄</summary>'
+            echo
+            echo '```text'
+            cat gradle-build-tail.log 2>/dev/null || echo 'Gradle 로그 파일을 생성하지 못했습니다.'
+            echo '```'
+            echo '</details>'
+          } > pr-diagnostic.md
+          gh pr comment "$PR_NUMBER" --body-file pr-diagnostic.md
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brain-Assistant-MVP-failure-${{ github.sha }}
+          path: brain-assistant/gradle-build*.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
