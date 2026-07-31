@@ -8,6 +8,12 @@ on:
     paths:
       - 'android-build/feature-overlay/**'
       - '.github/workflows/brain-assistant-extended.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'android-build/feature-overlay/**'
+      - '.github/workflows/brain-assistant-extended.yml'
 
 permissions:
   contents: read
