@@ -1,0 +1,75 @@
+name: Generate Brain Assistant Room V1 Schema
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/brain-assistant-mvp
+    paths:
+      - '.github/workflows/generate-brain-assistant-v1-schema.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  generate-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout source carrier
+        uses: actions/checkout@v4
+
+      - name: Reconstruct original version-one source
+        shell: bash
+        run: |
+          cat android-build/brain-assistant-source.part* > brain-assistant-source.b64
+          base64 --decode brain-assistant-source.b64 > brain-assistant-source.tar.xz
+          echo '624b49911a8c2f3690898801cdf74d2ec8fc0765788ebdb19032389fd1cb4acf  brain-assistant-source.tar.xz' | sha256sum --check
+          tar -xJf brain-assistant-source.tar.xz
+          chmod +x brain-assistant/gradlew
+          sed -i 's/compileSdk = 37/compileSdk = 36/g' brain-assistant/app/build.gradle.kts
+          sed -i 's/lifecycle = "2.11.0"/lifecycle = "2.10.0"/g' brain-assistant/gradle/libs.versions.toml
+          sed -i 's/core = "1.19.0"/core = "1.17.0"/g' brain-assistant/gradle/libs.versions.toml
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Configure non-secret values
+        shell: bash
+        run: |
+          cat > brain-assistant/local.properties <<'EOF'
+          GOOGLE_WEB_CLIENT_ID=1234567890-example.apps.googleusercontent.com
+          AI_GATEWAY_BASE_URL=https://example.invalid/
+          EOF
+
+      - name: Generate Room version-one schema
+        working-directory: brain-assistant
+        shell: bash
+        run: |
+          ./gradlew --no-daemon --stacktrace :app:kspDebugKotlin
+          test -f app/schemas/com.seongho.brainassistant.core.database.AppDatabase/1.json
+          sha256sum app/schemas/com.seongho.brainassistant.core.database.AppDatabase/1.json
+
+      - name: Upload schema fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brain-Assistant-Room-V1-Schema-${{ github.sha }}
+          path: brain-assistant/app/schemas/com.seongho.brainassistant.core.database.AppDatabase/1.json
+          if-no-files-found: error
+          retention-days: 7
