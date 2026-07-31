@@ -43,6 +43,7 @@ jobs:
           sed -i 's/compileSdk = 37/compileSdk = 36/g' brain-assistant/app/build.gradle.kts
           sed -i 's/lifecycle = "2.11.0"/lifecycle = "2.10.0"/g' brain-assistant/gradle/libs.versions.toml
           sed -i 's/core = "1.19.0"/core = "1.17.0"/g' brain-assistant/gradle/libs.versions.toml
+          sed -i '/import androidx.compose.ui.test.assertDoesNotExist/d' brain-assistant/app/src/androidTest/java/com/seongho/brainassistant/feature/review/ReviewScreenTest.kt
           grep -n 'compileSdk = 36' brain-assistant/app/build.gradle.kts
           grep -E '^(lifecycle|core) = ' brain-assistant/gradle/libs.versions.toml
 
