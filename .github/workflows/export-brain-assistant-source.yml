@@ -1,0 +1,46 @@
+name: Export Brain Assistant Source
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/brain-assistant-mvp
+    paths:
+      - '.github/workflows/export-brain-assistant-source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout source carrier
+        uses: actions/checkout@v4
+
+      - name: Reconstruct project source
+        shell: bash
+        run: |
+          cat android-build/brain-assistant-source.part* > brain-assistant-source.b64
+          base64 --decode brain-assistant-source.b64 > brain-assistant-source.tar.xz
+          echo '624b49911a8c2f3690898801cdf74d2ec8fc0765788ebdb19032389fd1cb4acf  brain-assistant-source.tar.xz' | sha256sum --check
+          tar -xJf brain-assistant-source.tar.xz
+          test -f brain-assistant/app/build.gradle.kts
+
+      - name: Package reconstructed source
+        shell: bash
+        run: |
+          tar -cJf brain-assistant-reconstructed-source.tar.xz brain-assistant
+          sha256sum brain-assistant-reconstructed-source.tar.xz > brain-assistant-reconstructed-source.sha256
+
+      - name: Upload reconstructed source
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brain-Assistant-Reconstructed-Source-${{ github.sha }}
+          path: |
+            brain-assistant-reconstructed-source.tar.xz
+            brain-assistant-reconstructed-source.sha256
+          if-no-files-found: error
+          retention-days: 1
