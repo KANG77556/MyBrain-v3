@@ -8,6 +8,7 @@ on:
     paths:
       - 'android-build/brain-assistant-source.part*'
       - 'android-build/device-calendar.patch'
+      - 'android-build/dashboard-redesign.patch'
       - '.github/workflows/brain-assistant-mvp.yml'
   pull_request:
     branches:
@@ -15,6 +16,7 @@ on:
     paths:
       - 'android-build/brain-assistant-source.part*'
       - 'android-build/device-calendar.patch'
+      - 'android-build/dashboard-redesign.patch'
       - '.github/workflows/brain-assistant-mvp.yml'
 
 permissions:
@@ -87,7 +89,26 @@ jobs:
           scheduler.write_text(text)
           PY
           patch -d brain-assistant -p1 < android-build/device-calendar.patch
+          if [ -f android-build/dashboard-redesign.patch ]; then
+            patch -d brain-assistant -p1 < android-build/dashboard-redesign.patch
+          fi
           grep -R '기기 캘린더 연결' -n brain-assistant/app/src/main/java
+
+      - name: Package effective source for design work
+        shell: bash
+        run: |
+          tar -cJf brain-assistant-effective-source.tar.xz brain-assistant
+          sha256sum brain-assistant-effective-source.tar.xz > brain-assistant-effective-source.sha256
+
+      - name: Upload effective source
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brain-Assistant-Effective-Source-${{ github.sha }}
+          path: |
+            brain-assistant-effective-source.tar.xz
+            brain-assistant-effective-source.sha256
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
