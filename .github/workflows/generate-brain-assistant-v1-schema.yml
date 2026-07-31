@@ -9,7 +9,7 @@ on:
       - '.github/workflows/generate-brain-assistant-v1-schema.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate-schema:
@@ -17,8 +17,10 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - name: Checkout source carrier
+      - name: Checkout source carrier branch
         uses: actions/checkout@v4
+        with:
+          ref: feature/brain-assistant-mvp
 
       - name: Reconstruct original version-one source
         shell: bash
@@ -65,6 +67,22 @@ jobs:
           ./gradlew --no-daemon --stacktrace :app:kspDebugKotlin
           test -f app/schemas/com.seongho.brainassistant.core.database.AppDatabase/1.json
           sha256sum app/schemas/com.seongho.brainassistant.core.database.AppDatabase/1.json
+
+      - name: Commit canonical schema fixture
+        shell: bash
+        run: |
+          destination='android-build/feature-overlay/app/schemas/com.seongho.brainassistant.core.database.AppDatabase/1.json'
+          mkdir -p "$(dirname "$destination")"
+          cp brain-assistant/app/schemas/com.seongho.brainassistant.core.database.AppDatabase/1.json "$destination"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$destination"
+          if git diff --cached --quiet; then
+            echo 'Canonical schema fixture is already current.'
+          else
+            git commit -m 'test: add canonical room version one schema fixture'
+            git push origin HEAD:feature/brain-assistant-mvp
+          fi
 
       - name: Upload schema fixture
         uses: actions/upload-artifact@v4
