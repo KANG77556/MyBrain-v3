@@ -8,7 +8,7 @@ on:
     paths:
       - 'android-build/brain-assistant-source.part*'
       - 'android-build/device-calendar.patch'
-      - 'android-build/dashboard-redesign.patch'
+      - 'android-build/dashboard-overlay/**'
       - '.github/workflows/brain-assistant-mvp.yml'
   pull_request:
     branches:
@@ -16,7 +16,7 @@ on:
     paths:
       - 'android-build/brain-assistant-source.part*'
       - 'android-build/device-calendar.patch'
-      - 'android-build/dashboard-redesign.patch'
+      - 'android-build/dashboard-overlay/**'
       - '.github/workflows/brain-assistant-mvp.yml'
 
 permissions:
@@ -40,7 +40,7 @@ jobs:
           tar -xJf brain-assistant-source.tar.xz
           test -x brain-assistant/gradlew || chmod +x brain-assistant/gradlew
 
-      - name: Apply verified source fixes
+      - name: Apply verified source fixes and dashboard overlay
         shell: bash
         run: |
           sed -i 's/compileSdk = 37/compileSdk = 36/g' brain-assistant/app/build.gradle.kts
@@ -89,12 +89,11 @@ jobs:
           scheduler.write_text(text)
           PY
           patch -d brain-assistant -p1 < android-build/device-calendar.patch
-          if [ -f android-build/dashboard-redesign.patch ]; then
-            patch -d brain-assistant -p1 < android-build/dashboard-redesign.patch
-          fi
+          cp -R android-build/dashboard-overlay/. brain-assistant/
           grep -R '기기 캘린더 연결' -n brain-assistant/app/src/main/java
+          grep -R 'quick-capture-dock' -n brain-assistant/app/src/main/java
 
-      - name: Package effective source for design work
+      - name: Package effective source for review
         shell: bash
         run: |
           tar -cJf brain-assistant-effective-source.tar.xz brain-assistant
