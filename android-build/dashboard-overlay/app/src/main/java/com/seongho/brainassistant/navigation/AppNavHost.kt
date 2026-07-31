@@ -1,0 +1,196 @@
+package com.seongho.brainassistant.navigation
+
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.seongho.brainassistant.app.AppContainer
+import com.seongho.brainassistant.core.auth.CredentialManagerGoogleAuthGateway
+import com.seongho.brainassistant.feature.auth.AuthAction
+import com.seongho.brainassistant.feature.auth.AuthScreen
+import com.seongho.brainassistant.feature.auth.AuthViewModel
+import com.seongho.brainassistant.feature.capture.AndroidSpeechRecognizerAdapter
+import com.seongho.brainassistant.feature.capture.CaptureViewModel
+import com.seongho.brainassistant.feature.capture.SpeechInputController
+import com.seongho.brainassistant.feature.dashboard.DashboardAction
+import com.seongho.brainassistant.feature.dashboard.DashboardScreen
+import com.seongho.brainassistant.feature.dashboard.DashboardViewModel
+import com.seongho.brainassistant.feature.review.ReviewAction
+import com.seongho.brainassistant.feature.review.ReviewItemUi
+import com.seongho.brainassistant.feature.review.ReviewScreen
+import com.seongho.brainassistant.feature.review.ReviewUiState
+import com.seongho.brainassistant.feature.settings.SettingsAction
+import com.seongho.brainassistant.feature.settings.SettingsScreen
+import com.seongho.brainassistant.feature.settings.SettingsViewModel
+import com.seongho.brainassistant.feature.trash.TrashAction
+import com.seongho.brainassistant.feature.trash.TrashScreen
+import com.seongho.brainassistant.feature.trash.TrashViewModel
+
+private object Routes {
+    const val AUTH = "auth"
+    const val DASHBOARD = "dashboard"
+    const val REVIEW = "review/{inputId}"
+    const val TRASH = "trash"
+    const val SETTINGS = "settings"
+}
+
+@Composable
+fun AppNavHost(
+    container: AppContainer,
+    activity: Activity,
+) {
+    val navController = rememberNavController()
+    val captureViewModel: CaptureViewModel = viewModel(factory = factory { CaptureViewModel(container.captureUseCase) })
+    val dashboardViewModel: DashboardViewModel = viewModel(factory = factory { DashboardViewModel(container.repository, captureViewModel) })
+    val authViewModel: AuthViewModel = viewModel(factory = factory { AuthViewModel(CredentialManagerGoogleAuthGateway(activity)) })
+    val trashViewModel: TrashViewModel = viewModel(factory = factory { TrashViewModel(container.repository) })
+    val settingsViewModel: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings, calendarConnected = false) })
+
+    val authState by authViewModel.state.collectAsState()
+    val captureState by captureViewModel.state.collectAsState()
+    val dashboardState by dashboardViewModel.state.collectAsState()
+    val trashState by trashViewModel.state.collectAsState()
+    val settingsState by settingsViewModel.state.collectAsState()
+
+    val speechController = remember { SpeechInputController(AndroidSpeechRecognizerAdapter(activity)) }
+    val speechState by speechController.state.collectAsState()
+    DisposableEffect(Unit) { onDispose { speechController.destroy() } }
+    LaunchedEffect(speechState.text) {
+        if (speechState.text.isNotBlank()) captureViewModel.applySpeechText(speechState.text)
+    }
+
+    val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) speechController.start() else speechController.onPermissionDenied()
+    }
+    val calendarPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        authViewModel.onCalendarPermissionResult(result.values.all { it })
+    }
+
+    LaunchedEffect(authState.canContinue) {
+        if (authState.canContinue && navController.currentDestination?.route == Routes.AUTH) {
+            navController.navigate(Routes.DASHBOARD) { popUpTo(Routes.AUTH) { inclusive = true } }
+        }
+    }
+    LaunchedEffect(captureState.pendingReview?.inputId) {
+        captureState.pendingReview?.let { review ->
+            val route = "review/${review.inputId}"
+            if (navController.currentDestination?.route != Routes.REVIEW) navController.navigate(route)
+        }
+    }
+
+    NavHost(navController = navController, startDestination = Routes.AUTH) {
+        composable(Routes.AUTH) {
+            AuthScreen(authState) { action ->
+                when (action) {
+                    AuthAction.SignIn -> authViewModel.signIn()
+                    AuthAction.UseLocalMode -> authViewModel.useLocalMode()
+                    AuthAction.RetryCalendarPermission -> calendarPermission.launch(
+                        arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)
+                    )
+                    AuthAction.SignOut -> authViewModel.signOut()
+                }
+            }
+        }
+        composable(Routes.DASHBOARD) {
+            DashboardScreen(dashboardState) { action ->
+                when (action) {
+                    is DashboardAction.ChangeInput -> dashboardViewModel.updateInput(action.value)
+                    DashboardAction.Submit -> dashboardViewModel.submit()
+                    DashboardAction.Voice -> {
+                        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            speechController.start()
+                        } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                    DashboardAction.Undo -> dashboardViewModel.undo()
+                    DashboardAction.OpenTrash -> navController.navigate(Routes.TRASH)
+                    DashboardAction.OpenSettings -> navController.navigate(Routes.SETTINGS)
+                }
+            }
+        }
+        composable(
+            route = Routes.REVIEW,
+            arguments = listOf(navArgument("inputId") { type = NavType.StringType }),
+        ) {
+            val pending = captureState.pendingReview
+            if (pending == null) {
+                LaunchedEffect(Unit) { navController.popBackStack() }
+            } else {
+                var state by remember(pending.inputId) {
+                    mutableStateOf(
+                        ReviewUiState(
+                            inputId = pending.inputId,
+                            items = pending.items.map(ReviewItemUi::from),
+                            clarificationFields = pending.clarificationFields,
+                            conflictMessage = pending.message,
+                        )
+                    )
+                }
+                ReviewScreen(state) { action ->
+                    when (action) {
+                        is ReviewAction.ChangeTitle -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(title = action.value) else it })
+                        is ReviewAction.ChangeStartAt -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(startAt = action.value) else it })
+                        is ReviewAction.ChangeEndAt -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(endAt = action.value) else it })
+                        is ReviewAction.ChangeDueAt -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(dueAt = action.value) else it })
+                        ReviewAction.Save -> {
+                            val parsed = state.items.map(ReviewItemUi::toParsedItem)
+                            val invalid = parsed.any { it.title.isBlank() || (it.type.name == "EVENT" && it.startAt == null) }
+                            if (invalid) state = state.copy(message = "제목과 일정 시간을 확인해 주세요.")
+                            else {
+                                captureViewModel.confirmReview(parsed)
+                                navController.popBackStack()
+                            }
+                        }
+                        ReviewAction.Cancel -> {
+                            captureViewModel.cancelReview()
+                            navController.popBackStack()
+                        }
+                    }
+                }
+            }
+        }
+        composable(Routes.TRASH) {
+            TrashScreen(trashState.items, trashState.pendingPermanentDelete) { action ->
+                if (action == TrashAction.Back) navController.popBackStack() else trashViewModel.onAction(action)
+            }
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                settingsState.copy(
+                    calendarStatusLabel = if (authState.calendarConnected) "연결됨" else "로컬 모드",
+                )
+            ) { action ->
+                when (action) {
+                    SettingsAction.Back -> navController.popBackStack()
+                    SettingsAction.OpenTrash -> navController.navigate(Routes.TRASH)
+                    else -> settingsViewModel.onAction(action)
+                }
+            }
+        }
+    }
+}
+
+private fun <T : ViewModel> factory(create: () -> T): ViewModelProvider.Factory =
+    object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <VM : ViewModel> create(modelClass: Class<VM>): VM = create() as VM
+    }
