@@ -151,8 +151,13 @@ interface DDayDao {
         SELECT * FROM dday_items
         WHERE status = 'ACTIVE'
           AND deletedAtEpochMs IS NULL
-          AND targetDateEpochDay >= :oldestVisibleEpochDay
-          AND (showElapsedDays = 1 OR targetDateEpochDay >= :todayEpochDay)
+          AND (
+            targetDateEpochDay >= :todayEpochDay
+            OR (
+              showElapsedDays = 1
+              AND targetDateEpochDay + archiveAfterDays >= :todayEpochDay
+            )
+          )
         ORDER BY
           isPinned DESC,
           CASE WHEN targetDateEpochDay >= :todayEpochDay THEN 0 ELSE 1 END,
@@ -161,10 +166,7 @@ interface DDayDao {
         LIMIT 1
         """,
     )
-    suspend fun getRepresentative(
-        todayEpochDay: Long,
-        oldestVisibleEpochDay: Long,
-    ): DDayEntity?
+    suspend fun getRepresentative(todayEpochDay: Long): DDayEntity?
 
     @Query("SELECT * FROM dday_items WHERE status = 'DELETED' ORDER BY deletedAtEpochMs DESC")
     fun observeTrash(): Flow<List<DDayEntity>>
