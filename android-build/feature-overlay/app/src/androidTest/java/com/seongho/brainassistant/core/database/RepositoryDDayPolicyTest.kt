@@ -128,7 +128,7 @@ class RepositoryDDayPolicyTest {
                 transactionId = "tx-visible",
                 title = "아직 표시할 일정",
                 targetDate = today.minusDays(5),
-                category = DDayCategory.PERSONAL,
+                category = DDayCategory.TRAVEL,
                 importance = 2,
                 showElapsedDays = true,
                 archiveAfterDays = 7,
