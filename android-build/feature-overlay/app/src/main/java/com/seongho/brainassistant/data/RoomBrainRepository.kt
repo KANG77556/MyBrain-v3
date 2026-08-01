@@ -6,6 +6,7 @@ import com.seongho.brainassistant.core.database.*
 import com.seongho.brainassistant.core.model.*
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +25,7 @@ class RoomBrainRepository(private val database: AppDatabase) : BrainRepository {
     override suspend fun saveInput(input: InputRecord) = inputs.upsert(input.toEntity())
     override suspend fun saveNote(note: NoteItem) = notes.upsert(note.toEntity())
     override suspend fun saveTask(task: TaskItem) = tasks.upsert(task.toEntity())
+    override suspend fun saveDDay(item: DDayItem) = dDays.upsert(item.toEntity())
 
     override suspend fun saveCalendar(item: CalendarItem, enqueue: Boolean) {
         database.withTransaction {
@@ -159,6 +161,17 @@ class RoomBrainRepository(private val database: AppDatabase) : BrainRepository {
             notes.observeRecent().map { list -> list.map(NoteEntity::toDomain) },
         ) { taskItems, eventItems, noteItems -> TodaySnapshot(taskItems, eventItems, noteItems) }
     }
+
+    override fun observeDDays(today: LocalDate): Flow<List<DDayItem>> =
+        dDays.observeActive().map { rows ->
+            rows.map(DDayEntity::toDomain).filter { item ->
+                item.targetDate >= today ||
+                    (item.showElapsedDays && !item.targetDate.plusDays(item.archiveAfterDays.toLong()).isBefore(today))
+            }
+        }
+
+    override suspend fun getRepresentativeDDay(today: LocalDate): DDayItem? =
+        dDays.getRepresentative(today.toEpochDay())?.toDomain()
 
     override fun observeTrash(): Flow<List<TrashItem>> = combine(
         notes.observeTrash(), tasks.observeTrash(), calendars.observeTrash(), dDays.observeTrash(),
