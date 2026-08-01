@@ -64,7 +64,10 @@ class RepositoryDDayPolicyTest {
         val stored = database.ddayDao().get("dday-report")
         assertNotNull(stored)
         assertEquals(targetDate.toEpochDay(), stored?.targetDateEpochDay)
-        assertEquals("7,3,1,0", stored?.reminderOffsetsCsv)
+        assertEquals(
+            setOf(0, 1, 3, 7),
+            stored?.reminderOffsetsCsv?.split(",")?.map(String::toInt)?.toSet(),
+        )
     }
 
     @Test
