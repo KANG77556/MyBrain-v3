@@ -129,4 +129,5 @@ data class PersistedItems(
     val notes: List<NoteItem>,
     val tasks: List<TaskItem>,
     val events: List<CalendarItem>,
+    val dDays: List<DDayItem> = emptyList(),
 )
