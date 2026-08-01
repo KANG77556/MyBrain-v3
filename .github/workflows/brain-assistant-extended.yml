@@ -116,11 +116,12 @@ jobs:
           AI_GATEWAY_BASE_URL=https://example.invalid/
           EOF
 
-      - name: Compile tests and build debug APK
+      - name: Run unit tests and build debug APK
         working-directory: brain-assistant
         shell: bash
         run: |
           ./gradlew --no-daemon --stacktrace \
+            :app:testDebugUnitTest \
             :app:assembleDebugAndroidTest \
             :app:assembleDebug
 
