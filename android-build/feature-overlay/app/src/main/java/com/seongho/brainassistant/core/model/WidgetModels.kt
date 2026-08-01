@@ -36,6 +36,7 @@ data class WidgetConfig(
 )
 
 data class WidgetSnapshot(
+    val widgetId: Int,
     val type: WidgetType,
     val payloadJson: String,
     val generatedAt: Instant,
