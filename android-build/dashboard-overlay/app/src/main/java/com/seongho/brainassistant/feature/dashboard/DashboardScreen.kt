@@ -123,10 +123,10 @@ fun DashboardScreen(
                 }
 
                 if (DashboardSection.D_DAY in visibleSections) {
-                    state.representativeDDay?.let { item ->
+                    state.representativeDDay?.let { dday ->
                         item {
                             RepresentativeDDayCard(
-                                item = item,
+                                item = dday,
                                 today = state.displayDate,
                             )
                         }
