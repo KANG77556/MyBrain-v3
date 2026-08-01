@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.seongho.brainassistant.core.model.DDayCategory
+import com.seongho.brainassistant.core.model.DDayItem
 import com.seongho.brainassistant.core.model.ItemStatus
 import com.seongho.brainassistant.core.model.ItemType
 import com.seongho.brainassistant.core.model.ParsedItem
@@ -97,5 +99,50 @@ class RepositoryDDayPolicyTest {
         val restored = database.ddayDao().get("dday-trip")
         assertEquals(ItemStatus.ACTIVE.name, restored?.status)
         assertTrue(repository.observeTrash().first().none { it.id == "dday-trip" })
+    }
+
+    @Test
+    fun repositoryExposesOnlyVisibleDDaysAndRepresentative() = runBlocking {
+        val today = LocalDate.of(2026, 8, 20)
+        val now = Instant.parse("2026-08-20T00:00:00Z")
+
+        repository.saveDDay(
+            DDayItem(
+                id = "expired-pinned",
+                inputId = "input-expired",
+                transactionId = "tx-expired",
+                title = "노출 기간이 지난 일정",
+                targetDate = today.minusDays(10),
+                category = DDayCategory.DEADLINE,
+                importance = 3,
+                isPinned = true,
+                showElapsedDays = true,
+                archiveAfterDays = 7,
+                updatedAt = now,
+            ),
+        )
+        repository.saveDDay(
+            DDayItem(
+                id = "still-visible",
+                inputId = "input-visible",
+                transactionId = "tx-visible",
+                title = "아직 표시할 일정",
+                targetDate = today.minusDays(5),
+                category = DDayCategory.PERSONAL,
+                importance = 2,
+                showElapsedDays = true,
+                archiveAfterDays = 7,
+                updatedAt = now,
+            ),
+        )
+
+        assertEquals(
+            listOf("still-visible"),
+            repository.observeDDays(today).first().map { it.id },
+        )
+        assertEquals(
+            "still-visible",
+            repository.getRepresentativeDDay(today)?.id,
+        )
     }
 }
