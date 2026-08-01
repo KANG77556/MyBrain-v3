@@ -107,6 +107,7 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
+    debugImplementation(platform("org.jetbrains.kotlinx:kotlinx-serialization-bom:1.8.1"))
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
