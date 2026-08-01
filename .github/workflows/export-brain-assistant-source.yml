@@ -44,3 +44,5 @@ jobs:
             brain-assistant-reconstructed-source.sha256
           if-no-files-found: error
           retention-days: 1
+
+# Task 4 source inspection trigger
