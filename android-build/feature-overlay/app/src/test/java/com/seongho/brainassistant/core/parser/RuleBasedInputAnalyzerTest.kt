@@ -131,21 +131,14 @@ class RuleBasedInputAnalyzerTest {
     }
 
     @Test
-    fun expandsNextWeekWeekdayAndTimeRangeIntoFiveEvents() = runTest {
+    fun recurringWeekdayRangeProducesOneDraftWithoutExpandedEvents() = runTest {
         val batch = analyzer.analyzeBatch(
             AnalysisRequest("다음주 월요일부터 금요일까지 9시부터 12시까지 방과후수업", reference),
         )
 
-        assertEquals(5, batch.items.size)
-        assertEquals(List(5) { ItemType.EVENT }, batch.items.map { it.type })
-        assertEquals(List(5) { "방과후수업" }, batch.items.map { it.title })
-        assertEquals(
-            listOf(3, 4, 5, 6, 7),
-            batch.items.map { it.startAt!!.atZone(seoul).dayOfMonth },
-        )
-        assertEquals(List(5) { 9 }, batch.items.map { it.startAt!!.atZone(seoul).hour })
-        assertEquals(List(5) { 12 }, batch.items.map { it.endAt!!.atZone(seoul).hour })
-        assertEquals(listOf(0, 1, 2, 3, 4), batch.items.map { it.batchIndex })
-        assertTrue(!batch.requiresReview)
+        assertTrue(batch.items.isEmpty())
+        assertEquals(1, batch.recurrences.size)
+        assertEquals("방과후수업", batch.recurrences.single().title)
+        assertTrue(batch.requiresReview)
     }
 }

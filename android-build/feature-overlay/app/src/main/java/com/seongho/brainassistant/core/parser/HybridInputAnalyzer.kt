@@ -28,7 +28,11 @@ class HybridInputAnalyzer(
     ): AnalysisResult {
         val localQuality = localResult.quality()
         val remoteQuality = remoteResult.quality()
-        return if (remoteQuality > localQuality) remoteResult else localResult
+        val selected = if (remoteQuality > localQuality) remoteResult else localResult
+        return selected.copy(
+            recurrences = (localResult.recurrences + remoteResult.recurrences)
+                .distinctBy { it.localId },
+        )
     }
 
     private fun AnalysisResult.quality(): AnalysisQuality = AnalysisQuality(

@@ -5,9 +5,14 @@ import com.seongho.brainassistant.core.model.AnalysisResult
 import com.seongho.brainassistant.core.model.ClarificationField
 import com.seongho.brainassistant.core.model.ItemType
 import com.seongho.brainassistant.core.model.ParsedItem
+import com.seongho.brainassistant.core.model.RecurrenceDraft
+import com.seongho.brainassistant.core.model.RecurrenceFrequency
+import com.seongho.brainassistant.core.model.RecurrenceRule
 import com.seongho.brainassistant.core.parser.InputAnalyzer
 import com.seongho.brainassistant.testing.FakeBrainRepository
 import java.time.Clock
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlinx.coroutines.test.runTest
@@ -137,5 +142,36 @@ class CaptureUseCaseTest {
         useCase.undo(saved.transactionId)
 
         assertTrue(repository.tasks.isEmpty())
+    }
+
+    @Test
+    fun recurringInputAlwaysRoutesToReviewWithDraft() = runTest {
+        val repository = FakeBrainRepository()
+        val recurrence = RecurrenceDraft(
+            title = "방과후수업",
+            startDate = LocalDate.of(2026, 8, 3),
+            startTime = LocalTime.of(9, 0),
+            durationMinutes = 180,
+            rule = RecurrenceRule(frequency = RecurrenceFrequency.WEEKLY),
+            confidence = 0.90,
+        )
+        val analyzer = InputAnalyzer {
+            AnalysisResult(
+                items = emptyList(),
+                confidence = 0.90,
+                clarificationFields = emptySet(),
+                analyzer = "FAKE",
+                recurrences = listOf(recurrence),
+            )
+        }
+        val useCase = CaptureUseCase(repository, analyzer, ConflictChecker(), clock)
+
+        val outcome = useCase.capture("매주 월요일 9시부터 12시까지 방과후수업", now)
+
+        assertTrue(outcome is CaptureResult.NeedsReview)
+        outcome as CaptureResult.NeedsReview
+        assertEquals(listOf(recurrence), outcome.recurrences)
+        assertEquals("반복 일정의 전체 날짜를 확인해 주세요.", outcome.message)
+        assertTrue(repository.calendars.isEmpty())
     }
 }

@@ -10,6 +10,7 @@ import com.seongho.brainassistant.core.model.InputRecord
 import com.seongho.brainassistant.core.model.ItemType
 import com.seongho.brainassistant.core.model.ParsedItem
 import com.seongho.brainassistant.core.model.PersistedItems
+import com.seongho.brainassistant.core.model.RecurrenceDraft
 import com.seongho.brainassistant.core.parser.InputAnalyzer
 import java.time.Clock
 import java.time.Duration
@@ -29,6 +30,7 @@ sealed interface CaptureResult {
         val clarificationFields: Set<ClarificationField>,
         val message: String,
         val originalText: String = "",
+        val recurrences: List<RecurrenceDraft> = emptyList(),
     ) : CaptureResult
 
     data class Failed(val message: String) : CaptureResult
@@ -63,7 +65,7 @@ class CaptureUseCase(
         }
 
         val effectiveClarifications = analysis.clarificationFields +
-            inferRequiredClarifications(analysis.items)
+            inferRequiredClarifications(analysis.items, analysis.recurrences.isNotEmpty())
         repository.saveAnalysis(
             AnalysisRecord(
                 inputId = input.id,
@@ -73,6 +75,17 @@ class CaptureUseCase(
                 createdAt = clock.instant(),
             ),
         )
+
+        if (analysis.recurrences.isNotEmpty()) {
+            return CaptureResult.NeedsReview(
+                inputId = input.id,
+                items = analysis.items,
+                clarificationFields = effectiveClarifications,
+                message = "반복 일정의 전체 날짜를 확인해 주세요.",
+                originalText = clean,
+                recurrences = analysis.recurrences,
+            )
+        }
 
         val conflictMessages = findConflictMessages(input.id, analysis.items)
         val autoSave = analysis.confidence >= AUTO_SAVE_CONFIDENCE &&
@@ -140,8 +153,9 @@ class CaptureUseCase(
 
     private fun inferRequiredClarifications(
         items: List<ParsedItem>,
+        hasRecurrences: Boolean,
     ): Set<ClarificationField> = buildSet {
-        if (items.isEmpty()) add(ClarificationField.TITLE)
+        if (items.isEmpty() && !hasRecurrences) add(ClarificationField.TITLE)
         items.forEach { item ->
             if (item.title.isBlank()) add(ClarificationField.TITLE)
             when (item.type) {

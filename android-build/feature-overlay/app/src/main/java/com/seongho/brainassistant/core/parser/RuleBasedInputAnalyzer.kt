@@ -15,6 +15,8 @@ import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 
 class RuleBasedInputAnalyzer : InputAnalyzer {
+    private val recurrenceParser = KoreanRecurrenceParser()
+
     suspend fun analyzeBatch(request: AnalysisRequest): ParsedBatch {
         val result = analyze(request)
         val batchId = result.items.firstOrNull()?.batchId ?: java.util.UUID.randomUUID().toString()
@@ -23,8 +25,10 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
             originalText = request.rawText,
             items = result.items,
             requiresReview = result.items.isEmpty() ||
+                result.recurrences.isNotEmpty() ||
                 result.confidence < AUTO_SAVE_CONFIDENCE ||
                 result.clarificationFields.isNotEmpty(),
+            recurrences = result.recurrences,
         )
     }
 
@@ -36,6 +40,16 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
                 confidence = 0.0,
                 clarificationFields = setOf(ClarificationField.TITLE),
                 analyzer = ANALYZER_NAME,
+            )
+        }
+
+        recurrenceParser.parse(normalized, request.referenceTime)?.let { recurrence ->
+            return AnalysisResult(
+                items = emptyList(),
+                confidence = recurrence.confidence,
+                clarificationFields = emptySet(),
+                analyzer = ANALYZER_NAME,
+                recurrences = listOf(recurrence),
             )
         }
 
