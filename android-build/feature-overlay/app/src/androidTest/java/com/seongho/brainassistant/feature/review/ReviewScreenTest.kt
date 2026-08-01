@@ -1,11 +1,16 @@
 package com.seongho.brainassistant.feature.review
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import com.seongho.brainassistant.core.model.ClarificationField
 import com.seongho.brainassistant.core.model.ItemType
 import com.seongho.brainassistant.core.model.ParsedItem
@@ -63,8 +68,9 @@ class ReviewScreenTest {
 
         composeRule.onNodeWithText("원문").assertIsDisplayed()
         composeRule.onNodeWithText("내일 3시 회의하고 보고서 제출해").assertIsDisplayed()
-        composeRule.onNodeWithText("일정").assertIsDisplayed()
+        composeRule.onAllNodesWithText("일정").assertCountEquals(2)
         composeRule.onNodeWithText("할 일").assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasContentDescription("보고서 제출 삭제"))
         composeRule.onNodeWithContentDescription("보고서 제출 삭제").performClick()
         assertEquals(ReviewAction.RemoveItem("task"), actions.single())
     }

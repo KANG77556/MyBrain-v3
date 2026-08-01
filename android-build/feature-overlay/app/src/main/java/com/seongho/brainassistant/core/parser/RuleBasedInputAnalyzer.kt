@@ -42,18 +42,19 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
         val vagueDate = VAGUE_DATE_WORDS.any(normalized::contains)
         val batchId = java.util.UUID.randomUUID().toString()
         val sourceSegments = splitBatchSegments(request.rawText)
-        val parsedSegments = sourceSegments.mapIndexedNotNull { index, segment ->
-            parseSegment(segment.text.trim().replace(Regex("\\s+"), " "), request.referenceTime, request.zoneId)
-                ?.let { parsed ->
+        val parsedSegments = sourceSegments.flatMap { segment ->
+            parseSegments(segment.text.trim().replace(Regex("\\s+"), " "), request.referenceTime, request.zoneId)
+                .map { parsed ->
                     parsed.copy(
                         item = parsed.item.copy(
                             batchId = batchId,
-                            batchIndex = index,
                             sourceStart = segment.start,
                             sourceEnd = segment.end,
                         ),
                     )
                 }
+        }.mapIndexed { index, parsed ->
+            parsed.copy(item = parsed.item.copy(batchIndex = index))
         }
         val items = parsedSegments.map(ParsedSegment::item)
         val missing = buildSet {
@@ -166,6 +167,59 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
         }
     }
 
+    private fun parseSegments(
+        segment: String,
+        reference: ZonedDateTime,
+        zone: ZoneId,
+    ): List<ParsedSegment> = parseWeekdayRangeEvents(segment, reference, zone)
+        ?: listOfNotNull(parseSegment(segment, reference, zone))
+
+    private fun parseWeekdayRangeEvents(
+        segment: String,
+        reference: ZonedDateTime,
+        zone: ZoneId,
+    ): List<ParsedSegment>? {
+        if (!EVENT_WORDS.any(segment::contains)) return null
+        val dateRange = WEEKDAY_RANGE_PATTERN.find(segment) ?: return null
+        val timeRange = TIME_RANGE_PATTERN.find(segment) ?: return null
+        val startDay = WEEKDAYS.getValue("${dateRange.groupValues[1]}요일")
+        val endDay = WEEKDAYS.getValue("${dateRange.groupValues[2]}요일")
+        if (endDay.value < startDay.value) return null
+
+        val startMarker = timeRange.groupValues[1]
+        val startTime = rangeTime(startMarker, timeRange.groupValues[2], timeRange.groupValues[3]) ?: return null
+        val endTime = rangeTime(
+            timeRange.groupValues[4].ifBlank { startMarker },
+            timeRange.groupValues[5],
+            timeRange.groupValues[6],
+        ) ?: return null
+        if (!endTime.isAfter(startTime)) return null
+
+        val nextMonday = reference.toLocalDate().with(TemporalAdjusters.next(DayOfWeek.MONDAY))
+        val title = cleanTitle(segment)
+        return (startDay.value..endDay.value).map { dayValue ->
+            val date = nextMonday.plusDays((dayValue - DayOfWeek.MONDAY.value).toLong())
+            ParsedSegment(
+                item = ParsedItem(
+                    type = ItemType.EVENT,
+                    title = title,
+                    startAt = date.atTime(startTime).atZone(zone).toInstant(),
+                    endAt = date.atTime(endTime).atZone(zone).toInstant(),
+                    priority = 2,
+                ),
+            )
+        }
+    }
+
+    private fun rangeTime(marker: String, hour: String, minute: String): LocalTime? {
+        var parsedHour = hour.toIntOrNull() ?: return null
+        if (parsedHour !in 0..23) return null
+        val parsedMinute = minute.ifBlank { "0" }.toIntOrNull()?.takeIf { it in 0..59 } ?: return null
+        if (marker == "오후" && parsedHour in 1..11) parsedHour += 12
+        if (marker == "오전" && parsedHour == 12) parsedHour = 0
+        return LocalTime.of(parsedHour, parsedMinute)
+    }
+
     private fun parseDate(text: String, reference: LocalDate): LocalDate? {
         if (text.contains("오늘")) return reference
         if (text.contains("모레")) return reference.plusDays(2)
@@ -219,6 +273,8 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
 
     private fun cleanTitle(text: String): String {
         var value = text
+            .replace(WEEKDAY_RANGE_PATTERN, "")
+            .replace(TIME_RANGE_PATTERN, "")
             .replace(Regex("다음 주\\s*[월화수목금토일]요일(?:까지|에)?"), "")
             .replace(Regex("(오늘|내일|모레)(?:까지|에)?"), "")
             .replace(Regex("\\d{1,2}월\\s*\\d{1,2}일(?:까지|에)?"), "")
@@ -293,6 +349,8 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
         val NOTE_WORDS = listOf("메모해줘", "메모로", "메모해")
         val MONTH_DAY_PATTERN = Regex("(\\d{1,2})월\\s*(\\d{1,2})일")
         val NUMERIC_TIME_PATTERN = Regex("(오전|오후)?\\s*(\\d{1,2})시(?:\\s*(\\d{1,2})분)?")
+        val WEEKDAY_RANGE_PATTERN = Regex("다음\\s*주\\s*([월화수목금토일])요일\\s*부터\\s*([월화수목금토일])요일\\s*까지")
+        val TIME_RANGE_PATTERN = Regex("(오전|오후)?\\s*(\\d{1,2})시(?:\\s*(\\d{1,2})분)?\\s*부터\\s*(오전|오후)?\\s*(\\d{1,2})시(?:\\s*(\\d{1,2})분)?\\s*까지")
         val DDAY_PATTERN = Regex("(?i)D\\s*-?\\s*(?:DAY|데이)|디데이")
         val WEEKDAYS = mapOf(
             "월요일" to DayOfWeek.MONDAY,
