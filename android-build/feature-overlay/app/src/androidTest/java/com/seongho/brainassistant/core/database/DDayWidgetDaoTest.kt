@@ -54,10 +54,10 @@ class DDayWidgetDaoTest {
         dao.upsert(pinned)
 
         assertEquals(listOf("pinned", "closer"), dao.observeActive().first().map { it.id })
-        assertEquals("pinned", dao.getRepresentative(today, today - 7)?.id)
+        assertEquals("pinned", dao.getRepresentative(today)?.id)
 
         dao.softDelete("pinned", now + 1)
-        assertNull(dao.getRepresentative(today, today - 7)?.takeIf { it.id == "pinned" })
+        assertNull(dao.getRepresentative(today)?.takeIf { it.id == "pinned" })
 
         dao.restore("pinned", now + 2)
         assertEquals("pinned", dao.get("pinned")?.id)
@@ -88,7 +88,7 @@ class DDayWidgetDaoTest {
         dao.upsert(expiredPinned)
         dao.upsert(stillVisible)
 
-        assertEquals("still-visible", dao.getRepresentative(today, today - 30)?.id)
+        assertEquals("still-visible", dao.getRepresentative(today)?.id)
     }
 
     @Test
