@@ -7,10 +7,13 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.seongho.brainassistant.core.model.CalendarItem
+import com.seongho.brainassistant.core.model.DDayCategory
+import com.seongho.brainassistant.core.model.DDayItem
 import com.seongho.brainassistant.core.model.NoteItem
 import com.seongho.brainassistant.core.model.SyncState
 import com.seongho.brainassistant.core.model.TaskItem
 import java.time.Instant
+import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -30,6 +33,7 @@ class DashboardScreenTest {
         composeRule.onNodeWithText("오늘 일정").assertIsDisplayed()
         composeRule.onNodeWithText("오늘 예정된 일정이 없습니다.").assertIsDisplayed()
         composeRule.onNodeWithText("추천 집중 작업").assertIsDisplayed()
+        composeRule.onNodeWithText("대표 D-Day").assertDoesNotExist()
         composeRule.onNodeWithText("긴급 할 일").assertDoesNotExist()
         composeRule.onNodeWithText("최근 메모").assertDoesNotExist()
         composeRule.onNodeWithText("표시할 항목이 없습니다.").assertDoesNotExist()
@@ -37,6 +41,28 @@ class DashboardScreenTest {
         composeRule.onNodeWithTag("quick-capture-dock").assertIsDisplayed()
         composeRule.onNodeWithText("무엇을 기록할까요?").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("음성 입력").assertIsDisplayed()
+    }
+
+    @Test
+    fun representativeDDayCardShowsTitleAndDateDistance() {
+        val state = DashboardUiState(
+            displayDate = LocalDate.of(2026, 8, 1),
+            representativeDDay = DDayItem(
+                id = "dday-1",
+                inputId = "input-dday",
+                transactionId = "transaction-dday",
+                title = "교육청 보고서 제출",
+                targetDate = LocalDate.of(2026, 8, 20),
+                category = DDayCategory.DEADLINE,
+            ),
+        )
+
+        composeRule.setContent { DashboardScreen(state = state, onAction = {}) }
+
+        composeRule.onNodeWithText("대표 D-Day").assertIsDisplayed()
+        composeRule.onNodeWithText("교육청 보고서 제출").assertIsDisplayed()
+        composeRule.onNodeWithText("D-19").assertIsDisplayed()
+        composeRule.onNodeWithText("8월 20일").assertIsDisplayed()
     }
 
     @Test
