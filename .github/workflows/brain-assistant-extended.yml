@@ -125,7 +125,7 @@ jobs:
             :app:assembleDebugAndroidTest \
             :app:assembleDebug
 
-      - name: Run Room migration test on API 28 emulator
+      - name: Run database tests on API 28 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 28
@@ -133,4 +133,4 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: cd brain-assistant && ./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.seongho.brainassistant.core.database.Migration1To2Test
+          script: cd brain-assistant && ./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.seongho.brainassistant.core.database
