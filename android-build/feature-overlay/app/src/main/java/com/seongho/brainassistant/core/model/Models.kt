@@ -102,6 +102,7 @@ data class ParsedBatch(
     val originalText: String,
     val items: List<ParsedItem>,
     val requiresReview: Boolean,
+    val recurrences: List<RecurrenceDraft> = emptyList(),
 )
 
 data class AnalysisRequest(
@@ -115,6 +116,7 @@ data class AnalysisResult(
     val confidence: Double,
     val clarificationFields: Set<ClarificationField>,
     val analyzer: String,
+    val recurrences: List<RecurrenceDraft> = emptyList(),
 )
 
 data class TodaySnapshot(
