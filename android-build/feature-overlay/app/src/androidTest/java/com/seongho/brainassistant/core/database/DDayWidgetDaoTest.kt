@@ -64,6 +64,34 @@ class DDayWidgetDaoTest {
     }
 
     @Test
+    fun representativeSkipsElapsedItemPastItsOwnArchiveWindow() = runBlocking {
+        val dao = database.ddayDao()
+        val today = 20_000L
+        val now = 1_700_000_000_000L
+        val expiredPinned = ddayEntity(
+            id = "expired-pinned",
+            targetDateEpochDay = today - 10,
+            isPinned = true,
+            importance = 3,
+            archiveAfterDays = 7,
+            updatedAtEpochMs = now,
+        )
+        val stillVisible = ddayEntity(
+            id = "still-visible",
+            targetDateEpochDay = today - 5,
+            isPinned = false,
+            importance = 2,
+            archiveAfterDays = 7,
+            updatedAtEpochMs = now,
+        )
+
+        dao.upsert(expiredPinned)
+        dao.upsert(stillVisible)
+
+        assertEquals("still-visible", dao.getRepresentative(today, today - 30)?.id)
+    }
+
+    @Test
     fun widgetDaosReplaceConfigAndManageSnapshotCache() = runBlocking {
         val configDao = database.widgetConfigDao()
         val snapshotDao = database.widgetSnapshotDao()
@@ -104,6 +132,7 @@ class DDayWidgetDaoTest {
         targetDateEpochDay: Long,
         isPinned: Boolean,
         importance: Int,
+        archiveAfterDays: Int = 7,
         updatedAtEpochMs: Long,
     ) = DDayEntity(
         id = id,
@@ -115,7 +144,7 @@ class DDayWidgetDaoTest {
         importance = importance,
         isPinned = isPinned,
         showElapsedDays = true,
-        archiveAfterDays = 7,
+        archiveAfterDays = archiveAfterDays,
         recurrenceRule = null,
         linkedTaskId = null,
         linkedCalendarId = null,
