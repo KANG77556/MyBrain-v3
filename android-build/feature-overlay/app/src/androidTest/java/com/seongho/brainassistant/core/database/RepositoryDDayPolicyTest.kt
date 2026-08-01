@@ -211,6 +211,14 @@ class RepositoryDDayPolicyTest {
             ),
         )
         assertEquals(1, repository.pendingOutbox().size)
+        val today = repository.observeToday(Instant.parse("2026-08-03T00:00:00Z")).first()
+        assertEquals(listOf("note-undo"), today.notes.map { it.id })
+        assertEquals(listOf("task-undo"), today.tasks.map { it.id })
+        assertEquals(listOf("event-undo"), today.events.map { it.id })
+        assertEquals(
+            listOf("dday-undo"),
+            repository.observeDDays(LocalDate.of(2026, 8, 3)).first().map { it.id },
+        )
 
         repository.softDeleteByTransaction(transactionId, Instant.parse("2026-08-01T00:00:00Z"))
 
