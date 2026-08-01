@@ -42,6 +42,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.seongho.brainassistant.core.model.DDayDisplay
+import com.seongho.brainassistant.core.model.DDayItem
 import com.seongho.brainassistant.core.model.SyncState
 import com.seongho.brainassistant.feature.capture.QuickCaptureBar
 import java.time.LocalDate
@@ -56,8 +58,8 @@ fun DashboardScreen(
     onAction: (DashboardAction) -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
-    val todayLabel = remember {
-        LocalDate.now(SEOUL_ZONE).format(DateTimeFormatter.ofPattern("M월 d일 EEEE", Locale.KOREAN))
+    val todayLabel = remember(state.displayDate) {
+        state.displayDate.format(DateTimeFormatter.ofPattern("M월 d일 EEEE", Locale.KOREAN))
     }
     val visibleSections = visibleDashboardSections(state).toSet()
 
@@ -120,6 +122,17 @@ fun DashboardScreen(
                     SummaryCard(state)
                 }
 
+                if (DashboardSection.D_DAY in visibleSections) {
+                    state.representativeDDay?.let { item ->
+                        item {
+                            RepresentativeDDayCard(
+                                item = item,
+                                today = state.displayDate,
+                            )
+                        }
+                    }
+                }
+
                 if (DashboardSection.URGENT_TASKS in visibleSections) {
                     item {
                         SectionCard(
@@ -166,6 +179,75 @@ fun DashboardScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RepresentativeDDayCard(
+    item: DDayItem,
+    today: LocalDate,
+) {
+    val display = remember(today, item.targetDate) {
+        when (val value = DDayDisplay.between(today, item.targetDate)) {
+            is DDayDisplay.Before -> "D-${value.days}"
+            DDayDisplay.Today -> "D-Day"
+            is DDayDisplay.After -> "D+${value.days}"
+        }
+    }
+    val dateLabel = remember(item.targetDate) {
+        item.targetDate.format(DateTimeFormatter.ofPattern("M월 d일", Locale.KOREAN))
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("representative-dday-card"),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "대표 D-Day",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = dateLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
+                Text(
+                    text = display,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    maxLines = 1,
+                )
             }
         }
     }
