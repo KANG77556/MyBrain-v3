@@ -34,20 +34,31 @@ jobs:
           tar -xJf brain-assistant-source.tar.xz
           test -f brain-assistant/app/build.gradle.kts
 
-      - name: Package reconstructed source
+      - name: Apply build fixes and cumulative overlays
         shell: bash
         run: |
-          tar -cJf brain-assistant-reconstructed-source.tar.xz brain-assistant
-          sha256sum brain-assistant-reconstructed-source.tar.xz > brain-assistant-reconstructed-source.sha256
+          sed -i 's/compileSdk = 37/compileSdk = 36/g' brain-assistant/app/build.gradle.kts
+          sed -i 's/lifecycle = "2.11.0"/lifecycle = "2.10.0"/g' brain-assistant/gradle/libs.versions.toml
+          sed -i 's/core = "1.19.0"/core = "1.17.0"/g' brain-assistant/gradle/libs.versions.toml
+          sed -i '/import androidx.compose.ui.test.assertDoesNotExist/d' brain-assistant/app/src/androidTest/java/com/seongho/brainassistant/feature/review/ReviewScreenTest.kt
+          patch -d brain-assistant -p1 < android-build/device-calendar.patch
+          cp -R android-build/dashboard-overlay/. brain-assistant/
+          if [ -d android-build/feature-overlay ]; then
+            cp -R android-build/feature-overlay/. brain-assistant/
+          fi
 
-      - name: Upload reconstructed source
+      - name: Package effective source
+        shell: bash
+        run: |
+          tar -cJf brain-assistant-effective-source.tar.xz brain-assistant
+          sha256sum brain-assistant-effective-source.tar.xz > brain-assistant-effective-source.sha256
+
+      - name: Upload effective source
         uses: actions/upload-artifact@v4
         with:
-          name: Brain-Assistant-Reconstructed-Source-${{ github.sha }}
+          name: Brain-Assistant-Effective-Source-${{ github.sha }}
           path: |
-            brain-assistant-reconstructed-source.tar.xz
-            brain-assistant-reconstructed-source.sha256
+            brain-assistant-effective-source.tar.xz
+            brain-assistant-effective-source.sha256
           if-no-files-found: error
           retention-days: 1
-
-# Task 4 source inspection trigger
