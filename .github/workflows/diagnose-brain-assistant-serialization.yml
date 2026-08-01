@@ -7,6 +7,13 @@ on:
       - feature/brain-assistant-mvp
     paths:
       - '.github/workflows/diagnose-brain-assistant-serialization.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/diagnose-brain-assistant-serialization.yml'
+      - 'android-build/feature-overlay/gradle/libs.versions.toml'
+      - 'android-build/feature-overlay/app/build.gradle.kts'
 
 permissions:
   contents: read
