@@ -204,6 +204,32 @@ class RecurrenceEngineTest {
     }
 
     @Test
+    fun exceptionMovedPastUntilDateIsDropped() {
+        val master = master(
+            rule = RecurrenceRule(
+                frequency = RecurrenceFrequency.DAILY,
+                end = RecurrenceEnd.Until(LocalDate.of(2026, 8, 3)),
+            ),
+        )
+
+        val occurrences = engine.generate(
+            master,
+            listOf(
+                RecurrenceException(
+                    id = "modified-after-end",
+                    key = OccurrenceKey(master.id, Instant.parse("2026-08-03T00:00:00Z")),
+                    kind = RecurrenceExceptionKind.MODIFIED,
+                    effectiveStartAt = Instant.parse("2026-08-04T00:00:00Z"),
+                ),
+            ),
+            emptySet(),
+            LocalDate.of(2026, 8, 3)..LocalDate.of(2026, 8, 4),
+        )
+
+        assertEquals(emptyList<Any>(), occurrences)
+    }
+
+    @Test
     fun countEndsAfterTenAcceptedOccurrencesDespiteExclusions() {
         assertDates(
             master(
@@ -240,7 +266,10 @@ class RecurrenceEngineTest {
 
         assertEquals(2, occurrences.size)
         assertEquals(listOf("2026-08-04T00:00:00Z", "2026-08-04T00:00:00Z"), occurrences.map { it.startAt.toString() })
-        assertEquals(listOf(COLLISION_REASON, COLLISION_REASON), occurrences.map { it.conflictReason })
+        assertEquals(
+            listOf("반복 일정 이동 결과가 겹칩니다.", "반복 일정 이동 결과가 겹칩니다."),
+            occurrences.map { it.conflictReason },
+        )
     }
 
     private fun assertDates(
@@ -276,6 +305,5 @@ class RecurrenceEngineTest {
 
     private companion object {
         val SEOUL: ZoneId = ZoneId.of("Asia/Seoul")
-        const val COLLISION_REASON = "諛섎났 ?쇱젙 ?대룞 寃곌낵媛 寃뱀묩?덈떎."
     }
 }

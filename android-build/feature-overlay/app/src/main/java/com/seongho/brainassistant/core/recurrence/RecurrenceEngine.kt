@@ -52,7 +52,13 @@ class RecurrenceEngine {
                 endAt = effectiveStart.plus(Duration.ofMinutes(master.durationMinutes.toLong())),
                 kind = if (effectiveDate == originalDate) null else RecurrenceExceptionKind.MOVED,
             )
-            applyException(occurrence, exceptionMap)?.let(accepted::add)
+            val resolved = applyException(occurrence, exceptionMap) ?: continue
+            if (master.rule.end is RecurrenceEnd.Until &&
+                resolved.startAt.atZone(master.zoneId).toLocalDate() > master.rule.end.date
+            ) {
+                continue
+            }
+            accepted.add(resolved)
         }
 
         val collisions = accepted.groupingBy(RecurrenceOccurrence::startAt)
@@ -172,6 +178,6 @@ class RecurrenceEngine {
     private companion object {
         const val LAST_ORDINAL = 5
         val WEEKEND_DAYS = setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)
-        const val COLLISION_REASON = "諛섎났 ?쇱젙 ?대룞 寃곌낵媛 寃뱀묩?덈떎."
+        const val COLLISION_REASON = "반복 일정 이동 결과가 겹칩니다."
     }
 }
