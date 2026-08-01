@@ -25,4 +25,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun calendarDao(): CalendarDao
     abstract fun analysisDao(): AnalysisDao
     abstract fun syncOutboxDao(): SyncOutboxDao
+    abstract fun ddayDao(): DDayDao
+    abstract fun widgetConfigDao(): WidgetConfigDao
+    abstract fun widgetSnapshotDao(): WidgetSnapshotDao
 }
