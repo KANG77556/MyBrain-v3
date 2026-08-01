@@ -1,0 +1,60 @@
+name: Diagnose Brain Assistant Serialization
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/brain-assistant-mvp
+    paths:
+      - '.github/workflows/diagnose-brain-assistant-serialization.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-insight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source carrier
+        uses: actions/checkout@v4
+
+      - name: Reconstruct source and apply feature build overlay
+        shell: bash
+        run: |
+          cat android-build/brain-assistant-source.part* > brain-assistant-source.b64
+          base64 --decode brain-assistant-source.b64 > brain-assistant-source.tar.xz
+          echo '624b49911a8c2f3690898801cdf74d2ec8fc0765788ebdb19032389fd1cb4acf  brain-assistant-source.tar.xz' | sha256sum --check
+          tar -xJf brain-assistant-source.tar.xz
+          chmod +x brain-assistant/gradlew
+          cp android-build/feature-overlay/gradle/libs.versions.toml brain-assistant/gradle/libs.versions.toml
+          cp android-build/feature-overlay/app/build.gradle.kts brain-assistant/app/build.gradle.kts
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Configure non-secret build values
+        shell: bash
+        run: |
+          cat > brain-assistant/local.properties <<'EOF'
+          GOOGLE_WEB_CLIENT_ID=1234567890-example.apps.googleusercontent.com
+          AI_GATEWAY_BASE_URL=https://example.invalid/
+          EOF
+
+      - name: Inspect serialization runtime selection
+        working-directory: brain-assistant
+        shell: bash
+        run: |
+          ./gradlew --no-daemon :app:dependencyInsight \
+            --configuration debugAndroidTestRuntimeClasspath \
+            --dependency org.jetbrains.kotlinx:kotlinx-serialization-core
+          ./gradlew --no-daemon :app:dependencyInsight \
+            --configuration debugAndroidTestRuntimeClasspath \
+            --dependency org.jetbrains.kotlinx:kotlinx-serialization-json
