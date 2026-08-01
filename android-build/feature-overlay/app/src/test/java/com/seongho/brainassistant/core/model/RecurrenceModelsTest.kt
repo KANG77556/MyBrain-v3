@@ -39,6 +39,13 @@ class RecurrenceModelsTest {
     }
 
     @Test
+    fun persistedDurationMustBePositive() {
+        assertValidationFailure("일정 기간은 양수여야 합니다.") {
+            recurrenceMaster(durationMinutes = 0)
+        }
+    }
+
+    @Test
     fun countMustBePositive() {
         assertValidationFailure("반복 횟수는 양수여야 합니다.") {
             RecurrenceEnd.Count(0)
@@ -74,6 +81,21 @@ class RecurrenceModelsTest {
         zoneId = ZoneId.of("Asia/Seoul"),
         rule = RecurrenceRule(frequency = RecurrenceFrequency.WEEKLY),
         confidence = 0.9,
+    )
+
+    private fun recurrenceMaster(durationMinutes: Int) = RecurrenceMaster(
+        id = "master-1",
+        inputId = "input-1",
+        transactionId = "transaction-1",
+        title = "교무회의",
+        startDate = LocalDate.of(2026, 8, 3),
+        startTime = LocalTime.of(9, 0),
+        durationMinutes = durationMinutes,
+        zoneId = ZoneId.of("Asia/Seoul"),
+        rule = RecurrenceRule(frequency = RecurrenceFrequency.WEEKLY),
+        exclusionKinds = emptySet(),
+        exclusionPolicy = ExclusionPolicy.SKIP,
+        updatedAt = Instant.parse("2026-08-03T00:00:00Z"),
     )
 
     private fun assertValidationFailure(expectedMessage: String, block: () -> Unit) {

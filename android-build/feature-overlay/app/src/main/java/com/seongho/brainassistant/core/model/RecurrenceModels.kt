@@ -78,7 +78,11 @@ data class RecurrenceMaster(
     val syncState: SyncState = SyncState.PENDING,
     val deletedAt: Instant? = null,
     val updatedAt: Instant,
-)
+) {
+    init {
+        require(durationMinutes > 0) { "일정 기간은 양수여야 합니다." }
+    }
+}
 
 data class OccurrenceKey(val masterId: String, val originalStartAt: Instant)
 
