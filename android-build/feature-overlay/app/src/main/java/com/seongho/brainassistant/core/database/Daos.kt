@@ -166,8 +166,14 @@ interface DDayDao {
         oldestVisibleEpochDay: Long,
     ): DDayEntity?
 
+    @Query("SELECT * FROM dday_items WHERE status = 'DELETED' ORDER BY deletedAtEpochMs DESC")
+    fun observeTrash(): Flow<List<DDayEntity>>
+
     @Query("UPDATE dday_items SET status = 'DELETED', deletedAtEpochMs = :deletedAt, updatedAtEpochMs = :deletedAt WHERE id = :id")
     suspend fun softDelete(id: String, deletedAt: Long)
+
+    @Query("UPDATE dday_items SET status = 'DELETED', deletedAtEpochMs = :deletedAt, updatedAtEpochMs = :deletedAt WHERE transactionId = :transactionId")
+    suspend fun softDeleteByTransaction(transactionId: String, deletedAt: Long)
 
     @Query("UPDATE dday_items SET status = 'ACTIVE', deletedAtEpochMs = NULL, updatedAtEpochMs = :updatedAt WHERE id = :id")
     suspend fun restore(id: String, updatedAt: Long)
