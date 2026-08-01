@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -90,6 +91,9 @@ fun DashboardScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { onAction(DashboardAction.OpenCalendar) }) {
+                            Icon(Icons.Default.DateRange, contentDescription = "캘린더")
+                        }
                         IconButton(onClick = { onAction(DashboardAction.OpenSettings) }) {
                             Icon(Icons.Default.Settings, contentDescription = "설정")
                         }
