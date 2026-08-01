@@ -7,6 +7,11 @@ on:
       - feature/brain-assistant-mvp
     paths:
       - '.github/workflows/export-brain-assistant-source.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/export-brain-assistant-source.yml'
 
 permissions:
   contents: read
