@@ -104,15 +104,17 @@ class RoomBrainRepository(private val database: AppDatabase) : BrainRepository {
             tasks.softDeleteByTransaction(transactionId, deletedAt.toEpochMilli())
             dDays.softDeleteByTransaction(transactionId, deletedAt.toEpochMilli())
             calendars.softDeleteByTransaction(transactionId, deletedAt.toEpochMilli())
-            calendarItems.filter { it.googleEventId != null }.forEach { item ->
+            calendarItems.forEach { item ->
                 outbox.deleteByLocalCalendarId(item.id)
-                outbox.upsert(
-                    SyncOutboxItem(
-                        localCalendarId = item.id,
-                        operation = OutboxOperation.DELETE,
-                        createdAt = deletedAt,
-                    ).toEntity()
-                )
+                if (item.googleEventId != null) {
+                    outbox.upsert(
+                        SyncOutboxItem(
+                            localCalendarId = item.id,
+                            operation = OutboxOperation.DELETE,
+                            createdAt = deletedAt,
+                        ).toEntity()
+                    )
+                }
             }
         }
     }

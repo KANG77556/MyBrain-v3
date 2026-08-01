@@ -28,11 +28,11 @@ sealed interface CaptureResult {
         val items: List<ParsedItem>,
         val clarificationFields: Set<ClarificationField>,
         val message: String,
+        val originalText: String = "",
     ) : CaptureResult
 
     data class Failed(val message: String) : CaptureResult
 }
-
 class CaptureUseCase(
     private val repository: BrainRepository,
     private val analyzer: InputAnalyzer,
@@ -58,6 +58,7 @@ class CaptureUseCase(
                 items = emptyList(),
                 clarificationFields = setOf(ClarificationField.TITLE),
                 message = "분석에 실패하여 직접 분류가 필요합니다.",
+                originalText = clean,
             )
         }
 
@@ -88,6 +89,7 @@ class CaptureUseCase(
                 items = analysis.items,
                 clarificationFields = effectiveClarifications,
                 message = message,
+                originalText = clean,
             )
         }
 

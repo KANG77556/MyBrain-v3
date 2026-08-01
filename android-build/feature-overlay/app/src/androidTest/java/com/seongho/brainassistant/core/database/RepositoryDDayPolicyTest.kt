@@ -19,6 +19,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -145,4 +146,86 @@ class RepositoryDDayPolicyTest {
             repository.getRepresentativeDDay(today)?.id,
         )
     }
+
+    @Test
+    fun secondEventFailureRollsBackWholeMixedBatch() = runBlocking {
+        database.openHelper.writableDatabase.execSQL(
+            """CREATE TRIGGER fail_second_event BEFORE INSERT ON calendar_items
+               WHEN NEW.title = '저장 실패'
+               BEGIN SELECT RAISE(ABORT, 'forced batch failure'); END""",
+        )
+
+        try {
+            repository.saveParsedItems(
+                inputId = "input-rollback",
+                transactionId = "tx-rollback",
+                items = listOf(
+                    ParsedItem(localId = "note-before", type = ItemType.NOTE, title = "준비 메모"),
+                    ParsedItem(localId = "task-before", type = ItemType.TASK, title = "보고서 제출"),
+                    ParsedItem(
+                        localId = "event-ok",
+                        type = ItemType.EVENT,
+                        title = "교무회의",
+                        startAt = Instant.parse("2026-08-03T01:00:00Z"),
+                    ),
+                    ParsedItem(
+                        localId = "event-fail",
+                        type = ItemType.EVENT,
+                        title = "저장 실패",
+                        startAt = Instant.parse("2026-08-03T02:00:00Z"),
+                    ),
+                ),
+            )
+            fail("두 번째 일정 저장은 실패해야 합니다.")
+        } catch (_: Exception) {
+            // Expected: the database trigger aborts the transaction.
+        }
+
+        assertEquals(0, tableCount("notes"))
+        assertEquals(0, tableCount("tasks"))
+        assertEquals(0, tableCount("calendar_items"))
+        assertEquals(0, tableCount("sync_outbox"))
+    }
+
+    @Test
+    fun undoMixedBatchDeletesAllItemsAndPendingCreateOutbox() = runBlocking {
+        val transactionId = "tx-mixed-undo"
+        repository.saveParsedItems(
+            inputId = "input-mixed-undo",
+            transactionId = transactionId,
+            items = listOf(
+                ParsedItem(localId = "note-undo", type = ItemType.NOTE, title = "준비 메모"),
+                ParsedItem(localId = "task-undo", type = ItemType.TASK, title = "보고서 제출"),
+                ParsedItem(
+                    localId = "event-undo",
+                    type = ItemType.EVENT,
+                    title = "교무회의",
+                    startAt = Instant.parse("2026-08-03T01:00:00Z"),
+                ),
+                ParsedItem(
+                    localId = "dday-undo",
+                    type = ItemType.D_DAY,
+                    title = "개학",
+                    targetDate = LocalDate.of(2026, 8, 20),
+                ),
+            ),
+        )
+        assertEquals(1, repository.pendingOutbox().size)
+
+        repository.softDeleteByTransaction(transactionId, Instant.parse("2026-08-01T00:00:00Z"))
+
+        assertEquals(
+            setOf("note-undo", "task-undo", "event-undo", "dday-undo"),
+            repository.observeTrash().first().map { it.id }.toSet(),
+        )
+        assertTrue(repository.pendingOutbox().isEmpty())
+    }
+
+    private fun tableCount(table: String): Int =
+        database.openHelper.readableDatabase
+            .query("SELECT COUNT(*) FROM $table")
+            .use { cursor ->
+                cursor.moveToFirst()
+                cursor.getInt(0)
+            }
 }

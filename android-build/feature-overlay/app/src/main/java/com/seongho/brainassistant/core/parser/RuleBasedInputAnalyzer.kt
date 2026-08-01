@@ -5,6 +5,7 @@ import com.seongho.brainassistant.core.model.AnalysisResult
 import com.seongho.brainassistant.core.model.ClarificationField
 import com.seongho.brainassistant.core.model.ItemType
 import com.seongho.brainassistant.core.model.ParsedItem
+import com.seongho.brainassistant.core.model.ParsedBatch
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate
@@ -14,6 +15,19 @@ import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 
 class RuleBasedInputAnalyzer : InputAnalyzer {
+    suspend fun analyzeBatch(request: AnalysisRequest): ParsedBatch {
+        val result = analyze(request)
+        val batchId = result.items.firstOrNull()?.batchId ?: java.util.UUID.randomUUID().toString()
+        return ParsedBatch(
+            id = batchId,
+            originalText = request.rawText,
+            items = result.items,
+            requiresReview = result.items.isEmpty() ||
+                result.confidence < AUTO_SAVE_CONFIDENCE ||
+                result.clarificationFields.isNotEmpty(),
+        )
+    }
+
     override suspend fun analyze(request: AnalysisRequest): AnalysisResult {
         val normalized = request.rawText.trim().replace(Regex("\\s+"), " ")
         if (normalized.isBlank()) {
@@ -26,12 +40,20 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
         }
 
         val vagueDate = VAGUE_DATE_WORDS.any(normalized::contains)
-        val segments = normalized
-            .split(Regex("\\s*하고\\s*|\\s*,\\s*|\\s+그리고\\s+"))
-            .map(String::trim)
-            .filter(String::isNotBlank)
-        val parsedSegments = segments.mapNotNull { segment ->
-            parseSegment(segment, request.referenceTime, request.zoneId)
+        val batchId = java.util.UUID.randomUUID().toString()
+        val sourceSegments = splitBatchSegments(request.rawText)
+        val parsedSegments = sourceSegments.mapIndexedNotNull { index, segment ->
+            parseSegment(segment.text.trim().replace(Regex("\\s+"), " "), request.referenceTime, request.zoneId)
+                ?.let { parsed ->
+                    parsed.copy(
+                        item = parsed.item.copy(
+                            batchId = batchId,
+                            batchIndex = index,
+                            sourceStart = segment.start,
+                            sourceEnd = segment.end,
+                        ),
+                    )
+                }
         }
         val items = parsedSegments.map(ParsedSegment::item)
         val missing = buildSet {
@@ -60,6 +82,7 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
         val date = parseDate(segment, reference.toLocalDate())
         val time = parseTime(segment)
         val looksLikeDDay = DDAY_PATTERN.containsMatchIn(segment)
+        val looksLikeNote = NOTE_WORDS.any(segment::contains)
         val looksLikeEvent = EVENT_WORDS.any(segment::contains) && !segment.contains("전에")
         val looksLikeTask = TASK_WORDS.any(segment::contains) || segment.contains("전에") || segment.contains("까지")
         val title = cleanTitle(segment)
@@ -87,6 +110,15 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
                     },
                 )
             }
+
+            looksLikeNote -> ParsedSegment(
+                item = ParsedItem(
+                    type = ItemType.NOTE,
+                    title = title,
+                    body = segment,
+                    priority = 1,
+                ),
+            )
 
             looksLikeEvent -> {
                 val start = when {
@@ -197,6 +229,7 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
             .replace("다음 주쯤", "")
             .replace("쯤", "")
             .replace("상담 전에", "")
+            .replace(Regex("\\s*(하고|넣고|추가하고)$"), "")
             .replace(Regex("\\s*(해야 해|해야함|해줘|잡아줘|등록해줘|기억해줘)$"), "")
             .replace(Regex("\\s+"), " ")
             .trim(' ', ',', '.')
@@ -212,17 +245,52 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
     private fun estimateMinutes(text: String): Int? =
         Regex("(\\d+)분").find(text)?.groupValues?.get(1)?.toIntOrNull()
 
+    private fun splitBatchSegments(rawText: String): List<SourceSegment> {
+        val segments = mutableListOf<SourceSegment>()
+        var start = 0
+        BATCH_SEPARATOR.findAll(rawText).forEach { match ->
+            addSourceSegment(rawText, start, match.range.first, segments)
+            start = match.range.last + 1
+        }
+        addSourceSegment(rawText, start, rawText.length, segments)
+        return segments.ifEmpty {
+            listOf(SourceSegment(rawText.trim(), rawText.indexOfFirst { !it.isWhitespace() }.coerceAtLeast(0), rawText.trimEnd().length))
+        }
+    }
+
+    private fun addSourceSegment(
+        rawText: String,
+        rawStart: Int,
+        rawEnd: Int,
+        destination: MutableList<SourceSegment>,
+    ) {
+        var start = rawStart
+        var end = rawEnd
+        while (start < end && rawText[start].isWhitespace()) start++
+        while (end > start && (rawText[end - 1].isWhitespace() || rawText[end - 1] == '.')) end--
+        if (start < end) destination += SourceSegment(rawText.substring(start, end), start, end)
+    }
+
     private data class ParsedSegment(
         val item: ParsedItem,
         val clarificationFields: Set<ClarificationField> = emptySet(),
     )
 
+    private data class SourceSegment(
+        val text: String,
+        val start: Int,
+        val end: Int,
+    )
+
     private companion object {
         const val ANALYZER_NAME = "RULE_BASED_V1"
+        const val AUTO_SAVE_CONFIDENCE = 0.85
+        val BATCH_SEPARATOR = Regex("[,，;]+|\\.(?=\\s|$)|\\s+그리고\\s+|(?<=하고)\\s+")
         val DEFAULT_EVENT_TIME: LocalTime = LocalTime.of(9, 0)
         val VAGUE_DATE_WORDS = listOf("쯤", "언젠가", "시간 될 때", "나중에")
         val EVENT_WORDS = listOf("상담", "회의", "예약", "병원", "수업", "약속", "검사", "면담")
-        val TASK_WORDS = listOf("채점", "제출", "확인", "작성", "준비", "처리", "검토", "해야")
+        val TASK_WORDS = listOf("할 일", "채점", "제출", "확인", "작성", "준비", "처리", "검토", "해야")
+        val NOTE_WORDS = listOf("메모해줘", "메모로", "메모해")
         val MONTH_DAY_PATTERN = Regex("(\\d{1,2})월\\s*(\\d{1,2})일")
         val NUMERIC_TIME_PATTERN = Regex("(오전|오후)?\\s*(\\d{1,2})시(?:\\s*(\\d{1,2})분)?")
         val DDAY_PATTERN = Regex("(?i)D\\s*-?\\s*(?:DAY|데이)|디데이")

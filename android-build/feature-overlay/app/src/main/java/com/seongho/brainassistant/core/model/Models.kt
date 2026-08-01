@@ -80,6 +80,8 @@ data class SyncOutboxItem(
 
 data class ParsedItem(
     val localId: String = UUID.randomUUID().toString(),
+    val batchId: String? = null,
+    val batchIndex: Int? = null,
     val type: ItemType,
     val title: String,
     val body: String = "",
@@ -93,6 +95,13 @@ data class ParsedItem(
     val linkedLocalIds: Set<String> = emptySet(),
     val sourceStart: Int? = null,
     val sourceEnd: Int? = null,
+)
+
+data class ParsedBatch(
+    val id: String = UUID.randomUUID().toString(),
+    val originalText: String,
+    val items: List<ParsedItem>,
+    val requiresReview: Boolean,
 )
 
 data class AnalysisRequest(
