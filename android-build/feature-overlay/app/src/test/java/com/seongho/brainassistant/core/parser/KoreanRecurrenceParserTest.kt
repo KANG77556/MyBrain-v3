@@ -131,6 +131,62 @@ class KoreanRecurrenceParserTest {
     }
 
     @Test
+    fun treatsUnmarkedTwelveAsNoonAfterMorningStart() {
+        val draft = requireNotNull(
+            parser.parse("매주 월요일 오전 9시부터 12시까지 방과후수업", reference),
+        )
+
+        assertEquals(LocalTime.of(9, 0), draft.startTime)
+        assertEquals(180, draft.durationMinutes)
+    }
+
+    @Test
+    fun monthlyDaySearchesForwardFromMonthWithoutThatDay() {
+        val aprilReference = reference.withMonth(4).withDayOfMonth(30)
+
+        val draft = requireNotNull(parser.parse("매월 31일 9시부터 10시까지 상담", aprilReference))
+
+        assertEquals(LocalDate.of(2026, 5, 31), draft.startDate)
+    }
+
+    @Test
+    fun yearlyLeapDaySearchesForwardToNextLeapYear() {
+        val draft = requireNotNull(parser.parse("매년 2월 29일 9시부터 10시까지 행사", reference))
+
+        assertEquals(LocalDate.of(2028, 2, 29), draft.startDate)
+    }
+
+    @Test
+    fun parsesCompactMoveToNextWeekdayPolicy() {
+        val draft = requireNotNull(
+            parser.parse("매주 월요일 9시부터 10시까지 수업 공휴일은 다음평일로 이동", reference),
+        )
+
+        assertEquals(MOVE_TO_NEXT_WEEKDAY, draft.exclusionPolicy)
+    }
+
+    @Test
+    fun weeklyOccurrenceTodayAfterStartTimeMovesToNextWeek() {
+        val draft = requireNotNull(parser.parse("매주 일요일 9시부터 10시까지 수업", reference))
+
+        assertEquals(LocalDate.of(2026, 8, 9), draft.startDate)
+    }
+
+    @Test
+    fun monthlyOccurrenceTodayAfterStartTimeMovesToNextMonth() {
+        val draft = requireNotNull(parser.parse("매월 2일 9시부터 10시까지 상담", reference))
+
+        assertEquals(LocalDate.of(2026, 9, 2), draft.startDate)
+    }
+
+    @Test
+    fun yearlyOccurrenceTodayAfterStartTimeMovesToNextYear() {
+        val draft = requireNotNull(parser.parse("매년 8월 2일 9시부터 10시까지 행사", reference))
+
+        assertEquals(LocalDate.of(2027, 8, 2), draft.startDate)
+    }
+
+    @Test
     fun returnsNullWhenTextHasNoRecurrenceMarker() {
         assertNull(parser.parse("내일 9시부터 10시까지 상담", reference))
     }

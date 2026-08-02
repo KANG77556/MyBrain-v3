@@ -17,8 +17,8 @@ import java.time.temporal.TemporalAdjusters
 class KoreanRecurrenceParser {
     fun parse(text: String, reference: ZonedDateTime): RecurrenceDraft? {
         val normalized = text.replace(Regex("\\s+"), " ").trim()
-        val schedule = parseSchedule(normalized, reference.toLocalDate()) ?: return null
         val times = parseTimeRange(normalized) ?: return null
+        val schedule = parseSchedule(normalized, reference, times.first) ?: return null
 
         return RecurrenceDraft(
             title = cleanRecurringTitle(normalized),
@@ -27,7 +27,7 @@ class KoreanRecurrenceParser {
             durationMinutes = Duration.between(times.first, times.second).toMinutes().toInt(),
             rule = schedule.rule.copy(end = parseEnd(normalized, reference.toLocalDate()) ?: schedule.rule.end),
             exclusionKinds = parseExclusions(normalized),
-            exclusionPolicy = if (normalized.contains("다음 평일")) {
+            exclusionPolicy = if (NEXT_WEEKDAY_POLICY_PATTERN.containsMatchIn(normalized)) {
                 ExclusionPolicy.MOVE_TO_NEXT_WEEKDAY
             } else {
                 ExclusionPolicy.SKIP
@@ -36,12 +36,17 @@ class KoreanRecurrenceParser {
         )
     }
 
-    private fun parseSchedule(text: String, reference: LocalDate): Schedule? {
+    private fun parseSchedule(
+        text: String,
+        reference: ZonedDateTime,
+        startTime: LocalTime,
+    ): Schedule? {
+        val referenceDate = reference.toLocalDate()
         WEEKDAY_RANGE_PATTERN.find(text)?.let { match ->
             val startDay = weekday(match.groupValues[1])
             val endDay = weekday(match.groupValues[2])
             if (endDay.value < startDay.value) return null
-            val nextMonday = reference.with(TemporalAdjusters.next(DayOfWeek.MONDAY))
+            val nextMonday = referenceDate.with(TemporalAdjusters.next(DayOfWeek.MONDAY))
             val start = nextMonday.plusDays((startDay.value - DayOfWeek.MONDAY.value).toLong())
             val end = nextMonday.plusDays((endDay.value - DayOfWeek.MONDAY.value).toLong())
             return Schedule(
@@ -56,9 +61,9 @@ class KoreanRecurrenceParser {
 
         MONTHLY_LAST_WEEKDAY_PATTERN.find(text)?.let { match ->
             val targetDay = weekday(match.groupValues[1])
-            var date = YearMonth.from(reference).atEndOfMonth().with(TemporalAdjusters.lastInMonth(targetDay))
-            if (date.isBefore(reference)) {
-                date = YearMonth.from(reference).plusMonths(1).atEndOfMonth()
+            var date = YearMonth.from(referenceDate).atEndOfMonth().with(TemporalAdjusters.lastInMonth(targetDay))
+            if (!isFuture(date, startTime, reference)) {
+                date = YearMonth.from(referenceDate).plusMonths(1).atEndOfMonth()
                     .with(TemporalAdjusters.lastInMonth(targetDay))
             }
             return Schedule(
@@ -73,12 +78,12 @@ class KoreanRecurrenceParser {
 
         MONTHLY_DAY_PATTERN.find(text)?.let { match ->
             val day = match.groupValues[1].toIntOrNull() ?: return null
-            var month = YearMonth.from(reference)
-            var date = validDay(month, day) ?: return null
-            if (date.isBefore(reference)) {
-                month = month.plusMonths(1)
-                date = validDay(month, day) ?: return null
-            }
+            if (day !in 1..31) return null
+            val date = generateSequence(YearMonth.from(referenceDate)) { it.plusMonths(1) }
+                .take(MONTH_SEARCH_LIMIT)
+                .mapNotNull { validDay(it, day) }
+                .firstOrNull { isFuture(it, startTime, reference) }
+                ?: return null
             return Schedule(
                 date,
                 RecurrenceRule(frequency = RecurrenceFrequency.MONTHLY, dayOfMonth = day),
@@ -88,15 +93,22 @@ class KoreanRecurrenceParser {
         YEARLY_PATTERN.find(text)?.let { match ->
             val month = match.groupValues[1].toIntOrNull() ?: return null
             val day = match.groupValues[2].toIntOrNull() ?: return null
-            var date = runCatching { LocalDate.of(reference.year, month, day) }.getOrNull() ?: return null
-            if (date.isBefore(reference)) date = date.plusYears(1)
+            if (month !in 1..12 || day !in 1..31) return null
+            val date = generateSequence(referenceDate.year) { it + 1 }
+                .take(YEAR_SEARCH_LIMIT)
+                .mapNotNull { year -> runCatching { LocalDate.of(year, month, day) }.getOrNull() }
+                .firstOrNull { isFuture(it, startTime, reference) }
+                ?: return null
             return Schedule(date, RecurrenceRule(frequency = RecurrenceFrequency.YEARLY))
         }
 
         WEEKLY_PATTERN.find(text)?.let { match ->
             val days = match.groupValues[2].map(::weekday).toSet()
             if (days.isEmpty()) return null
-            val start = days.minOf { day -> reference.with(TemporalAdjusters.nextOrSame(day)) }
+            val start = days.minOf { day ->
+                val candidate = referenceDate.with(TemporalAdjusters.nextOrSame(day))
+                if (isFuture(candidate, startTime, reference)) candidate else candidate.plusWeeks(1)
+            }
             return Schedule(
                 start,
                 RecurrenceRule(
@@ -114,8 +126,14 @@ class KoreanRecurrenceParser {
         val match = TIME_RANGE_PATTERN.find(text) ?: return null
         val startMarker = match.groupValues[1]
         val start = parseTime(startMarker, match.groupValues[2], match.groupValues[3]) ?: return null
+        val rawEndMarker = match.groupValues[4]
+        val endMarker = when {
+            rawEndMarker.isNotBlank() -> rawEndMarker
+            match.groupValues[5] == "12" -> ""
+            else -> startMarker
+        }
         val end = parseTime(
-            match.groupValues[4].ifBlank { startMarker },
+            endMarker,
             match.groupValues[5],
             match.groupValues[6],
         ) ?: return null
@@ -166,10 +184,18 @@ class KoreanRecurrenceParser {
     private fun validDay(month: YearMonth, day: Int): LocalDate? =
         if (day in 1..month.lengthOfMonth()) month.atDay(day) else null
 
+    private fun isFuture(
+        date: LocalDate,
+        startTime: LocalTime,
+        reference: ZonedDateTime,
+    ): Boolean = date.atTime(startTime).atZone(reference.zone).isAfter(reference)
+
     private data class Schedule(val start: LocalDate, val rule: RecurrenceRule)
 
     private companion object {
         const val LAST_ORDINAL = 5
+        const val MONTH_SEARCH_LIMIT = 4_800
+        const val YEAR_SEARCH_LIMIT = 400
         val WEEKDAY_RANGE_PATTERN = Regex("다음\\s*주\\s*([월화수목금토일])요일\\s*부터\\s*([월화수목금토일])요일\\s*까지")
         val MONTHLY_LAST_WEEKDAY_PATTERN = Regex("매월\\s*마지막\\s*([월화수목금토일])요일")
         val MONTHLY_DAY_PATTERN = Regex("매월\\s*(\\d{1,2})일")
@@ -178,6 +204,7 @@ class KoreanRecurrenceParser {
         val TIME_RANGE_PATTERN = Regex("(오전|오후)?\\s*(\\d{1,2})시(?:\\s*(\\d{1,2})분)?\\s*부터\\s*(오전|오후)?\\s*(\\d{1,2})시(?:\\s*(\\d{1,2})분)?\\s*까지")
         val COUNT_PATTERN = Regex("(\\d+)회")
         val NEXT_MONTH_END_PATTERN = Regex("다음\\s*달\\s*말까지")
+        val NEXT_WEEKDAY_POLICY_PATTERN = Regex("다음\\s*평일")
         val CLEANUP_PATTERNS = listOf(
             WEEKDAY_RANGE_PATTERN,
             MONTHLY_LAST_WEEKDAY_PATTERN,
