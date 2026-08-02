@@ -11,6 +11,8 @@ interface BrainRepository {
     suspend fun saveNote(note: NoteItem)
     suspend fun saveTask(task: TaskItem)
     suspend fun saveDDay(item: DDayItem)
+    suspend fun getDDay(id: String): DDayItem?
+    suspend fun softDeleteDDay(id: String, deletedAt: Instant)
     suspend fun saveCalendar(item: CalendarItem, enqueue: Boolean = true)
     suspend fun saveAnalysis(record: AnalysisRecord)
     suspend fun saveParsedItems(inputId: String, items: List<ParsedItem>, transactionId: String): PersistedItems
