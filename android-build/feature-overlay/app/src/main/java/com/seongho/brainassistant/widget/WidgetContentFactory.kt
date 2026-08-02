@@ -194,7 +194,10 @@ class WidgetContentFactory(
         limit: Int,
     ): WidgetRenderContent {
         val rows = source.snapshot.notes
-            .sortedWith(compareByDescending({ it.updatedAt }, { it.id }))
+            .sortedWith(
+                compareByDescending<com.seongho.brainassistant.core.model.NoteItem> { it.updatedAt }
+                    .thenBy { it.id },
+            )
             .take(limit)
             .map { note ->
                 WidgetContentRow(
