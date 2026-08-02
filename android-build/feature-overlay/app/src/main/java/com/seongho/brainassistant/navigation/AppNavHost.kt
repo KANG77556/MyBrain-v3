@@ -80,8 +80,8 @@ internal data class ReviewSaveNavigation(
 
 internal fun reviewSaveNavigation() = ReviewSaveNavigation(
     destination = Routes.DASHBOARD,
-    popUpTo = Routes.DASHBOARD,
-    inclusive = false,
+    popUpTo = Routes.REVIEW,
+    inclusive = true,
     launchSingleTop = true,
 )
 

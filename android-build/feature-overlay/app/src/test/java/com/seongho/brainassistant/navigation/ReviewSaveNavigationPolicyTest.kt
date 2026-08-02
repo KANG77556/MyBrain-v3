@@ -5,9 +5,9 @@ import org.junit.Test
 
 class ReviewSaveNavigationPolicyTest {
     @Test
-    fun savingReviewReturnsToDashboardWithoutRemovingItFromBackStack() {
+    fun savingReviewRemovesCurrentReviewAndShowsDashboard() {
         assertEquals(
-            ReviewSaveNavigation(destination = "dashboard", popUpTo = "dashboard", inclusive = false, launchSingleTop = true),
+            ReviewSaveNavigation(destination = "dashboard", popUpTo = "review/{inputId}", inclusive = true, launchSingleTop = true),
             reviewSaveNavigation(),
         )
     }
