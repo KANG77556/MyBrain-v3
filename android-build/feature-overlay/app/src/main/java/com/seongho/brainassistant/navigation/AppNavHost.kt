@@ -21,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.seongho.brainassistant.app.AppContainer
@@ -81,12 +82,17 @@ internal fun reviewSaveNavigation() = ReviewSaveNavigation(
     launchSingleTop = true,
 )
 
+internal fun dashboardRecoveryDestination(currentRoute: String?): String? =
+    if (currentRoute == null) Routes.DASHBOARD else null
+
 @Composable
 fun AppNavHost(
     container: AppContainer,
     activity: Activity,
 ) {
     val navController = rememberNavController()
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    var navigationInitialized by remember { mutableStateOf(false) }
     val captureViewModel: CaptureViewModel = viewModel(factory = factory { CaptureViewModel(container.captureUseCase) })
     val dashboardViewModel: DashboardViewModel = viewModel(factory = factory { DashboardViewModel(container.repository, captureViewModel) })
     val calendarViewModel: CalendarViewModel = viewModel(factory = factory { CalendarViewModel(container.repository) })
@@ -115,6 +121,16 @@ fun AppNavHost(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
         authViewModel.onCalendarPermissionResult(result.values.all { it })
+    }
+
+    LaunchedEffect(currentBackStackEntry) {
+        if (currentBackStackEntry != null) {
+            navigationInitialized = true
+        } else if (navigationInitialized) {
+            dashboardRecoveryDestination(null)?.let { destination ->
+                navController.navigate(destination) { launchSingleTop = true }
+            }
+        }
     }
 
     LaunchedEffect(authState.canContinue) {
