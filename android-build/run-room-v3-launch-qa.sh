@@ -14,7 +14,7 @@ adb install -r "$APK_PATH" | tee "$OUTPUT_DIR/install-result.txt"
 adb shell am force-stop "$PACKAGE_NAME"
 adb logcat -c
 
-ACTIVITY="$(adb shell cmd package resolve-activity --brief "$PACKAGE_NAME" | tr -d '\r')"
+ACTIVITY="$(adb shell cmd package resolve-activity --brief "$PACKAGE_NAME" | tr -d '\r' | grep '/' | tail -n 1)"
 test -n "$ACTIVITY"
 printf '%s\n' "$ACTIVITY" | tee "$OUTPUT_DIR/resolved-activity.txt"
 
