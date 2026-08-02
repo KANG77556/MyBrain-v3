@@ -234,6 +234,7 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
             .replace("상담 전에", "")
             .replace(Regex("\\s*(?:은|는)?\\s*(?:메모로\\s*)?(?:메모해줘|메모해|기억해줘)$"), "")
             .replace(Regex("\\s*(?:은|는)?\\s*(?:일정으로|일정에|할 일로|할일로)?\\s*(?:넣어줘|넣고|추가해줘|추가해|추가하고|추가)$"), "")
+            .replace(Regex("\\s*하고$"), "")
             .replace(Regex("\\s*(해야 해|해야함|해줘|잡아줘|등록해줘|기억해줘)$"), "")
             .replace(Regex("\\s+"), " ")
             .trim(' ', ',', '.')
