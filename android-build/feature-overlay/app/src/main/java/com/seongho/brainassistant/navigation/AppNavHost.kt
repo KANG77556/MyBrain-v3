@@ -71,6 +71,20 @@ private object Routes {
     const val EXCLUSIONS = "settings/exclusions"
 }
 
+internal data class ReviewSaveNavigation(
+    val destination: String,
+    val popUpTo: String,
+    val inclusive: Boolean,
+    val launchSingleTop: Boolean,
+)
+
+internal fun reviewSaveNavigation() = ReviewSaveNavigation(
+    destination = Routes.DASHBOARD,
+    popUpTo = Routes.DASHBOARD,
+    inclusive = false,
+    launchSingleTop = true,
+)
+
 @Composable
 fun AppNavHost(
     container: AppContainer,
@@ -193,7 +207,12 @@ fun AppNavHost(
                             if (invalid) state = state.copy(message = "제목과 일정 시간을 확인해 주세요.")
                             else {
                                 captureViewModel.confirmReviewBatch(parsed, pending.recurrences)
-                                navController.popBackStack()
+                                reviewSaveNavigation().let { navigation ->
+                                    navController.navigate(navigation.destination) {
+                                        popUpTo(navigation.popUpTo) { inclusive = navigation.inclusive }
+                                        launchSingleTop = navigation.launchSingleTop
+                                    }
+                                }
                             }
                         }
                         ReviewAction.Cancel -> {
