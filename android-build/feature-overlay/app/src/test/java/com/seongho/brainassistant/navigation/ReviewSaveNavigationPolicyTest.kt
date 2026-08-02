@@ -18,4 +18,10 @@ class ReviewSaveNavigationPolicyTest {
         assertEquals("dashboard", dashboardRecoveryDestination(null))
         assertNull(dashboardRecoveryDestination("review/input"))
     }
+
+    @Test
+    fun clearedReviewNavigatesForwardInsteadOfPoppingTheDashboard() {
+        assertEquals("dashboard", clearedReviewDestination("review/{inputId}"))
+        assertNull(clearedReviewDestination("dashboard"))
+    }
 }

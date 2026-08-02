@@ -85,6 +85,9 @@ internal fun reviewSaveNavigation() = ReviewSaveNavigation(
 internal fun dashboardRecoveryDestination(currentRoute: String?): String? =
     if (currentRoute == null) Routes.DASHBOARD else null
 
+internal fun clearedReviewDestination(currentRoute: String?): String? =
+    if (currentRoute == Routes.REVIEW) Routes.DASHBOARD else null
+
 @Composable
 fun AppNavHost(
     container: AppContainer,
@@ -190,7 +193,11 @@ fun AppNavHost(
         ) {
             val pending = captureState.pendingReview
             if (pending == null) {
-                LaunchedEffect(Unit) { navController.popBackStack() }
+                LaunchedEffect(navController.currentDestination?.route) {
+                    clearedReviewDestination(navController.currentDestination?.route)?.let { destination ->
+                        navController.navigate(destination) { launchSingleTop = true }
+                    }
+                }
             } else {
                 var state by remember(pending.inputId) {
                     mutableStateOf(
