@@ -25,6 +25,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.seongho.brainassistant.core.model.ClarificationField
 import com.seongho.brainassistant.core.model.ItemType
+import com.seongho.brainassistant.core.model.RecurrenceDraft
+import com.seongho.brainassistant.core.model.RecurrenceEnd
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,11 +79,38 @@ fun ReviewScreen(
             }
             state.conflictMessage?.let { message -> item { WarningText(message) } }
             state.message?.let { message -> item { WarningText(message) } }
+            items(state.recurrences, key = RecurrenceDraft::localId) { recurrence ->
+                RecurrenceReviewCard(recurrence)
+            }
             items(state.items, key = ReviewItemUi::localId) { item ->
                 ReviewItemCard(item, onAction)
             }
         }
     }
+}
+
+@Composable
+private fun RecurrenceReviewCard(recurrence: RecurrenceDraft) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("반복 일정", style = MaterialTheme.typography.labelLarge)
+            Text(recurrence.title, style = MaterialTheme.typography.titleMedium)
+            Text("${recurrence.startDate} ${recurrence.startTime} · ${recurrence.durationMinutes / 60}시간")
+            Text(recurrence.rule.summary())
+            Text(when (val end = recurrence.rule.end) {
+                is RecurrenceEnd.Until -> "종료일: ${end.date}"
+                is RecurrenceEnd.Count -> "${end.occurrences}회"
+                RecurrenceEnd.Never -> "종료일 없음"
+            })
+        }
+    }
+}
+
+private fun com.seongho.brainassistant.core.model.RecurrenceRule.summary(): String = when (frequency) {
+    com.seongho.brainassistant.core.model.RecurrenceFrequency.DAILY -> "매일"
+    com.seongho.brainassistant.core.model.RecurrenceFrequency.WEEKLY -> "매주 ${weekdays.sortedBy { it.value }.joinToString(",") { it.name.take(2) }}"
+    com.seongho.brainassistant.core.model.RecurrenceFrequency.MONTHLY -> "매월"
+    com.seongho.brainassistant.core.model.RecurrenceFrequency.YEARLY -> "매년"
 }
 @Composable
 private fun WarningText(text: String) {

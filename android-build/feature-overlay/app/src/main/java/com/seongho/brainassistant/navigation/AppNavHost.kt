@@ -172,6 +172,7 @@ fun AppNavHost(
                             inputId = pending.inputId,
                             originalText = pending.originalText,
                             items = pending.items.map(ReviewItemUi::from),
+                            recurrences = pending.recurrences,
                             clarificationFields = pending.clarificationFields,
                             conflictMessage = pending.message,
                         )

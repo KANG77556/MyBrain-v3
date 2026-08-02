@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.seongho.brainassistant.core.model.ClarificationField
 import com.seongho.brainassistant.core.model.ItemType
 import com.seongho.brainassistant.core.model.ParsedItem
+import com.seongho.brainassistant.core.model.RecurrenceDraft
 import com.seongho.brainassistant.data.BrainRepository
 import com.seongho.brainassistant.data.CaptureResult
 import java.time.Instant
@@ -58,12 +59,13 @@ data class ReviewUiState(
     val inputId: String = "",
     val originalText: String = "",
     val items: List<ReviewItemUi> = emptyList(),
+    val recurrences: List<RecurrenceDraft> = emptyList(),
     val clarificationFields: Set<ClarificationField> = emptySet(),
     val conflictMessage: String? = null,
     val isSaving: Boolean = false,
     val message: String? = null,
 ) {
-    val isValid: Boolean get() = items.isNotEmpty() && items.all(ReviewItemUi::isValid)
+    val isValid: Boolean get() = (items.isNotEmpty() || recurrences.isNotEmpty()) && items.all(ReviewItemUi::isValid)
 }
 
 private fun ReviewItemUi.isValid(): Boolean =
@@ -99,6 +101,7 @@ class ReviewViewModel(
             inputId = review.inputId,
             originalText = review.originalText,
             items = review.items.map(ReviewItemUi::from),
+            recurrences = review.recurrences,
             clarificationFields = review.clarificationFields,
             conflictMessage = review.message.takeUnless { it == "확인이 필요한 항목이 있습니다." },
         )
