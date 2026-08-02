@@ -3,7 +3,6 @@ package com.seongho.brainassistant.feature.dashboard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -14,6 +13,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -79,18 +79,21 @@ fun DashboardScreen(
                     title = {
                         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Text(
-                                text = "오늘의 브레인 비서",
+                                "오늘의 브레인 비서",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = todayLabel,
+                                todayLabel,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     },
                     actions = {
+                        TextButton(onClick = { onAction(DashboardAction.OpenDDay) }) {
+                            Text("D-Day")
+                        }
                         IconButton(onClick = { onAction(DashboardAction.OpenCalendar) }) {
                             Icon(Icons.Default.DateRange, contentDescription = "캘린더")
                         }
@@ -100,17 +103,11 @@ fun DashboardScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
                     ),
                 )
             },
             snackbarHost = { SnackbarHost(snackbar) },
-            bottomBar = {
-                CaptureDock(
-                    state = state,
-                    onAction = onAction,
-                )
-            },
+            bottomBar = { CaptureDock(state, onAction) },
         ) { scaffoldPadding ->
             LazyVerticalGrid(
                 columns = GridCells.Fixed(columns),
@@ -118,22 +115,15 @@ fun DashboardScreen(
                     .fillMaxSize()
                     .padding(scaffoldPadding)
                     .testTag("dashboard-content"),
-                contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 12.dp),
+                contentPadding = PaddingValues(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    SummaryCard(state)
-                }
+                item(span = { GridItemSpan(maxLineSpan) }) { SummaryCard(state) }
 
                 if (DashboardSection.D_DAY in visibleSections) {
-                    state.representativeDDay?.let { dday ->
-                        item {
-                            RepresentativeDDayCard(
-                                item = dday,
-                                today = state.displayDate,
-                            )
-                        }
+                    state.representativeDDay?.let { item ->
+                        item { RepresentativeDDayCard(item, state.displayDate) }
                     }
                 }
 
@@ -142,10 +132,7 @@ fun DashboardScreen(
                         SectionCard(
                             title = "긴급 할 일",
                             rows = state.urgentTasks.map { task ->
-                                buildString {
-                                    append(task.title)
-                                    task.dueAt?.let { append(" · ${it.formatDueSeoul()}") }
-                                }
+                                task.title + (task.dueAt?.let { " · ${it.formatDueSeoul()}" } ?: "")
                             },
                             emphasized = true,
                         )
@@ -176,12 +163,7 @@ fun DashboardScreen(
                 }
 
                 if (DashboardSection.RECENT_NOTES in visibleSections) {
-                    item {
-                        SectionCard(
-                            title = "최근 메모",
-                            rows = state.notes.map { it.title },
-                        )
-                    }
+                    item { SectionCard("최근 메모", state.notes.map { it.title }) }
                 }
             }
         }
@@ -189,10 +171,7 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun RepresentativeDDayCard(
-    item: DDayItem,
-    today: LocalDate,
-) {
+private fun RepresentativeDDayCard(item: DDayItem, today: LocalDate) {
     val display = remember(today, item.targetDate) {
         when (val value = DDayDisplay.between(today, item.targetDate)) {
             is DDayDisplay.Before -> "D-${value.days}"
@@ -200,71 +179,41 @@ private fun RepresentativeDDayCard(
             is DDayDisplay.After -> "D+${value.days}"
         }
     }
-    val dateLabel = remember(item.targetDate) {
-        item.targetDate.format(DateTimeFormatter.ofPattern("M월 d일", Locale.KOREAN))
-    }
-
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("representative-dday-card"),
+        modifier = Modifier.fillMaxWidth().testTag("representative-dday-card"),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = "대표 D-Day",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onTertiaryContainer,
-            )
+            Text("대표 D-Day", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = item.title,
+                        item.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = dateLabel,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    )
+                    Text(item.targetDate.format(DateTimeFormatter.ofPattern("M월 d일", Locale.KOREAN)))
                 }
-                Text(
-                    text = display,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    maxLines = 1,
-                )
+                Text(display, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 @Composable
-private fun CaptureDock(
-    state: DashboardUiState,
-    onAction: (DashboardAction) -> Unit,
-) {
+private fun CaptureDock(state: DashboardUiState, onAction: (DashboardAction) -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,
         shadowElevation = 8.dp,
     ) {
@@ -280,9 +229,7 @@ private fun CaptureDock(
                 TextButton(
                     onClick = { onAction(DashboardAction.Undo) },
                     modifier = Modifier.align(Alignment.End),
-                ) {
-                    Text("방금 저장 실행 취소")
-                }
+                ) { Text("방금 저장 실행 취소") }
             }
             QuickCaptureBar(
                 text = state.inputText,
@@ -300,58 +247,24 @@ private fun SummaryCard(state: DashboardUiState) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = "오늘 요약",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Text("오늘 요약", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                SummaryMetric(
-                    label = "일정",
-                    value = state.summary.eventCount.toString(),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.weight(1f).testTag("summary-metric-events"),
-                )
-                SummaryMetric(
-                    label = "할 일",
-                    value = state.summary.taskCount.toString(),
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.weight(1f).testTag("summary-metric-tasks"),
-                )
-                SummaryMetric(
-                    label = "긴급",
-                    value = state.urgentTasks.size.toString(),
-                    containerColor = if (state.urgentTasks.isEmpty()) {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.errorContainer
-                    },
-                    modifier = Modifier.weight(1f).testTag("summary-metric-urgent"),
-                )
-                SummaryMetric(
-                    label = "동기화",
-                    value = if (state.summary.pendingSyncCount == 0) "완료" else "${state.summary.pendingSyncCount}",
-                    containerColor = if (state.summary.pendingSyncCount == 0) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.tertiaryContainer
-                    },
-                    modifier = Modifier.weight(1f).testTag("summary-metric-sync"),
-                )
+                SummaryMetric("일정", state.summary.eventCount.toString(), MaterialTheme.colorScheme.primaryContainer, Modifier.weight(1f).testTag("summary-metric-events"))
+                SummaryMetric("할 일", state.summary.taskCount.toString(), MaterialTheme.colorScheme.secondaryContainer, Modifier.weight(1f).testTag("summary-metric-tasks"))
+                SummaryMetric("긴급", state.urgentTasks.size.toString(), MaterialTheme.colorScheme.errorContainer, Modifier.weight(1f).testTag("summary-metric-urgent"))
+                SummaryMetric("동기화", if (state.summary.pendingSyncCount == 0) "완료" else state.summary.pendingSyncCount.toString(), MaterialTheme.colorScheme.tertiaryContainer, Modifier.weight(1f).testTag("summary-metric-sync"))
             }
             if (state.summary.overdueCount > 0) {
                 Text(
-                    text = "마감이 지난 할 일 ${state.summary.overdueCount}건을 먼저 확인하세요.",
+                    "마감이 지난 할 일 ${state.summary.overdueCount}건을 먼저 확인하세요.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -365,29 +278,15 @@ private fun SummaryMetric(
     label: String,
     value: String,
     containerColor: Color,
-    modifier: Modifier = Modifier,
+    modifier: Modifier,
 ) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        color = containerColor,
-    ) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(14.dp), color = containerColor) {
         Column(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 9.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1,
-            )
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
         }
     }
 }
@@ -403,51 +302,19 @@ private fun SectionCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (emphasized) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
+            containerColor = if (emphasized) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             if (rows.isEmpty() && emptyMessage != null) {
-                Text(
-                    text = emptyMessage,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text(emptyMessage, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             rows.forEach { row ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Surface(
-                        modifier = Modifier.padding(top = 7.dp),
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primary,
-                    ) {
-                        androidx.compose.foundation.layout.Box(Modifier.padding(3.dp))
-                    }
-                    Text(
-                        text = row,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Text(row, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
     }
