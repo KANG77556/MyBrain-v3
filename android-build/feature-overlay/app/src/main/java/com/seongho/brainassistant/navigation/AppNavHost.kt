@@ -166,16 +166,18 @@ fun AppNavHost(
                     when (action) {
                         is ReviewAction.ChangeType -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(type = action.value) else it })
                         is ReviewAction.ChangeTitle -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(title = action.value) else it })
+                        is ReviewAction.ChangeBody -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(body = action.value) else it })
                         is ReviewAction.ChangeStartAt -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(startAt = action.value) else it })
                         is ReviewAction.ChangeEndAt -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(endAt = action.value) else it })
                         is ReviewAction.ChangeDueAt -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(dueAt = action.value) else it })
+                        is ReviewAction.ChangeTargetDate -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(targetDate = action.value) else it })
                         is ReviewAction.ChangePriority -> state = state.copy(items = state.items.map { if (it.localId == action.localId) it.copy(priority = action.value.coerceIn(1, 3)) else it })
                         is ReviewAction.RemoveItem -> state = state.copy(items = state.items.filterNot { it.localId == action.localId })
                         ReviewAction.Save -> {
                             val parsed = state.items.map(ReviewItemUi::toParsedItem)
-                            val invalid = parsed.any { it.title.isBlank() || (it.type.name == "EVENT" && it.startAt == null) }
-                            if (invalid) state = state.copy(message = "제목과 일정 시간을 확인해 주세요.")
-                            else {
+                            if (!state.isValid) {
+                                state = state.copy(message = "제목과 날짜·시간을 확인해 주세요.")
+                            } else {
                                 captureViewModel.confirmReview(parsed)
                                 navController.popBackStack()
                             }
