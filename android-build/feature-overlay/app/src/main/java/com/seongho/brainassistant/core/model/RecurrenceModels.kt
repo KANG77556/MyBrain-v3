@@ -37,7 +37,7 @@ data class RecurrenceRule(
     init {
         require(interval > 0) { "반복 간격은 양수여야 합니다." }
         require(dayOfMonth == null || dayOfMonth > 0) { "월간 일자는 양수여야 합니다." }
-        require(ordinal == null || ordinal > 0) { "월간 순서는 양수여야 합니다." }
+        require(ordinal == null || ordinal in -5..5 && ordinal != 0) { "월간 순서는 0이 아닌 -5~5여야 합니다." }
         require(frequency != RecurrenceFrequency.MONTHLY || ordinal == null || ordinalWeekday != null) {
             "월간 순서 반복에는 요일이 필요합니다."
         }

@@ -60,8 +60,8 @@ class RecurrenceModelsTest {
     }
 
     @Test
-    fun ordinalMustBePositive() {
-        assertValidationFailure("월간 순서는 양수여야 합니다.") {
+    fun ordinalMustNotBeZero() {
+        assertValidationFailure("월간 순서는 0이 아닌 -5~5여야 합니다.") {
             RecurrenceRule(frequency = RecurrenceFrequency.MONTHLY, ordinal = 0)
         }
     }
