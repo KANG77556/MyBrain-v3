@@ -12,6 +12,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
@@ -24,6 +25,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.seongho.brainassistant.app.AppContainer
 import com.seongho.brainassistant.core.auth.CredentialManagerGoogleAuthGateway
+import com.seongho.brainassistant.core.calendar.ExclusionCalendarClassifier
+import com.seongho.brainassistant.core.calendar.SchoolExclusionCategory
+import com.seongho.brainassistant.core.model.ExclusionKind
+import com.seongho.brainassistant.core.sync.ExclusionCandidateKey
+import com.seongho.brainassistant.core.sync.ExclusionRefreshWorker
 import com.seongho.brainassistant.feature.auth.AuthAction
 import com.seongho.brainassistant.feature.auth.AuthScreen
 import com.seongho.brainassistant.feature.auth.AuthViewModel
@@ -41,11 +47,19 @@ import com.seongho.brainassistant.feature.review.ReviewItemUi
 import com.seongho.brainassistant.feature.review.ReviewScreen
 import com.seongho.brainassistant.feature.review.ReviewUiState
 import com.seongho.brainassistant.feature.settings.SettingsAction
+import com.seongho.brainassistant.feature.settings.ExclusionCalendarAction
+import com.seongho.brainassistant.feature.settings.ExclusionCalendarScreen
+import com.seongho.brainassistant.feature.settings.ExclusionCalendarUiState
+import com.seongho.brainassistant.feature.settings.ExclusionCandidateUi
+import com.seongho.brainassistant.feature.settings.ExclusionSourceUi
 import com.seongho.brainassistant.feature.settings.SettingsScreen
 import com.seongho.brainassistant.feature.settings.SettingsViewModel
 import com.seongho.brainassistant.feature.trash.TrashAction
 import com.seongho.brainassistant.feature.trash.TrashScreen
 import com.seongho.brainassistant.feature.trash.TrashViewModel
+import java.time.LocalDate
+import java.time.ZoneId
+import kotlinx.coroutines.launch
 
 private object Routes {
     const val AUTH = "auth"
@@ -54,6 +68,7 @@ private object Routes {
     const val REVIEW = "review/{inputId}"
     const val TRASH = "trash"
     const val SETTINGS = "settings"
+    const val EXCLUSIONS = "settings/exclusions"
 }
 
 @Composable
@@ -202,7 +217,72 @@ fun AppNavHost(
                 when (action) {
                     SettingsAction.Back -> navController.popBackStack()
                     SettingsAction.OpenTrash -> navController.navigate(Routes.TRASH)
+                    SettingsAction.OpenExclusions -> navController.navigate(Routes.EXCLUSIONS)
                     else -> settingsViewModel.onAction(action)
+                }
+            }
+        }
+        composable(Routes.EXCLUSIONS) {
+            val scope = rememberCoroutineScope()
+            val currentYear = remember { LocalDate.now(ZoneId.of("Asia/Seoul")).year }
+            var state by remember { mutableStateOf(ExclusionCalendarUiState()) }
+            LaunchedEffect(Unit) {
+                val sources = container.exclusionSettingsStore.loadSources()
+                val classifier = ExclusionCalendarClassifier()
+                state = ExclusionCalendarUiState(
+                    sources = sources.map { source ->
+                        ExclusionSourceUi(
+                            id = source.id,
+                            title = source.displayName,
+                            kindLabel = if (source.kind == ExclusionKind.KOREAN_PUBLIC_HOLIDAY) "공휴일" else "학교",
+                            enabled = source.enabled,
+                        )
+                    },
+                    candidates = container.exclusionSettingsStore
+                        .loadSchoolCandidates(currentYear, currentYear + 1)
+                        .map { candidate ->
+                            ExclusionCandidateUi(
+                                sourceId = candidate.sourceId,
+                                remoteEventId = candidate.remoteEventId,
+                                title = candidate.title,
+                                date = candidate.date,
+                                categoryLabel = when (classifier.classifySchoolEvent(candidate.title)) {
+                                    SchoolExclusionCategory.VACATION -> "방학"
+                                    SchoolExclusionCategory.DISCRETIONARY_CLOSURE -> "재량휴업"
+                                    SchoolExclusionCategory.SCHOOL_EVENT -> "학교행사"
+                                    null -> "학교 일정"
+                                },
+                                approved = candidate.approved,
+                            )
+                        },
+                )
+            }
+            ExclusionCalendarScreen(state) { action ->
+                when (action) {
+                    is ExclusionCalendarAction.ToggleSource -> state = state.copy(
+                        sources = state.sources.map { if (it.id == action.sourceId) it.copy(enabled = action.enabled) else it },
+                    )
+                    is ExclusionCalendarAction.ToggleCandidate -> state = state.copy(
+                        candidates = state.candidates.map {
+                            if (it.sourceId == action.sourceId && it.remoteEventId == action.remoteEventId && it.date == action.date) {
+                                it.copy(approved = action.approved)
+                            } else it
+                        },
+                    )
+                    ExclusionCalendarAction.Save -> scope.launch {
+                        state = state.copy(isSaving = true)
+                        container.exclusionSettingsStore.saveSelections(
+                            enabledSourceIds = state.sources.filter { it.enabled }.mapTo(mutableSetOf()) { it.id },
+                            approvedCandidates = state.candidates.filter { it.approved }.mapTo(mutableSetOf()) {
+                                ExclusionCandidateKey(it.sourceId, it.remoteEventId, it.date)
+                            },
+                            startYear = currentYear,
+                            endYear = currentYear + 1,
+                        )
+                        ExclusionRefreshWorker.refreshNow(activity)
+                        navController.popBackStack()
+                    }
+                    ExclusionCalendarAction.Back -> navController.popBackStack()
                 }
             }
         }

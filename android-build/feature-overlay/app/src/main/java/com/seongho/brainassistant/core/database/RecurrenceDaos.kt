@@ -70,6 +70,12 @@ interface ExclusionSourceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: ExclusionSourceEntity)
 
+    @Query("SELECT * FROM exclusion_sources WHERE id = :id LIMIT 1")
+    suspend fun get(id: String): ExclusionSourceEntity?
+
+    @Query("SELECT * FROM exclusion_sources ORDER BY displayName")
+    suspend fun listAll(): List<ExclusionSourceEntity>
+
     @Query("SELECT * FROM exclusion_sources WHERE enabled = 1 ORDER BY displayName")
     suspend fun listEnabled(): List<ExclusionSourceEntity>
 }
@@ -81,6 +87,18 @@ interface ExclusionDateDao {
 
     @Query("SELECT * FROM exclusion_dates WHERE sourceId = :sourceId AND year = :year ORDER BY dateEpochDay, remoteEventId")
     suspend fun listForSourceYear(sourceId: String, year: Int): List<ExclusionDateEntity>
+
+    @Query(
+        """
+        SELECT * FROM exclusion_dates
+        WHERE approved = 1 AND dateEpochDay >= :startEpochDay AND dateEpochDay <= :endEpochDay
+        ORDER BY dateEpochDay, sourceId, remoteEventId
+        """,
+    )
+    suspend fun listApprovedRange(startEpochDay: Long, endEpochDay: Long): List<ExclusionDateEntity>
+
+    @Query("SELECT * FROM exclusion_dates WHERE year >= :startYear AND year <= :endYear ORDER BY dateEpochDay, sourceId, remoteEventId")
+    suspend fun listYears(startYear: Int, endYear: Int): List<ExclusionDateEntity>
 
     @Query("DELETE FROM exclusion_dates WHERE sourceId = :sourceId AND year = :year")
     suspend fun deleteForSourceYear(sourceId: String, year: Int)

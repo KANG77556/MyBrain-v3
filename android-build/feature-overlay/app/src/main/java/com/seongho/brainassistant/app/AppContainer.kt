@@ -7,6 +7,7 @@ import com.seongho.brainassistant.BuildConfig
 import com.seongho.brainassistant.core.calendar.CalendarGateway
 import com.seongho.brainassistant.core.calendar.ConflictChecker
 import com.seongho.brainassistant.core.calendar.GoogleCalendarGateway
+import com.seongho.brainassistant.core.calendar.DeviceCalendarExclusionGateway
 import com.seongho.brainassistant.core.database.AppDatabase
 import com.seongho.brainassistant.core.database.MIGRATION_1_2
 import com.seongho.brainassistant.core.database.MIGRATION_2_3
@@ -21,6 +22,10 @@ import com.seongho.brainassistant.core.parser.RuleBasedInputAnalyzer
 import com.seongho.brainassistant.core.settings.DataStoreUserSettingsRepository
 import com.seongho.brainassistant.core.settings.SensitivePreviewMasker
 import com.seongho.brainassistant.core.settings.UserSettingsRepository
+import com.seongho.brainassistant.core.sync.ExclusionRefreshEngine
+import com.seongho.brainassistant.core.sync.RoomExclusionCacheStore
+import com.seongho.brainassistant.core.sync.RoomRecurrenceExclusionRecalculator
+import com.seongho.brainassistant.core.sync.RoomExclusionSettingsStore
 import com.seongho.brainassistant.data.BrainRepository
 import com.seongho.brainassistant.data.CaptureUseCase
 import com.seongho.brainassistant.data.RoomBrainRepository
@@ -44,6 +49,13 @@ class AppContainer(context: Context) {
     val conflictChecker = ConflictChecker()
     val captureUseCase = CaptureUseCase(repository, analyzer, conflictChecker, Clock.systemUTC())
     val calendarGateway: CalendarGateway = GoogleCalendarGateway(appContext)
+    val exclusionCalendarGateway = DeviceCalendarExclusionGateway(appContext)
+    val exclusionRefreshEngine = ExclusionRefreshEngine(
+        exclusionCalendarGateway,
+        RoomExclusionCacheStore(database),
+        RoomRecurrenceExclusionRecalculator(database),
+    )
+    val exclusionSettingsStore = RoomExclusionSettingsStore(database)
     val notificationScheduler = NotificationScheduler(appContext, WorkManager.getInstance(appContext))
     val previewMasker = SensitivePreviewMasker()
     val logger = SafeLogger(enabled = BuildConfig.DEBUG)

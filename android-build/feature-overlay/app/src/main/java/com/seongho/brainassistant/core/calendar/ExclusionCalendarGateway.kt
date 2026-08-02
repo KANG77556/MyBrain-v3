@@ -38,10 +38,16 @@ class ExclusionCalendarClassifier {
         }
     }
 
+    fun isSchoolCalendarCandidate(calendarName: String): Boolean {
+        val normalized = calendarName.replace(Regex("\\s+"), "").lowercase()
+        return SCHOOL_CALENDAR_KEYWORDS.any(normalized::contains)
+    }
+
     private companion object {
         val VACATION_KEYWORDS = listOf("여름방학", "겨울방학", "봄방학", "방학식")
         val CLOSURE_KEYWORDS = listOf("재량휴업", "개교기념일", "휴업일")
         val SCHOOL_EVENT_KEYWORDS = listOf("학교운동회", "체육대회", "학교행사", "현장체험학습")
+        val SCHOOL_CALENDAR_KEYWORDS = listOf("학교", "학사일정", "교무", "school", "academiccalendar")
     }
 }
 
