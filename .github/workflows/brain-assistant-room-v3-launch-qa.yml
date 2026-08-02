@@ -8,6 +8,12 @@ on:
     paths:
       - 'android-build/run-room-v3-launch-qa.sh'
       - '.github/workflows/brain-assistant-room-v3-launch-qa.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'android-build/run-room-v3-launch-qa.sh'
+      - '.github/workflows/brain-assistant-room-v3-launch-qa.yml'
 
 permissions:
   contents: read
