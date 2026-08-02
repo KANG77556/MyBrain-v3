@@ -36,6 +36,9 @@ import com.seongho.brainassistant.feature.capture.SpeechInputController
 import com.seongho.brainassistant.feature.dashboard.DashboardAction
 import com.seongho.brainassistant.feature.dashboard.DashboardScreen
 import com.seongho.brainassistant.feature.dashboard.DashboardViewModel
+import com.seongho.brainassistant.feature.dday.DDayAction
+import com.seongho.brainassistant.feature.dday.DDayScreen
+import com.seongho.brainassistant.feature.dday.DDayViewModel
 import com.seongho.brainassistant.feature.review.ReviewAction
 import com.seongho.brainassistant.feature.review.ReviewItemUi
 import com.seongho.brainassistant.feature.review.ReviewScreen
@@ -51,6 +54,7 @@ private object Routes {
     const val AUTH = "auth"
     const val DASHBOARD = "dashboard"
     const val CALENDAR = "calendar"
+    const val DDAY = "dday"
     const val REVIEW = "review/{inputId}"
     const val TRASH = "trash"
     const val SETTINGS = "settings"
@@ -65,6 +69,7 @@ fun AppNavHost(
     val captureViewModel: CaptureViewModel = viewModel(factory = factory { CaptureViewModel(container.captureUseCase) })
     val dashboardViewModel: DashboardViewModel = viewModel(factory = factory { DashboardViewModel(container.repository, captureViewModel) })
     val calendarViewModel: CalendarViewModel = viewModel(factory = factory { CalendarViewModel(container.repository) })
+    val dDayViewModel: DDayViewModel = viewModel(factory = factory { DDayViewModel(container.repository) })
     val authViewModel: AuthViewModel = viewModel(factory = factory { AuthViewModel(CredentialManagerGoogleAuthGateway(activity)) })
     val trashViewModel: TrashViewModel = viewModel(factory = factory { TrashViewModel(container.repository) })
     val settingsViewModel: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings, calendarConnected = false) })
@@ -73,6 +78,7 @@ fun AppNavHost(
     val captureState by captureViewModel.state.collectAsState()
     val dashboardState by dashboardViewModel.state.collectAsState()
     val calendarState by calendarViewModel.state.collectAsState()
+    val dDayState by dDayViewModel.state.collectAsState()
     val trashState by trashViewModel.state.collectAsState()
     val settingsState by settingsViewModel.state.collectAsState()
 
@@ -129,6 +135,7 @@ fun AppNavHost(
                     }
                     DashboardAction.Undo -> dashboardViewModel.undo()
                     DashboardAction.OpenCalendar -> navController.navigate(Routes.CALENDAR)
+                    DashboardAction.OpenDDay -> navController.navigate(Routes.DDAY)
                     DashboardAction.OpenTrash -> navController.navigate(Routes.TRASH)
                     DashboardAction.OpenSettings -> navController.navigate(Routes.SETTINGS)
                 }
@@ -136,11 +143,14 @@ fun AppNavHost(
         }
         composable(Routes.CALENDAR) {
             CalendarScreen(calendarState) { action ->
-                if (action == CalendarAction.Back) {
-                    navController.popBackStack()
-                } else {
-                    calendarViewModel.onAction(action)
-                }
+                if (action == CalendarAction.Back) navController.popBackStack()
+                else calendarViewModel.onAction(action)
+            }
+        }
+        composable(Routes.DDAY) {
+            DDayScreen(dDayState) { action ->
+                if (action == DDayAction.Back) navController.popBackStack()
+                else dDayViewModel.onAction(action)
             }
         }
         composable(
