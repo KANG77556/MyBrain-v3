@@ -3,12 +3,15 @@ package com.seongho.brainassistant.testing
 import com.seongho.brainassistant.core.calendar.RemoteCalendarEvent
 import com.seongho.brainassistant.core.model.*
 import com.seongho.brainassistant.data.BrainRepository
+import com.seongho.brainassistant.data.RecurrenceMutationPolicy
+import com.seongho.brainassistant.core.recurrence.RecurrenceEngine
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOf
 
 class FakeBrainRepository : BrainRepository {
     val inputs = mutableListOf<InputRecord>()
@@ -18,6 +21,7 @@ class FakeBrainRepository : BrainRepository {
     val dDays = mutableListOf<DDayItem>()
     val analyses = mutableListOf<AnalysisRecord>()
     val outbox = mutableListOf<SyncOutboxItem>()
+    val recurrences = mutableListOf<RecurrenceMaster>()
     val trashFlow = MutableStateFlow<List<TrashItem>>(emptyList())
     val todayFlow = MutableStateFlow(TodaySnapshot())
     private val dDayFlow = MutableStateFlow<List<DDayItem>>(emptyList())
@@ -74,6 +78,59 @@ class FakeBrainRepository : BrainRepository {
         return PersistedItems(transactionId, persistedNotes, persistedTasks, persistedEvents, persistedDDays)
     }
     override suspend fun confirmReviewedItems(inputId: String, items: List<ParsedItem>): PersistedItems = saveParsedItems(inputId, items, "review-tx")
+    override suspend fun confirmReviewedBatch(
+        inputId: String,
+        items: List<ParsedItem>,
+        recurrences: List<RecurrenceDraft>,
+    ): PersistedBatch {
+        val transactionId = "review-batch-tx"
+        val ordinary = saveParsedItems(inputId, items, transactionId)
+        val now = Instant.now()
+        val masters = recurrences.map { draft ->
+            RecurrenceMaster(
+                id = draft.localId,
+                inputId = inputId,
+                transactionId = transactionId,
+                title = draft.title,
+                startDate = draft.startDate,
+                startTime = draft.startTime,
+                durationMinutes = draft.durationMinutes,
+                zoneId = draft.zoneId,
+                rule = draft.rule,
+                exclusionKinds = draft.exclusionKinds,
+                exclusionPolicy = draft.exclusionPolicy,
+                updatedAt = now,
+            )
+        }
+        this.recurrences += masters
+        return PersistedBatch(
+            transactionId,
+            ordinary,
+            masters.takeIf { it.isNotEmpty() }?.let {
+                RecurrenceCommit("fake-operation", masters.map(RecurrenceMaster::id), true)
+            },
+        )
+    }
+    override suspend fun mutateRecurrence(command: RecurrenceMutation): RecurrenceCommit {
+        val master = recurrences.first { it.id == command.key.masterId }
+        val plan = RecurrenceMutationPolicy().plan(master, emptyList(), command, Instant.now())
+        recurrences.removeAll { existing -> plan.upsertMasters.any { it.id == existing.id } }
+        recurrences += plan.upsertMasters
+        return RecurrenceCommit("fake-mutation", plan.upsertMasters.map(RecurrenceMaster::id), true)
+    }
+    override suspend fun undoRecurrence(operationId: String): RecurrenceCommit =
+        RecurrenceCommit(operationId, emptyList(), false)
+    override fun observeRecurringOccurrences(start: Instant, end: Instant): Flow<List<RecurrenceOccurrence>> =
+        flowOf(
+            recurrences.flatMap { master ->
+                RecurrenceEngine().generate(
+                    master,
+                    emptyList(),
+                    emptySet(),
+                    start.atZone(master.zoneId).toLocalDate()..end.minusNanos(1).atZone(master.zoneId).toLocalDate(),
+                )
+            }.filter { it.startAt >= start && it.startAt < end },
+        )
     override suspend fun softDeleteTask(id: String, deletedAt: Instant) { tasks.removeAll { it.id == id } }
     override suspend fun softDeleteCalendar(id: String, deletedAt: Instant) {
         val current = getCalendar(id) ?: return

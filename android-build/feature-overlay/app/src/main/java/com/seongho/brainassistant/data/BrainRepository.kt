@@ -15,6 +15,14 @@ interface BrainRepository {
     suspend fun saveAnalysis(record: AnalysisRecord)
     suspend fun saveParsedItems(inputId: String, items: List<ParsedItem>, transactionId: String): PersistedItems
     suspend fun confirmReviewedItems(inputId: String, items: List<ParsedItem>): PersistedItems
+    suspend fun confirmReviewedBatch(
+        inputId: String,
+        items: List<ParsedItem>,
+        recurrences: List<RecurrenceDraft>,
+    ): PersistedBatch
+    suspend fun mutateRecurrence(command: RecurrenceMutation): RecurrenceCommit
+    suspend fun undoRecurrence(operationId: String): RecurrenceCommit
+    fun observeRecurringOccurrences(start: Instant, end: Instant): Flow<List<RecurrenceOccurrence>>
     suspend fun softDeleteTask(id: String, deletedAt: Instant)
     suspend fun softDeleteCalendar(id: String, deletedAt: Instant)
     suspend fun softDeleteByTransaction(transactionId: String, deletedAt: Instant)

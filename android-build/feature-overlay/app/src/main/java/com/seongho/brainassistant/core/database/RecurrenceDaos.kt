@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RecurrenceMasterDao {
@@ -28,6 +29,17 @@ interface RecurrenceMasterDao {
     )
     suspend fun listOverlapping(startEpochDay: Long, endEpochDay: Long): List<RecurrenceMasterEntity>
 
+    @Query(
+        """
+        SELECT * FROM recurrence_masters
+        WHERE deletedAtEpochMs IS NULL
+          AND startDateEpochDay <= :endEpochDay
+          AND (endType != 'UNTIL' OR endValue >= :startEpochDay)
+        ORDER BY startDateEpochDay, startMinuteOfDay, id
+        """,
+    )
+    fun observeOverlapping(startEpochDay: Long, endEpochDay: Long): Flow<List<RecurrenceMasterEntity>>
+
     @Query("DELETE FROM recurrence_masters WHERE id = :id")
     suspend fun delete(id: String)
 }
@@ -42,6 +54,12 @@ interface RecurrenceExceptionDao {
 
     @Query("SELECT * FROM recurrence_exceptions WHERE masterId = :masterId ORDER BY originalStartEpochMs")
     suspend fun listForMaster(masterId: String): List<RecurrenceExceptionEntity>
+
+    @Query("SELECT * FROM recurrence_exceptions ORDER BY masterId, originalStartEpochMs")
+    fun observeAll(): Flow<List<RecurrenceExceptionEntity>>
+
+    @Query("DELETE FROM recurrence_exceptions WHERE id = :id")
+    suspend fun delete(id: String)
 
     @Query("DELETE FROM recurrence_exceptions WHERE masterId = :masterId")
     suspend fun deleteForMaster(masterId: String)
@@ -109,6 +127,9 @@ interface RecurrenceOutboxDao {
 
     @Query("DELETE FROM recurrence_outbox WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("DELETE FROM recurrence_outbox WHERE masterId = :masterId")
+    suspend fun deleteForMaster(masterId: String)
 
     @Query("UPDATE recurrence_outbox SET attemptCount = attemptCount + 1, lastError = :error WHERE id = :id")
     suspend fun markFailed(id: String, error: String)

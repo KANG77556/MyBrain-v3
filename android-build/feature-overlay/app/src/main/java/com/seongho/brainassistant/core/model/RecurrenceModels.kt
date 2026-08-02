@@ -136,6 +136,7 @@ data class RecurrenceCommit(
     val operationId: String,
     val affectedMasterIds: List<String>,
     val remoteSyncPending: Boolean,
+    val orphanedExceptionIds: List<String> = emptyList(),
 )
 
 data class PersistedBatch(
