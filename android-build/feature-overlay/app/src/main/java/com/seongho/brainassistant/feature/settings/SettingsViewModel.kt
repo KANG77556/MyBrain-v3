@@ -2,6 +2,8 @@ package com.seongho.brainassistant.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.seongho.brainassistant.core.auth.AuthSessionRepository
+import com.seongho.brainassistant.core.settings.ThemeMode
 import com.seongho.brainassistant.core.settings.UserSettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +17,8 @@ data class SettingsUiState(
     val quietStart: Int = 22,
     val quietEnd: Int = 7,
     val maskSensitivePreview: Boolean = true,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val keepSignedIn: Boolean = true,
     val calendarStatusLabel: String = "확인 필요",
 ) {
     val briefingTime: String get() = "%02d:%02d".format(briefingHour, briefingMinute)
@@ -24,6 +28,9 @@ sealed interface SettingsAction {
     data class SetBriefingTime(val hour: Int, val minute: Int) : SettingsAction
     data class SetQuietHours(val start: Int, val end: Int) : SettingsAction
     data class SetMasking(val enabled: Boolean) : SettingsAction
+    data class SetThemeMode(val mode: ThemeMode) : SettingsAction
+    data class SetKeepSignedIn(val enabled: Boolean) : SettingsAction
+    data object SyncNow : SettingsAction
     data object OpenExclusions : SettingsAction
     data object OpenTrash : SettingsAction
     data object Back : SettingsAction
@@ -32,6 +39,7 @@ sealed interface SettingsAction {
 class SettingsViewModel(
     private val repository: UserSettingsRepository,
     calendarConnected: Boolean,
+    private val sessionRepository: AuthSessionRepository? = null,
 ) : ViewModel() {
     val state: StateFlow<SettingsUiState> = repository.settings.map {
         SettingsUiState(
@@ -40,6 +48,8 @@ class SettingsViewModel(
             quietStart = it.quietStartHour,
             quietEnd = it.quietEndHour,
             maskSensitivePreview = it.maskSensitivePreview,
+            themeMode = it.themeMode,
+            keepSignedIn = it.keepSignedIn,
             calendarStatusLabel = if (calendarConnected) "연결됨" else "로컬 모드",
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
@@ -50,7 +60,12 @@ class SettingsViewModel(
                 is SettingsAction.SetBriefingTime -> repository.setBriefingTime(action.hour, action.minute)
                 is SettingsAction.SetQuietHours -> repository.setQuietHours(action.start, action.end)
                 is SettingsAction.SetMasking -> repository.setMaskSensitivePreview(action.enabled)
-                SettingsAction.OpenExclusions, SettingsAction.OpenTrash, SettingsAction.Back -> Unit
+                is SettingsAction.SetThemeMode -> repository.setThemeMode(action.mode)
+                is SettingsAction.SetKeepSignedIn -> {
+                    repository.setKeepSignedIn(action.enabled)
+                    if (!action.enabled) sessionRepository?.clear()
+                }
+                SettingsAction.SyncNow, SettingsAction.OpenExclusions, SettingsAction.OpenTrash, SettingsAction.Back -> Unit
             }
         }
     }

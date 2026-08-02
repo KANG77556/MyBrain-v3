@@ -19,6 +19,12 @@ enum class ThemeMode {
     }
 }
 
+fun ThemeMode.resolveDarkTheme(systemDark: Boolean): Boolean = when (this) {
+    ThemeMode.SYSTEM -> systemDark
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
+
 data class UserSettings(
     val briefingHour: Int = 7,
     val briefingMinute: Int = 30,
@@ -96,9 +102,12 @@ class DataStoreUserSettingsRepository(context: Context) : UserSettingsRepository
 
 class SensitivePreviewMasker {
     private val phone = Regex("(01[016789])-?([0-9]{3,4})-?([0-9]{4})")
+    private val koreanNameBeforeStudent = Regex("([가-힣])([가-힣]{1,2})(?= 학생)")
 
     fun mask(text: String, enabled: Boolean): String {
         if (!enabled) return text
-        return text.replace(phone) { "${it.groupValues[1]}-****-${it.groupValues[3]}" }
+        return text
+            .replace(phone) { "${it.groupValues[1]}-****-${it.groupValues[3]}" }
+            .replace(koreanNameBeforeStudent) { "${it.groupValues[1]}**" }
     }
 }

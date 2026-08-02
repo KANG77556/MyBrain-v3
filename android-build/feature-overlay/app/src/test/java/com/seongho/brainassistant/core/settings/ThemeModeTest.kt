@@ -1,6 +1,8 @@
 package com.seongho.brainassistant.core.settings
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ThemeModeTest {
@@ -13,4 +15,8 @@ class ThemeModeTest {
     fun storedDarkModeIsRestored() {
         assertEquals(ThemeMode.DARK, ThemeMode.fromStorage("DARK"))
     }
+
+    @Test fun lightModeOverridesDarkSystem() = assertFalse(ThemeMode.LIGHT.resolveDarkTheme(systemDark = true))
+    @Test fun darkModeOverridesLightSystem() = assertTrue(ThemeMode.DARK.resolveDarkTheme(systemDark = false))
+    @Test fun systemModeUsesSystemSetting() = assertTrue(ThemeMode.SYSTEM.resolveDarkTheme(systemDark = true))
 }
