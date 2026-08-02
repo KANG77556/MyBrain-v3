@@ -99,7 +99,9 @@ fun AppNavHost(
     val captureViewModel: CaptureViewModel = viewModel(factory = factory { CaptureViewModel(container.captureUseCase) })
     val dashboardViewModel: DashboardViewModel = viewModel(factory = factory { DashboardViewModel(container.repository, captureViewModel) })
     val calendarViewModel: CalendarViewModel = viewModel(factory = factory { CalendarViewModel(container.repository) })
-    val authViewModel: AuthViewModel = viewModel(factory = factory { AuthViewModel(CredentialManagerGoogleAuthGateway(activity)) })
+    val authViewModel: AuthViewModel = viewModel(factory = factory {
+        AuthViewModel(CredentialManagerGoogleAuthGateway(activity), container.authSession, container.settings)
+    })
     val trashViewModel: TrashViewModel = viewModel(factory = factory { TrashViewModel(container.repository) })
     val settingsViewModel: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings, calendarConnected = false) })
 

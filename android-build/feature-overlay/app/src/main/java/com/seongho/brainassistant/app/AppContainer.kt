@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.room.Room
 import androidx.work.WorkManager
 import com.seongho.brainassistant.BuildConfig
+import com.seongho.brainassistant.core.auth.AuthSessionRepository
+import com.seongho.brainassistant.core.auth.DataStoreAuthSessionRepository
 import com.seongho.brainassistant.core.calendar.CalendarGateway
 import com.seongho.brainassistant.core.calendar.ConflictChecker
-import com.seongho.brainassistant.core.calendar.GoogleCalendarGateway
 import com.seongho.brainassistant.core.calendar.DeviceCalendarExclusionGateway
 import com.seongho.brainassistant.core.calendar.DeviceRecurrenceCalendarGateway
+import com.seongho.brainassistant.core.calendar.GoogleCalendarGateway
 import com.seongho.brainassistant.core.database.AppDatabase
 import com.seongho.brainassistant.core.database.MIGRATION_1_2
 import com.seongho.brainassistant.core.database.MIGRATION_2_3
@@ -25,8 +27,8 @@ import com.seongho.brainassistant.core.settings.SensitivePreviewMasker
 import com.seongho.brainassistant.core.settings.UserSettingsRepository
 import com.seongho.brainassistant.core.sync.ExclusionRefreshEngine
 import com.seongho.brainassistant.core.sync.RoomExclusionCacheStore
-import com.seongho.brainassistant.core.sync.RoomRecurrenceExclusionRecalculator
 import com.seongho.brainassistant.core.sync.RoomExclusionSettingsStore
+import com.seongho.brainassistant.core.sync.RoomRecurrenceExclusionRecalculator
 import com.seongho.brainassistant.core.sync.RoomRecurrenceSyncStore
 import com.seongho.brainassistant.core.sync.RecurrenceSyncEngine
 import com.seongho.brainassistant.data.BrainRepository
@@ -46,6 +48,7 @@ class AppContainer(context: Context) {
 
     val repository: BrainRepository = RoomBrainRepository(database)
     val settings: UserSettingsRepository = DataStoreUserSettingsRepository(appContext)
+    val authSession: AuthSessionRepository = DataStoreAuthSessionRepository(appContext)
     val localAnalyzer: InputAnalyzer = RuleBasedInputAnalyzer()
     val remoteAnalyzer: InputAnalyzer = AiGatewayClient(createAiApi(BuildConfig.AI_GATEWAY_BASE_URL))
     val analyzer: InputAnalyzer = HybridInputAnalyzer(localAnalyzer, remoteAnalyzer)
@@ -53,11 +56,7 @@ class AppContainer(context: Context) {
     val captureUseCase = CaptureUseCase(repository, analyzer, conflictChecker, Clock.systemUTC())
     val calendarGateway: CalendarGateway = GoogleCalendarGateway(appContext)
     val exclusionCalendarGateway = DeviceCalendarExclusionGateway(appContext)
-    val exclusionRefreshEngine = ExclusionRefreshEngine(
-        exclusionCalendarGateway,
-        RoomExclusionCacheStore(database),
-        RoomRecurrenceExclusionRecalculator(database),
-    )
+    val exclusionRefreshEngine = ExclusionRefreshEngine(exclusionCalendarGateway, RoomExclusionCacheStore(database), RoomRecurrenceExclusionRecalculator(database))
     val exclusionSettingsStore = RoomExclusionSettingsStore(database)
     val recurrenceSyncEngine = RecurrenceSyncEngine(RoomRecurrenceSyncStore(database), DeviceRecurrenceCalendarGateway(appContext))
     val notificationScheduler = NotificationScheduler(appContext, WorkManager.getInstance(appContext))
