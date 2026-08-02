@@ -1,0 +1,95 @@
+diff --git a/app/src/main/java/com/seongho/brainassistant/feature/auth/AuthScreen.kt b/app/src/main/java/com/seongho/brainassistant/feature/auth/AuthScreen.kt
+index 1f93496..42d5977 100644
+--- a/app/src/main/java/com/seongho/brainassistant/feature/auth/AuthScreen.kt
++++ b/app/src/main/java/com/seongho/brainassistant/feature/auth/AuthScreen.kt
+@@ -29,23 +29,22 @@ fun AuthScreen(
+     ) {
+         Text("브레인 비서", style = MaterialTheme.typography.headlineLarge)
+         Spacer(Modifier.height(12.dp))
+-        Text("Google Calendar와 연결하면 휴대폰·태블릿 일정이 자동 동기화됩니다.")
++        Text("기기에 등록된 Google Calendar를 연결하면 일정이 자동 동기화됩니다.")
+         Spacer(Modifier.height(24.dp))
+         Button(
++            onClick = { onAction(AuthAction.RetryCalendarPermission) },
++            enabled = !state.isLoading,
++            modifier = Modifier.fillMaxWidth(),
++        ) { Text("기기 캘린더 연결") }
++        OutlinedButton(
+             onClick = { onAction(AuthAction.SignIn) },
+             enabled = !state.isLoading,
+             modifier = Modifier.fillMaxWidth(),
+-        ) { Text(if (state.isLoading) "로그인 중" else "Google로 계속") }
++        ) { Text(if (state.isLoading) "로그인 중" else "Google 계정 로그인(선택)") }
+         TextButton(
+             onClick = { onAction(AuthAction.UseLocalMode) },
+             modifier = Modifier.fillMaxWidth(),
+-        ) { Text("로컬 모드로 시작") }
+-        if (state.isSignedIn && !state.calendarConnected) {
+-            OutlinedButton(
+-                onClick = { onAction(AuthAction.RetryCalendarPermission) },
+-                modifier = Modifier.fillMaxWidth(),
+-            ) { Text("캘린더 권한 다시 확인") }
+-        }
++        ) { Text("캘린더 없이 로컬 모드로 시작") }
+         state.message?.let {
+             Spacer(Modifier.height(16.dp))
+             Text(it, style = MaterialTheme.typography.bodyMedium)
+diff --git a/app/src/main/java/com/seongho/brainassistant/feature/auth/AuthViewModel.kt b/app/src/main/java/com/seongho/brainassistant/feature/auth/AuthViewModel.kt
+index 3bb4c5c..63dab51 100644
+--- a/app/src/main/java/com/seongho/brainassistant/feature/auth/AuthViewModel.kt
++++ b/app/src/main/java/com/seongho/brainassistant/feature/auth/AuthViewModel.kt
+@@ -70,8 +70,12 @@ class AuthViewModel(
+         _state.update {
+             it.copy(
+                 calendarConnected = granted,
+-                message = if (granted) "Google Calendar 연결을 확인했습니다."
+-                else "Google Calendar 연결 없이 로컬 모드로 사용할 수 있습니다.",
++                localMode = if (granted) true else it.localMode,
++                message = if (granted) {
++                    "기기에 등록된 Google Calendar를 연결했습니다."
++                } else {
++                    "캘린더 권한 없이도 로컬 모드로 사용할 수 있습니다."
++                },
+             )
+         }
+     }
+diff --git a/app/src/main/java/com/seongho/brainassistant/navigation/AppNavHost.kt b/app/src/main/java/com/seongho/brainassistant/navigation/AppNavHost.kt
+index 1925389..9abc408 100644
+--- a/app/src/main/java/com/seongho/brainassistant/navigation/AppNavHost.kt
++++ b/app/src/main/java/com/seongho/brainassistant/navigation/AppNavHost.kt
+@@ -174,7 +174,11 @@ fun AppNavHost(
+             }
+         }
+         composable(Routes.SETTINGS) {
+-            SettingsScreen(settingsState) { action ->
++            SettingsScreen(
++                settingsState.copy(
++                    calendarStatusLabel = if (authState.calendarConnected) "연결됨" else "로컬 모드",
++                )
++            ) { action ->
+                 if (action == SettingsAction.Back) navController.popBackStack() else settingsViewModel.onAction(action)
+             }
+         }
+diff --git a/app/src/test/java/com/seongho/brainassistant/feature/auth/AuthViewModelTest.kt b/app/src/test/java/com/seongho/brainassistant/feature/auth/AuthViewModelTest.kt
+index 12c4704..01ddfdc 100644
+--- a/app/src/test/java/com/seongho/brainassistant/feature/auth/AuthViewModelTest.kt
++++ b/app/src/test/java/com/seongho/brainassistant/feature/auth/AuthViewModelTest.kt
+@@ -40,6 +40,18 @@ class AuthViewModelTest {
+         assertEquals("Google Calendar 연결 없이 로컬 모드로 사용할 수 있습니다.", viewModel.state.value.message)
+     }
+ 
++    @Test
++    fun grantedDeviceCalendarPermissionAllowsContinueWithoutGoogleLogin() {
++        val viewModel = AuthViewModel(FakeGoogleAuthGateway())
++
++        viewModel.onCalendarPermissionResult(granted = true)
++
++        assertTrue(viewModel.state.value.calendarConnected)
++        assertTrue(viewModel.state.value.localMode)
++        assertTrue(viewModel.state.value.canContinue)
++        assertFalse(viewModel.state.value.isSignedIn)
++    }
++
+     @Test
+     fun localModeDoesNotRequireGoogleAccount() {
+         val viewModel = AuthViewModel(FakeGoogleAuthGateway())
