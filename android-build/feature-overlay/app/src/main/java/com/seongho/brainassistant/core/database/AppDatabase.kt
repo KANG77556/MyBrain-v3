@@ -14,8 +14,16 @@ import androidx.room.RoomDatabase
         DDayEntity::class,
         WidgetConfigEntity::class,
         WidgetSnapshotEntity::class,
+        RecurrenceMasterEntity::class,
+        RecurrenceExceptionEntity::class,
+        ExclusionSourceEntity::class,
+        ExclusionDateEntity::class,
+        RecurrenceUndoOperationEntity::class,
+        RecurrenceUndoMasterSnapshotEntity::class,
+        RecurrenceUndoExceptionSnapshotEntity::class,
+        RecurrenceOutboxEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -28,4 +36,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun ddayDao(): DDayDao
     abstract fun widgetConfigDao(): WidgetConfigDao
     abstract fun widgetSnapshotDao(): WidgetSnapshotDao
+    abstract fun recurrenceMasterDao(): RecurrenceMasterDao
+    abstract fun recurrenceExceptionDao(): RecurrenceExceptionDao
+    abstract fun exclusionSourceDao(): ExclusionSourceDao
+    abstract fun exclusionDateDao(): ExclusionDateDao
+    abstract fun recurrenceUndoDao(): RecurrenceUndoDao
+    abstract fun recurrenceOutboxDao(): RecurrenceOutboxDao
 }

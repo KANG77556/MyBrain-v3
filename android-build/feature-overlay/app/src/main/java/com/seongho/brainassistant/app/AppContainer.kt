@@ -9,6 +9,7 @@ import com.seongho.brainassistant.core.calendar.ConflictChecker
 import com.seongho.brainassistant.core.calendar.GoogleCalendarGateway
 import com.seongho.brainassistant.core.database.AppDatabase
 import com.seongho.brainassistant.core.database.MIGRATION_1_2
+import com.seongho.brainassistant.core.database.MIGRATION_2_3
 import com.seongho.brainassistant.core.logging.SafeLogger
 import com.seongho.brainassistant.core.network.AiGatewayClient
 import com.seongho.brainassistant.core.network.createAiApi
@@ -31,7 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
     private val database = Room.databaseBuilder(appContext, AppDatabase::class.java, "brain-assistant.db")
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
         .build()
 
