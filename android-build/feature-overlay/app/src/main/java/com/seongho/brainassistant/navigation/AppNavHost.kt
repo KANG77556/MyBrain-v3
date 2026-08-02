@@ -97,7 +97,11 @@ fun AppNavHost(
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     var navigationInitialized by remember { mutableStateOf(false) }
     val captureViewModel: CaptureViewModel = viewModel(factory = factory {
-        CaptureViewModel(container.captureUseCase, calendarSyncTrigger = container.calendarSyncTrigger)
+        CaptureViewModel(
+            container.captureUseCase,
+            calendarSyncTrigger = container.calendarSyncTrigger,
+            recurrenceSyncTrigger = container.recurrenceSyncTrigger,
+        )
     })
     val dashboardViewModel: DashboardViewModel = viewModel(factory = factory { DashboardViewModel(container.repository, captureViewModel) })
     val calendarViewModel: CalendarViewModel = viewModel(factory = factory { CalendarViewModel(container.repository) })

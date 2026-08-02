@@ -6,6 +6,8 @@ import com.seongho.brainassistant.core.model.ItemType
 import com.seongho.brainassistant.core.model.ParsedItem
 import com.seongho.brainassistant.core.model.RecurrenceDraft
 import com.seongho.brainassistant.core.sync.CalendarSyncTrigger
+import com.seongho.brainassistant.core.sync.RecurrenceSyncDecision
+import com.seongho.brainassistant.core.sync.RecurrenceSyncTrigger
 import com.seongho.brainassistant.data.CaptureResult
 import com.seongho.brainassistant.data.CaptureUseCase
 import java.time.Clock
@@ -29,6 +31,7 @@ class CaptureViewModel(
     private val clock: Clock = Clock.systemUTC(),
     private val zoneId: ZoneId = ZoneId.of("Asia/Seoul"),
     private val calendarSyncTrigger: CalendarSyncTrigger = CalendarSyncTrigger {},
+    private val recurrenceSyncTrigger: RecurrenceSyncTrigger = RecurrenceSyncTrigger {},
 ) : ViewModel() {
     private val _state = MutableStateFlow(CaptureUiState())
     val state: StateFlow<CaptureUiState> = _state.asStateFlow()
@@ -66,6 +69,7 @@ class CaptureViewModel(
                 else captureUseCase.confirmBatch(review.inputId, items, recurrences).ordinaryItems
             }.onSuccess { persisted ->
                 triggerCalendarSyncIfNeeded(items)
+                if (RecurrenceSyncDecision.shouldEnqueue(recurrences.size)) recurrenceSyncTrigger.enqueue()
                 _state.update {
                     it.copy(inputText = "", isSaving = false, pendingReview = null, message = "확인한 내용을 저장했습니다.", lastTransactionId = persisted.transactionId)
                 }

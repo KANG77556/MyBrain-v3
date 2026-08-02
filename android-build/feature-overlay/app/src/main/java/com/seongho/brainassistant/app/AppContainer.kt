@@ -32,6 +32,8 @@ import com.seongho.brainassistant.core.sync.RoomExclusionCacheStore
 import com.seongho.brainassistant.core.sync.RoomExclusionSettingsStore
 import com.seongho.brainassistant.core.sync.RoomRecurrenceExclusionRecalculator
 import com.seongho.brainassistant.core.sync.RoomRecurrenceSyncStore
+import com.seongho.brainassistant.core.sync.RecurrenceSyncTrigger
+import com.seongho.brainassistant.core.sync.RecurrenceSyncWorker
 import com.seongho.brainassistant.core.sync.RecurrenceSyncEngine
 import com.seongho.brainassistant.data.BrainRepository
 import com.seongho.brainassistant.data.CaptureUseCase
@@ -64,6 +66,9 @@ class AppContainer(context: Context) {
     val exclusionRefreshEngine = ExclusionRefreshEngine(exclusionCalendarGateway, RoomExclusionCacheStore(database), RoomRecurrenceExclusionRecalculator(database))
     val exclusionSettingsStore = RoomExclusionSettingsStore(database)
     val recurrenceSyncEngine = RecurrenceSyncEngine(RoomRecurrenceSyncStore(database), DeviceRecurrenceCalendarGateway(appContext))
+    val recurrenceSyncTrigger: RecurrenceSyncTrigger = RecurrenceSyncTrigger {
+        RecurrenceSyncWorker.syncNow(appContext)
+    }
     val notificationScheduler = NotificationScheduler(appContext, WorkManager.getInstance(appContext))
     val previewMasker = SensitivePreviewMasker()
     val logger = SafeLogger(enabled = BuildConfig.DEBUG)
