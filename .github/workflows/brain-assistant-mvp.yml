@@ -1,0 +1,184 @@
+name: Brain Assistant MVP Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/brain-assistant-mvp
+    paths:
+      - 'android-build/brain-assistant-source.part*'
+      - 'android-build/device-calendar.patch'
+      - 'android-build/dashboard-overlay/**'
+      - '.github/workflows/brain-assistant-mvp.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'android-build/brain-assistant-source.part*'
+      - 'android-build/device-calendar.patch'
+      - 'android-build/dashboard-overlay/**'
+      - '.github/workflows/brain-assistant-mvp.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout source carrier
+        uses: actions/checkout@v4
+
+      - name: Reconstruct project source
+        shell: bash
+        run: |
+          cat android-build/brain-assistant-source.part* > brain-assistant-source.b64
+          base64 --decode brain-assistant-source.b64 > brain-assistant-source.tar.xz
+          echo '624b49911a8c2f3690898801cdf74d2ec8fc0765788ebdb19032389fd1cb4acf  brain-assistant-source.tar.xz' | sha256sum --check
+          tar -xJf brain-assistant-source.tar.xz
+          test -x brain-assistant/gradlew || chmod +x brain-assistant/gradlew
+
+      - name: Apply verified source fixes and dashboard overlay
+        shell: bash
+        run: |
+          sed -i 's/compileSdk = 37/compileSdk = 36/g' brain-assistant/app/build.gradle.kts
+          sed -i 's/lifecycle = "2.11.0"/lifecycle = "2.10.0"/g' brain-assistant/gradle/libs.versions.toml
+          sed -i 's/core = "1.19.0"/core = "1.17.0"/g' brain-assistant/gradle/libs.versions.toml
+          sed -i '/import androidx.compose.ui.test.assertDoesNotExist/d' brain-assistant/app/src/androidTest/java/com/seongho/brainassistant/feature/review/ReviewScreenTest.kt
+          python - <<'PY'
+          from pathlib import Path
+
+          briefing = Path('brain-assistant/app/src/main/java/com/seongho/brainassistant/core/notification/BriefingWorker.kt')
+          text = briefing.read_text()
+          text = text.replace('import androidx.core.app.NotificationManagerCompat\n', '')
+          text = text.replace(
+              '        NotificationManagerCompat.from(applicationContext).notify(730, notification)\n',
+              '        applicationContext.postNotificationIfAllowed(730, notification)\n',
+          )
+          briefing.write_text(text)
+
+          scheduler = Path('brain-assistant/app/src/main/java/com/seongho/brainassistant/core/notification/NotificationScheduler.kt')
+          text = scheduler.read_text()
+          text = text.replace(
+              'import android.Manifest\nimport android.content.Context\n',
+              'import android.Manifest\nimport android.app.Notification\nimport android.content.Context\n',
+          )
+          text = text.replace(
+              '        NotificationManagerCompat.from(applicationContext)\n            .notify(inputData.getInt(KEY_NOTIFICATION_ID, title.hashCode()), notification)\n',
+              '        applicationContext.postNotificationIfAllowed(\n            inputData.getInt(KEY_NOTIFICATION_ID, title.hashCode()),\n            notification,\n        )\n',
+          )
+          text = text.replace(
+              'internal fun Context.canPostNotifications(): Boolean =\n    android.os.Build.VERSION.SDK_INT < 33 ||\n        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED\n',
+              '''internal fun Context.canPostNotifications(): Boolean =
+              android.os.Build.VERSION.SDK_INT < 33 ||
+                  ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+          internal fun Context.postNotificationIfAllowed(id: Int, notification: Notification): Boolean {
+              if (!canPostNotifications()) return false
+              return try {
+                  NotificationManagerCompat.from(this).notify(id, notification)
+                  true
+              } catch (_: SecurityException) {
+                  false
+              }
+          }
+          ''',
+          )
+          scheduler.write_text(text)
+          PY
+          patch -d brain-assistant -p1 < android-build/device-calendar.patch
+          cp -R android-build/dashboard-overlay/. brain-assistant/
+          grep -R '기기 캘린더 연결' -n brain-assistant/app/src/main/java
+          grep -R 'quick-capture-dock' -n brain-assistant/app/src/main/java
+
+      - name: Package effective source for review
+        shell: bash
+        run: |
+          tar -cJf brain-assistant-effective-source.tar.xz brain-assistant
+          sha256sum brain-assistant-effective-source.tar.xz > brain-assistant-effective-source.sha256
+
+      - name: Upload effective source
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brain-Assistant-Effective-Source-${{ github.sha }}
+          path: |
+            brain-assistant-effective-source.tar.xz
+            brain-assistant-effective-source.sha256
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Configure non-secret build values
+        shell: bash
+        run: |
+          cat > brain-assistant/local.properties <<'EOF'
+          GOOGLE_WEB_CLIENT_ID=1234567890-example.apps.googleusercontent.com
+          AI_GATEWAY_BASE_URL=https://example.invalid/
+          EOF
+
+      - name: Run Android tests, lint, and APK builds
+        working-directory: brain-assistant
+        shell: bash
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleDebug \
+            :app:assembleRelease \
+            :app:assembleDebugAndroidTest
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: brain-assistant/server/pyproject.toml
+
+      - name: Run AI gateway tests
+        working-directory: brain-assistant
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e 'server[test]'
+          python -m pytest -q server/tests
+
+      - name: Prepare artifacts
+        working-directory: brain-assistant
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/Brain-Assistant-MVP-debug.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk dist/Brain-Assistant-MVP-release-unsigned.apk
+          cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk dist/Brain-Assistant-MVP-androidTest.apk
+          sha256sum dist/*.apk > dist/SHA256SUMS.txt
+          unzip -t dist/Brain-Assistant-MVP-debug.apk >/dev/null
+
+      - name: Upload APKs and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brain-Assistant-MVP-${{ github.sha }}
+          path: |
+            brain-assistant/dist/*
+            brain-assistant/app/build/reports/tests/**
+            brain-assistant/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
+          retention-days: 30

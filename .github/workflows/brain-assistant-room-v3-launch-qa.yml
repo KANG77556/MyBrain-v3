@@ -1,0 +1,76 @@
+name: Brain Assistant Room v3 Launch QA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/brain-assistant-room-v3-qa
+    paths:
+      - 'android-build/run-room-v3-launch-qa.sh'
+      - '.github/workflows/brain-assistant-room-v3-launch-qa.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'android-build/run-room-v3-launch-qa.sh'
+      - '.github/workflows/brain-assistant-room-v3-launch-qa.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  android-15-launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout QA script
+        uses: actions/checkout@v4
+
+      - name: Download verified Debug APK from build run
+        uses: actions/download-artifact@v4
+        with:
+          name: Brain-Assistant-Room-v3-Device-QA-bd242fd0c6e6c04867cec6d4edf5ef6369e43d06
+          path: qa-input
+          repository: KANG77556/MyBrain-v3
+          run-id: 30731403962
+          github-token: ${{ github.token }}
+
+      - name: Stage APK and QA script
+        shell: bash
+        run: |
+          APK_PATH="$(find qa-input -type f -name app-debug.apk -print -quit)"
+          test -n "$APK_PATH"
+          cp "$APK_PATH" qa-input/room-v3-debug.apk
+          chmod +x android-build/run-room-v3-launch-qa.sh
+          sha256sum qa-input/room-v3-debug.apk
+
+      - name: Enable Android emulator hardware acceleration
+        shell: bash
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            ls -l /dev/kvm
+          fi
+
+      - name: Install and launch on Android 15 phone emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: android-build/run-room-v3-launch-qa.sh qa-input/room-v3-debug.apk
+
+      - name: Upload installable APK and launch evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brain-Assistant-Room-v3-Android15-Launch-${{ github.sha }}
+          path: |
+            qa-input/room-v3-debug.apk
+            qa-output/
+          if-no-files-found: warn
+          retention-days: 30
