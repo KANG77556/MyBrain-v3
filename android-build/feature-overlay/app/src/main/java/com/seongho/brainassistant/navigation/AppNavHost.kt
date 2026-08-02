@@ -73,15 +73,11 @@ private object Routes {
 
 internal data class ReviewSaveNavigation(
     val destination: String,
-    val popUpTo: String,
-    val inclusive: Boolean,
     val launchSingleTop: Boolean,
 )
 
 internal fun reviewSaveNavigation() = ReviewSaveNavigation(
     destination = Routes.DASHBOARD,
-    popUpTo = Routes.REVIEW,
-    inclusive = true,
     launchSingleTop = true,
 )
 
@@ -209,7 +205,6 @@ fun AppNavHost(
                                 captureViewModel.confirmReviewBatch(parsed, pending.recurrences)
                                 reviewSaveNavigation().let { navigation ->
                                     navController.navigate(navigation.destination) {
-                                        popUpTo(navigation.popUpTo) { inclusive = navigation.inclusive }
                                         launchSingleTop = navigation.launchSingleTop
                                     }
                                 }
