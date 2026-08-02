@@ -12,7 +12,6 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,14 +35,16 @@ class CaptureBatchUseCaseTest {
             )
         }
         val useCase = CaptureUseCase(repository, analyzer, ConflictChecker(), clock)
+        val original = "금요일까지 보고서 제출하고 교무회의 넣어줘"
 
-        val outcome = useCase.capture("금요일까지 보고서 제출하고 교무회의 넣어줘", now)
+        val outcome = useCase.capture(original, now)
 
         assertTrue(outcome is CaptureResult.NeedsReview)
         val review = outcome as CaptureResult.NeedsReview
-        assertTrue(review.batch?.requiresReview == true)
-        assertEquals("금요일까지 보고서 제출하고 교무회의 넣어줘", review.batch?.originalText)
-        assertEquals(2, review.batch?.items?.size)
+        assertEquals(original, review.originalText)
+        assertEquals(2, review.items.size)
+        assertEquals(listOf(0, 1), review.items.map { it.batchIndex })
+        assertEquals(1, review.items.mapNotNull { it.batchId }.toSet().size)
         assertTrue(repository.tasks.isEmpty())
         assertTrue(repository.calendars.isEmpty())
         assertTrue(repository.notes.isEmpty())
@@ -67,8 +68,9 @@ class CaptureBatchUseCaseTest {
 
         assertTrue(outcome is CaptureResult.AutoSaved)
         val saved = outcome as CaptureResult.AutoSaved
-        assertFalse(saved.batch?.requiresReview ?: true)
-        assertEquals(1, saved.batch?.items?.size)
+        assertEquals(1, saved.items.size)
+        assertEquals(0, saved.items.single().batchIndex)
+        assertTrue(saved.items.single().batchId?.isNotBlank() == true)
         assertEquals(1, repository.tasks.size)
     }
 }
