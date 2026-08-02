@@ -8,6 +8,12 @@ on:
     paths:
       - 'android-build/room-v3-overlay.tar.xz.b64'
       - '.github/workflows/brain-assistant-room-v3-device-qa.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'android-build/room-v3-overlay.tar.xz.b64'
+      - '.github/workflows/brain-assistant-room-v3-device-qa.yml'
 
 permissions:
   contents: read
