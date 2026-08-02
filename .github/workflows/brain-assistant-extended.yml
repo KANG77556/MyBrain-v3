@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/brain-assistant-mvp
+      - feature/brain-assistant-batch
     paths:
       - 'android-build/feature-overlay/**'
       - '.github/workflows/brain-assistant-extended.yml'
@@ -122,8 +123,22 @@ jobs:
         run: |
           ./gradlew --no-daemon --stacktrace \
             :app:testDebugUnitTest \
+            :app:lintDebug \
             :app:assembleDebugAndroidTest \
             :app:assembleDebug
+
+      - name: Verify APK and record SHA-256
+        working-directory: brain-assistant
+        shell: bash
+        run: sha256sum app/build/outputs/apk/debug/app-debug.apk | tee app-debug.sha256
+
+      - name: Upload recurring schedule debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brain-Assistant-Recurring-debug
+          path: |
+            brain-assistant/app/build/outputs/apk/debug/app-debug.apk
+            brain-assistant/app-debug.sha256
 
       - name: Run database tests on API 28 emulator
         uses: reactivecircus/android-emulator-runner@v2
