@@ -33,6 +33,7 @@ sealed interface CaptureResult {
 
     data class Failed(val message: String) : CaptureResult
 }
+
 class CaptureUseCase(
     private val repository: BrainRepository,
     private val analyzer: InputAnalyzer,
@@ -62,8 +63,13 @@ class CaptureUseCase(
             )
         }
 
+        val batchId = analysis.items.firstOrNull { it.batchId != null }?.batchId
+            ?: UUID.randomUUID().toString()
+        val batchItems = analysis.items.mapIndexed { index, item ->
+            item.copy(batchId = batchId, batchIndex = index)
+        }
         val effectiveClarifications = analysis.clarificationFields +
-            inferRequiredClarifications(analysis.items)
+            inferRequiredClarifications(batchItems)
         repository.saveAnalysis(
             AnalysisRecord(
                 inputId = input.id,
@@ -74,19 +80,19 @@ class CaptureUseCase(
             ),
         )
 
-        val conflictMessages = findConflictMessages(input.id, analysis.items)
+        val conflictMessages = findConflictMessages(input.id, batchItems)
         val autoSave = analysis.confidence >= AUTO_SAVE_CONFIDENCE &&
             effectiveClarifications.isEmpty() &&
             conflictMessages.isEmpty() &&
-            analysis.items.isNotEmpty() &&
-            analysis.items.all(::hasRequiredFields)
+            batchItems.isNotEmpty() &&
+            batchItems.all(::hasRequiredFields)
         if (!autoSave) {
             val message = conflictMessages
                 .joinToString(" · ")
                 .ifBlank { "확인이 필요한 항목이 있습니다." }
             return CaptureResult.NeedsReview(
                 inputId = input.id,
-                items = analysis.items,
+                items = batchItems,
                 clarificationFields = effectiveClarifications,
                 message = message,
                 originalText = clean,
@@ -94,8 +100,8 @@ class CaptureUseCase(
         }
 
         val transactionId = UUID.randomUUID().toString()
-        repository.saveParsedItems(input.id, analysis.items, transactionId)
-        return CaptureResult.AutoSaved(input.id, transactionId, analysis.items)
+        repository.saveParsedItems(input.id, batchItems, transactionId)
+        return CaptureResult.AutoSaved(input.id, transactionId, batchItems)
     }
 
     suspend fun confirm(inputId: String, items: List<ParsedItem>): PersistedItems =
