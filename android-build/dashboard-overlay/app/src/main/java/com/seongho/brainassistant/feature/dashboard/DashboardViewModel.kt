@@ -85,6 +85,7 @@ sealed interface DashboardAction {
     data object Voice : DashboardAction
     data object Undo : DashboardAction
     data object OpenCalendar : DashboardAction
+    data object OpenDDay : DashboardAction
     data object OpenTrash : DashboardAction
     data object OpenSettings : DashboardAction
 }
