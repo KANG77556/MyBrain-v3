@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -38,6 +39,18 @@ class ReviewScreenTest {
         composeRule.onNodeWithText("시간을 확인해 주세요").assertDoesNotExist()
         composeRule.onNodeWithText("저장").assertIsNotEnabled()
         composeRule.onNodeWithText("취소").assertIsDisplayed()
+    }
+
+    @Test
+    fun placesReviewActionsInTheSafeBottomArea() {
+        composeRule.setContent {
+            ReviewScreen(
+                state = ReviewUiState(inputId = "input"),
+                onAction = {},
+            )
+        }
+
+        composeRule.onNodeWithTag("reviewBottomActions").assertIsDisplayed()
     }
 
     @Test
