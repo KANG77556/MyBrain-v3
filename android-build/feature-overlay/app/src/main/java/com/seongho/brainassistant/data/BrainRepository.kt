@@ -5,14 +5,28 @@ import com.seongho.brainassistant.core.model.*
 import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 interface BrainRepository {
     suspend fun saveInput(input: InputRecord)
     suspend fun saveNote(note: NoteItem)
     suspend fun saveTask(task: TaskItem)
     suspend fun saveDDay(item: DDayItem)
-    suspend fun getDDay(id: String): DDayItem?
-    suspend fun softDeleteDDay(id: String, deletedAt: Instant)
+
+    suspend fun getDDay(id: String): DDayItem? =
+        observeDDays(LocalDate.MIN).first().firstOrNull { it.id == id }
+
+    suspend fun softDeleteDDay(id: String, deletedAt: Instant) {
+        val item = getDDay(id) ?: return
+        saveDDay(
+            item.copy(
+                status = ItemStatus.DELETED,
+                deletedAt = deletedAt,
+                updatedAt = deletedAt,
+            ),
+        )
+    }
+
     suspend fun saveCalendar(item: CalendarItem, enqueue: Boolean = true)
     suspend fun saveAnalysis(record: AnalysisRecord)
     suspend fun saveParsedItems(inputId: String, items: List<ParsedItem>, transactionId: String): PersistedItems
