@@ -8,6 +8,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -75,7 +76,10 @@ class DDayViewModelTest {
         viewModel.onAction(DDayAction.Delete("first"))
         advanceUntilIdle()
 
-        assertEquals(listOf("second"), repository.dDays.map { it.id })
+        assertEquals(
+            listOf("second"),
+            repository.observeDDays(LocalDate.of(2026, 8, 2)).first().map { it.id },
+        )
     }
 
     private fun sample(id: String, transactionId: String, date: LocalDate) = DDayItem(
