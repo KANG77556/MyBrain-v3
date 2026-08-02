@@ -26,6 +26,8 @@ import com.seongho.brainassistant.core.settings.DataStoreUserSettingsRepository
 import com.seongho.brainassistant.core.settings.SensitivePreviewMasker
 import com.seongho.brainassistant.core.settings.UserSettingsRepository
 import com.seongho.brainassistant.core.sync.ExclusionRefreshEngine
+import com.seongho.brainassistant.core.sync.CalendarSyncScheduler
+import com.seongho.brainassistant.core.sync.CalendarSyncTrigger
 import com.seongho.brainassistant.core.sync.RoomExclusionCacheStore
 import com.seongho.brainassistant.core.sync.RoomExclusionSettingsStore
 import com.seongho.brainassistant.core.sync.RoomRecurrenceExclusionRecalculator
@@ -55,6 +57,9 @@ class AppContainer(context: Context) {
     val conflictChecker = ConflictChecker()
     val captureUseCase = CaptureUseCase(repository, analyzer, conflictChecker, Clock.systemUTC())
     val calendarGateway: CalendarGateway = GoogleCalendarGateway(appContext)
+    val calendarSyncTrigger: CalendarSyncTrigger = CalendarSyncTrigger {
+        CalendarSyncScheduler.enqueueNow(appContext)
+    }
     val exclusionCalendarGateway = DeviceCalendarExclusionGateway(appContext)
     val exclusionRefreshEngine = ExclusionRefreshEngine(exclusionCalendarGateway, RoomExclusionCacheStore(database), RoomRecurrenceExclusionRecalculator(database))
     val exclusionSettingsStore = RoomExclusionSettingsStore(database)

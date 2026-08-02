@@ -3,6 +3,7 @@ package com.seongho.brainassistant
 import android.app.Application
 import com.seongho.brainassistant.app.AppContainer
 import com.seongho.brainassistant.core.notification.NotificationChannels
+import com.seongho.brainassistant.core.sync.CalendarSyncScheduler
 import com.seongho.brainassistant.core.sync.ExclusionRefreshWorker
 import com.seongho.brainassistant.core.sync.RecurrenceSyncWorker
 import com.seongho.brainassistant.core.sync.TrashPurgeWorker
@@ -19,5 +20,6 @@ class BrainAssistantApp : Application() {
         TrashPurgeWorker.schedule(this)
         ExclusionRefreshWorker.schedule(this)
         RecurrenceSyncWorker.schedule(this)
+        CalendarSyncScheduler.schedulePeriodic(this)
     }
 }

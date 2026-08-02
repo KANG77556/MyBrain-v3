@@ -96,14 +96,18 @@ fun AppNavHost(
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     var navigationInitialized by remember { mutableStateOf(false) }
-    val captureViewModel: CaptureViewModel = viewModel(factory = factory { CaptureViewModel(container.captureUseCase) })
+    val captureViewModel: CaptureViewModel = viewModel(factory = factory {
+        CaptureViewModel(container.captureUseCase, calendarSyncTrigger = container.calendarSyncTrigger)
+    })
     val dashboardViewModel: DashboardViewModel = viewModel(factory = factory { DashboardViewModel(container.repository, captureViewModel) })
     val calendarViewModel: CalendarViewModel = viewModel(factory = factory { CalendarViewModel(container.repository) })
     val authViewModel: AuthViewModel = viewModel(factory = factory {
         AuthViewModel(CredentialManagerGoogleAuthGateway(activity), container.authSession, container.settings)
     })
     val trashViewModel: TrashViewModel = viewModel(factory = factory { TrashViewModel(container.repository) })
-    val settingsViewModel: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings, calendarConnected = false) })
+    val settingsViewModel: SettingsViewModel = viewModel(factory = factory {
+        SettingsViewModel(container.settings, calendarConnected = false, sessionRepository = container.authSession)
+    })
 
     val authState by authViewModel.state.collectAsState()
     val captureState by captureViewModel.state.collectAsState()
@@ -258,6 +262,7 @@ fun AppNavHost(
                     SettingsAction.Back -> navController.popBackStack()
                     SettingsAction.OpenTrash -> navController.navigate(Routes.TRASH)
                     SettingsAction.OpenExclusions -> navController.navigate(Routes.EXCLUSIONS)
+                    SettingsAction.SyncNow -> container.calendarSyncTrigger.enqueue()
                     else -> settingsViewModel.onAction(action)
                 }
             }
