@@ -46,6 +46,14 @@ jobs:
           chmod +x android-build/run-room-v3-launch-qa.sh
           sha256sum qa-input/room-v3-debug.apk
 
+      - name: Enable Android emulator hardware acceleration
+        shell: bash
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            ls -l /dev/kvm
+          fi
+
       - name: Install and launch on Android 15 phone emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
