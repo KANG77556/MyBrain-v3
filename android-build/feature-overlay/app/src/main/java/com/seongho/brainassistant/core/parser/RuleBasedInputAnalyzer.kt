@@ -219,6 +219,8 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
 
     private fun cleanTitle(text: String): String {
         var value = text
+            .trim()
+            .trimEnd('.', '!', '?')
             .replace(Regex("다음 주\\s*[월화수목금토일]요일(?:까지|에)?"), "")
             .replace(Regex("(오늘|내일|모레)(?:까지|에)?"), "")
             .replace(Regex("\\d{1,2}월\\s*\\d{1,2}일(?:까지|에)?"), "")
@@ -226,10 +228,12 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
             .replace(Regex("(오전|오후)?\\s*\\d{1,2}시(?:에|까지)?(?:\\s*\\d{1,2}분)?"), "")
             .replace(Regex("(오전|오후)?\\s*[한두세네다섯여섯일곱여덟아홉열]\\s*시(?:에|까지)?"), "")
             .replace(DDAY_PATTERN, "")
+            .replace(Regex("(은|는)?\\s*로(?=\\s*$)"), "")
             .replace("다음 주쯤", "")
             .replace("쯤", "")
             .replace("상담 전에", "")
-            .replace(Regex("\\s*(하고|넣고|추가하고)$"), "")
+            .replace(Regex("\\s*(?:은|는)?\\s*(?:메모로\\s*)?(?:메모해줘|메모해|기억해줘)$"), "")
+            .replace(Regex("\\s*(?:은|는)?\\s*(?:일정으로|일정에|할 일로|할일로)?\\s*(?:넣어줘|넣고|추가해줘|추가해|추가하고|추가)$"), "")
             .replace(Regex("\\s*(해야 해|해야함|해줘|잡아줘|등록해줘|기억해줘)$"), "")
             .replace(Regex("\\s+"), " ")
             .trim(' ', ',', '.')
@@ -283,13 +287,13 @@ class RuleBasedInputAnalyzer : InputAnalyzer {
     )
 
     private companion object {
-        const val ANALYZER_NAME = "RULE_BASED_V1"
+        const val ANALYZER_NAME = "RULE_BASED_V2_BATCH"
         const val AUTO_SAVE_CONFIDENCE = 0.85
         val BATCH_SEPARATOR = Regex("[,，;]+|\\.(?=\\s|$)|\\s+그리고\\s+|(?<=하고)\\s+")
         val DEFAULT_EVENT_TIME: LocalTime = LocalTime.of(9, 0)
         val VAGUE_DATE_WORDS = listOf("쯤", "언젠가", "시간 될 때", "나중에")
         val EVENT_WORDS = listOf("상담", "회의", "예약", "병원", "수업", "약속", "검사", "면담")
-        val TASK_WORDS = listOf("할 일", "채점", "제출", "확인", "작성", "준비", "처리", "검토", "해야")
+        val TASK_WORDS = listOf("할 일", "할일", "채점", "제출", "확인", "작성", "준비", "처리", "검토", "해야")
         val NOTE_WORDS = listOf("메모해줘", "메모로", "메모해")
         val MONTH_DAY_PATTERN = Regex("(\\d{1,2})월\\s*(\\d{1,2})일")
         val NUMERIC_TIME_PATTERN = Regex("(오전|오후)?\\s*(\\d{1,2})시(?:\\s*(\\d{1,2})분)?")
