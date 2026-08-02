@@ -99,6 +99,7 @@ private fun ReviewItemUi.isValid(): Boolean =
 sealed interface ReviewAction {
     data class ChangeType(val localId: String, val value: ItemType) : ReviewAction
     data class ChangeTitle(val localId: String, val value: String) : ReviewAction
+    data class ChangeBody(val localId: String, val value: String) : ReviewAction
     data class ChangeStartAt(val localId: String, val value: String) : ReviewAction
     data class ChangeEndAt(val localId: String, val value: String) : ReviewAction
     data class ChangeDueAt(val localId: String, val value: String) : ReviewAction
@@ -136,6 +137,7 @@ class ReviewViewModel(
         when (action) {
             is ReviewAction.ChangeType -> updateItem(action.localId) { it.copy(type = action.value) }
             is ReviewAction.ChangeTitle -> updateItem(action.localId) { it.copy(title = action.value) }
+            is ReviewAction.ChangeBody -> updateItem(action.localId) { it.copy(body = action.value) }
             is ReviewAction.ChangeStartAt -> updateItem(action.localId) { it.copy(startAt = action.value) }
             is ReviewAction.ChangeEndAt -> updateItem(action.localId) { it.copy(endAt = action.value) }
             is ReviewAction.ChangeDueAt -> updateItem(action.localId) { it.copy(dueAt = action.value) }
