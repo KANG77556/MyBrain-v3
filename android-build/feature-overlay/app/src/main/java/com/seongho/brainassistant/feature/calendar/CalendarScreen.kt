@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.seongho.brainassistant.core.model.CalendarItem
+import com.seongho.brainassistant.core.model.RecurrenceOccurrence
 import com.seongho.brainassistant.core.model.SyncState
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -112,6 +113,7 @@ fun CalendarScreen(
                         )
                         AgendaPane(
                             state = state,
+                            onAction = onAction,
                             modifier = Modifier
                                 .weight(0.85f)
                                 .fillMaxHeight()
@@ -133,11 +135,19 @@ fun CalendarScreen(
                         )
                         AgendaPane(
                             state = state,
+                            onAction = onAction,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Spacer(Modifier.height(16.dp))
                     }
                 }
+            }
+            state.pendingRecurrenceDelete?.let {
+                RecurrenceScopeSheet(
+                    delete = true,
+                    onScope = { scope -> onAction(CalendarAction.ConfirmRecurrenceDelete(scope)) },
+                    onDismiss = { onAction(CalendarAction.DismissRecurrenceScope) },
+                )
             }
         }
     }
@@ -238,7 +248,7 @@ private fun CalendarPane(
         when (state.viewMode) {
             CalendarViewMode.MONTH -> MonthCalendar(state, onAction)
             CalendarViewMode.WEEK -> WeekCalendar(state, onAction)
-            CalendarViewMode.AGENDA -> AgendaOverview(state)
+            CalendarViewMode.AGENDA -> AgendaOverview(state, onAction)
         }
     }
 }
@@ -254,7 +264,7 @@ private fun MonthCalendar(
             .filter { it.deletedAt == null }
             .map { it.startAt.atZone(CALENDAR_ZONE).toLocalDate() }
             .toSet()
-    }
+    } + state.recurringOccurrences.map { it.startAt.atZone(CALENDAR_ZONE).toLocalDate() }.toSet()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -314,7 +324,7 @@ private fun WeekCalendar(
                     date = date,
                     isCurrentMonth = true,
                     isSelected = date == state.selectedDate,
-                    hasEvent = eventsForDate(date, state.events).isNotEmpty(),
+                    hasEvent = eventsForDate(date, state.events).isNotEmpty() || recurringForDate(date, state.recurringOccurrences).isNotEmpty(),
                     onClick = { onAction(CalendarAction.SelectDate(date)) },
                     modifier = Modifier.weight(1f),
                     showWeekday = true,
@@ -386,14 +396,18 @@ private fun DateCell(
 @Composable
 private fun AgendaPane(
     state: CalendarUiState,
+    onAction: (CalendarAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (state.viewMode == CalendarViewMode.AGENDA) {
-        AgendaOverview(state, modifier)
+        AgendaOverview(state, onAction, modifier)
         return
     }
     val selectedEvents = remember(state.selectedDate, state.events) {
         eventsForDate(state.selectedDate, state.events)
+    }
+    val selectedRecurring = remember(state.selectedDate, state.recurringOccurrences) {
+        recurringForDate(state.selectedDate, state.recurringOccurrences)
     }
     Card(
         modifier = modifier,
@@ -410,7 +424,7 @@ private fun AgendaPane(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
-            if (selectedEvents.isEmpty()) {
+            if (selectedEvents.isEmpty() && selectedRecurring.isEmpty()) {
                 Text(
                     text = "선택한 날짜에 일정이 없습니다.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -418,6 +432,7 @@ private fun AgendaPane(
                 )
             } else {
                 selectedEvents.forEach { event -> EventRow(event) }
+                selectedRecurring.forEach { occurrence -> RecurrenceRow(occurrence, onAction) }
             }
         }
     }
@@ -426,11 +441,13 @@ private fun AgendaPane(
 @Composable
 private fun AgendaOverview(
     state: CalendarUiState,
+    onAction: (CalendarAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val events = remember(state.events) {
         state.events.filter { it.deletedAt == null }.sortedBy { it.startAt }
     }
+    val recurring = remember(state.recurringOccurrences) { state.recurringOccurrences.sortedBy { it.startAt } }
     Column(
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -440,7 +457,7 @@ private fun AgendaOverview(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
         )
-        if (events.isEmpty()) {
+        if (events.isEmpty() && recurring.isEmpty()) {
             Text(
                 text = "표시할 일정이 없습니다.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -454,6 +471,33 @@ private fun AgendaOverview(
                 )
                 EventRow(event)
             }
+            recurring.forEach { occurrence ->
+                Text(
+                    text = occurrence.startAt.atZone(CALENDAR_ZONE).toLocalDate().format(FULL_DATE_FORMATTER),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                RecurrenceRow(occurrence, onAction)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecurrenceRow(occurrence: RecurrenceOccurrence, onAction: (CalendarAction) -> Unit) {
+    val start = occurrence.startAt.atZone(CALENDAR_ZONE)
+    val end = occurrence.endAt.atZone(CALENDAR_ZONE)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(occurrence.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text("반복 · ${start.format(TIME_FORMATTER)} - ${end.format(TIME_FORMATTER)}", style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = { onAction(CalendarAction.RequestRecurrenceDelete(occurrence.key)) }) { Text("삭제") }
         }
     }
 }

@@ -3,6 +3,11 @@ package com.seongho.brainassistant.feature.calendar
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.seongho.brainassistant.core.model.CalendarItem
+import com.seongho.brainassistant.core.model.RecurrenceOccurrence
+import com.seongho.brainassistant.core.model.OccurrenceKey
+import com.seongho.brainassistant.core.model.RecurrenceMutation
+import com.seongho.brainassistant.core.model.RecurrenceMutationKind
+import com.seongho.brainassistant.core.model.RecurrenceScope
 import com.seongho.brainassistant.data.BrainRepository
 import java.time.Clock
 import java.time.DayOfWeek
@@ -28,6 +33,8 @@ data class CalendarUiState(
     val selectedDate: LocalDate = anchorDate,
     val viewMode: CalendarViewMode = CalendarViewMode.MONTH,
     val events: List<CalendarItem> = emptyList(),
+    val recurringOccurrences: List<RecurrenceOccurrence> = emptyList(),
+    val pendingRecurrenceDelete: OccurrenceKey? = null,
     val isLoading: Boolean = false,
     val message: String? = null,
 )
@@ -40,6 +47,9 @@ sealed interface CalendarAction {
     data object Refresh : CalendarAction
     data class SelectMode(val mode: CalendarViewMode) : CalendarAction
     data class SelectDate(val date: LocalDate) : CalendarAction
+    data class RequestRecurrenceDelete(val key: OccurrenceKey) : CalendarAction
+    data class ConfirmRecurrenceDelete(val scope: RecurrenceScope) : CalendarAction
+    data object DismissRecurrenceScope : CalendarAction
 }
 
 internal fun monthGridDates(anchorDate: LocalDate): List<LocalDate> {
@@ -79,6 +89,14 @@ internal fun eventsForDate(
         .toList()
 }
 
+internal fun recurringForDate(
+    date: LocalDate,
+    occurrences: List<RecurrenceOccurrence>,
+    zoneId: ZoneId = CALENDAR_ZONE,
+): List<RecurrenceOccurrence> = occurrences
+    .filter { it.startAt.atZone(zoneId).toLocalDate() == date }
+    .sortedBy { it.startAt }
+
 class CalendarViewModel(
     private val repository: BrainRepository,
     private val clock: Clock = Clock.systemUTC(),
@@ -94,6 +112,7 @@ class CalendarViewModel(
     val state: StateFlow<CalendarUiState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
+    private var recurrenceJob: Job? = null
 
     init {
         refresh()
@@ -129,6 +148,9 @@ class CalendarViewModel(
                 }
                 refresh()
             }
+            is CalendarAction.RequestRecurrenceDelete -> _state.update { it.copy(pendingRecurrenceDelete = action.key, message = null) }
+            CalendarAction.DismissRecurrenceScope -> _state.update { it.copy(pendingRecurrenceDelete = null) }
+            is CalendarAction.ConfirmRecurrenceDelete -> deleteRecurrence(action.scope)
         }
     }
 
@@ -160,6 +182,23 @@ class CalendarViewModel(
                     )
                 }
             }
+        }
+        recurrenceJob?.cancel()
+        recurrenceJob = viewModelScope.launch {
+            val current = _state.value
+            val range = calendarRange(current.anchorDate, current.viewMode, zoneId)
+            repository.observeRecurringOccurrences(range.start, range.end).collect { occurrences ->
+                _state.update { it.copy(recurringOccurrences = occurrences.sortedBy(RecurrenceOccurrence::startAt)) }
+            }
+        }
+    }
+
+    private fun deleteRecurrence(scope: RecurrenceScope) {
+        val key = state.value.pendingRecurrenceDelete ?: return
+        viewModelScope.launch {
+            runCatching { repository.mutateRecurrence(RecurrenceMutation(key, scope, RecurrenceMutationKind.DELETE)) }
+                .onSuccess { _state.update { it.copy(pendingRecurrenceDelete = null, message = "반복 일정을 변경했습니다.") } }
+                .onFailure { error -> _state.update { it.copy(pendingRecurrenceDelete = null, message = error.message ?: "반복 일정을 변경하지 못했습니다.") } }
         }
     }
 }
