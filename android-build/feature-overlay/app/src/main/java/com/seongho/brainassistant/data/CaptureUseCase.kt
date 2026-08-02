@@ -10,6 +10,7 @@ import com.seongho.brainassistant.core.model.InputRecord
 import com.seongho.brainassistant.core.model.ItemType
 import com.seongho.brainassistant.core.model.ParsedItem
 import com.seongho.brainassistant.core.model.PersistedItems
+import com.seongho.brainassistant.core.model.PersistedBatch
 import com.seongho.brainassistant.core.model.RecurrenceDraft
 import com.seongho.brainassistant.core.parser.InputAnalyzer
 import java.time.Clock
@@ -113,6 +114,9 @@ class CaptureUseCase(
 
     suspend fun confirm(inputId: String, items: List<ParsedItem>): PersistedItems =
         repository.confirmReviewedItems(inputId, items)
+
+    suspend fun confirmBatch(inputId: String, items: List<ParsedItem>, recurrences: List<RecurrenceDraft>): PersistedBatch =
+        repository.confirmReviewedBatch(inputId, items, recurrences)
 
     suspend fun undo(transactionId: String) {
         repository.softDeleteByTransaction(transactionId, clock.instant())

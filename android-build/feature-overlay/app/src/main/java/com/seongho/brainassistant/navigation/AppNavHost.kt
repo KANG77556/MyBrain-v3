@@ -191,7 +191,7 @@ fun AppNavHost(
                             val invalid = parsed.any { it.title.isBlank() || (it.type.name == "EVENT" && it.startAt == null) }
                             if (invalid) state = state.copy(message = "제목과 일정 시간을 확인해 주세요.")
                             else {
-                                captureViewModel.confirmReview(parsed)
+                                captureViewModel.confirmReviewBatch(parsed, pending.recurrences)
                                 navController.popBackStack()
                             }
                         }
