@@ -87,12 +87,16 @@ jobs:
           set -o pipefail
           gradle --stacktrace assembleDebug 2>&1 | tee build.log
 
-      - name: Debug APK 서명 검증
+      - name: Debug APK 패키지와 서명 검증
         shell: bash
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
           APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          AAPT2="$ANDROID_HOME/build-tools/35.0.0/aapt2"
           test -f "$APK"
+          "$AAPT2" dump badging "$APK" | tee debug-apk-badging.txt
+          grep -Fq "package: name='kr.co.mybrain.v2.debug'" debug-apk-badging.txt
+          grep -Fq "application-label:'MyBrain AI Debug'" debug-apk-badging.txt
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee debug-apk-signature-report.txt
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" debug-apk-signature-report.txt
           grep -q "^Signer #1 certificate SHA-256 digest:" debug-apk-signature-report.txt
@@ -113,6 +117,7 @@ jobs:
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             debug-apk.sha256
+            debug-apk-badging.txt
             debug-apk-signature-report.txt
           if-no-files-found: error
 
