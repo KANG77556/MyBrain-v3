@@ -1,0 +1,48 @@
+# Android Studio
+.idea/
+*.iml
+.navigation/
+captures/
+
+# Gradle
+.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local SDK and environment configuration
+local.properties
+.env
+.env.*
+!.env.example
+
+# Native build output
+.externalNativeBuild/
+.cxx/
+**/.cxx/
+
+# Android build artifacts
+*.apk
+*.aab
+*.apks
+*.aar
+
+# Signing and certificate material
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.jks.b64
+*.keystore.b64
+*.p12.b64
+*.pfx.b64
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*~
+
+# Operating system metadata
+.DS_Store
+Thumbs.db
