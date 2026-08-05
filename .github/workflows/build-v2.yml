@@ -3,12 +3,14 @@ name: Build MyBrain AI V2
 on:
   push:
     branches:
+      - "v2"
       - "rebuild/v2"
       - "rebuild/v2-*"
       - "feature/personal-1.1-widgets"
       - "cleanup/**"
   pull_request:
     branches:
+      - "v2"
       - "main"
       - "rebuild/v2"
       - "feature/personal-1.1-widgets"

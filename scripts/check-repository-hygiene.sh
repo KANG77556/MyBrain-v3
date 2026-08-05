@@ -25,7 +25,8 @@ if git grep -n -F "$legacy_debug_password" -- . >"$secret_scan_file" 2>/dev/null
   fail '폐기된 개발 서명 비밀번호가 Git 추적 텍스트에 남아 있습니다.'
 fi
 
-private_key_headers="$(git grep -n -I -E -- '-----BEGIN ([A-Z0-9]+ )?PRIVATE KEY-----' -- . || true)"
+private_key_pattern="$(printf '%s%s' '-----BEGIN ([A-Z0-9]+ )?PRI' 'VATE KEY-----')"
+private_key_headers="$(git grep -n -I -E -- "$private_key_pattern" -- . || true)"
 if [[ -n "$private_key_headers" ]]; then
   printf '%s\n' "$private_key_headers" >&2
   fail 'PEM 개인키 헤더가 Git 추적 텍스트에 남아 있습니다.'
@@ -45,6 +46,49 @@ fi
 
 if ! grep -Fq '"cleanup/**"' .github/workflows/build-v2.yml; then
   fail '대표 V2 워크플로가 cleanup/** push를 감시하지 않습니다.'
+fi
+
+workflow_event_watches_branch() {
+  local event_name="$1"
+  local branch_name="$2"
+
+  awk -v event_name="$event_name" -v branch_name="$branch_name" '
+    $0 == "  " event_name ":" {
+      in_event = 1
+      in_branches = 0
+      next
+    }
+
+    in_event && ($0 ~ /^[^[:space:]]/ || $0 ~ /^  [^[:space:]]/) {
+      in_event = 0
+      in_branches = 0
+    }
+
+    in_event && $0 == "    branches:" {
+      in_branches = 1
+      next
+    }
+
+    in_branches && $0 ~ /^    [^[:space:]]/ {
+      in_branches = 0
+    }
+
+    in_branches && $0 == "      - \"" branch_name "\"" {
+      found = 1
+    }
+
+    END {
+      exit(found ? 0 : 1)
+    }
+  ' .github/workflows/build-v2.yml
+}
+
+if ! workflow_event_watches_branch push v2; then
+  fail '대표 V2 워크플로가 v2 push를 감시하지 않습니다.'
+fi
+
+if ! workflow_event_watches_branch pull_request v2; then
+  fail '대표 V2 워크플로가 v2 대상 pull request를 감시하지 않습니다.'
 fi
 
 if ! grep -Fq 'bash scripts/check-repository-hygiene.sh' .github/workflows/build-v2.yml; then
