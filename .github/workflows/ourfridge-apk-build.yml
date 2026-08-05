@@ -1,0 +1,105 @@
+name: Build OurFridge APK
+
+on:
+  push:
+    branches:
+      - fridge-apk-build
+    paths:
+      - 'fridge-apk/**'
+      - '.github/workflows/ourfridge-apk-build.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'fridge-apk/**'
+      - '.github/workflows/ourfridge-apk-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+
+      - name: Reconstruct and patch project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat fridge-apk/source.part* > OurFridge-source.zip.b64
+          base64 --decode OurFridge-source.zip.b64 > OurFridge-source.zip
+          echo '8a5c8842965539f3d177cef2387e5ef795da9ffe535b271e5f76faa98598f11d  OurFridge-source.zip' | sha256sum --check
+          unzip -q OurFridge-source.zip
+          test -f OurFridge/settings.gradle.kts
+          test -f OurFridge/app/src/main/AndroidManifest.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('OurFridge/app/build.gradle.kts')
+          s = p.read_text()
+          if 'import org.jetbrains.kotlin.gradle.dsl.JvmTarget' not in s:
+              s = 'import org.jetbrains.kotlin.gradle.dsl.JvmTarget\n\n' + s
+          s = s.replace('\n    kotlinOptions {\n        jvmTarget = "17"\n    }\n', '\n')
+          if '\nkotlin {\n    compilerOptions {' not in s:
+              s += '\n\nkotlin {\n    compilerOptions {\n        jvmTarget.set(JvmTarget.JVM_17)\n    }\n}\n'
+          p.write_text(s)
+
+          p = Path('OurFridge/app/src/main/java/kr/co/seongho/ourfridge/ui/App.kt')
+          s = p.read_text()
+          s = s.replace('import androidx.compose.foundation.layout.weight\n', '')
+          s = s.replace('"음성 입력 $count건을 저장했습니다."', '"음성 입력 ${count}건을 저장했습니다."')
+          p.write_text(s)
+          PY
+          mkdir -p artifacts
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Run tests and build debug APK
+        working-directory: OurFridge
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace testDebugUnitTest :app:assembleDebug 2>&1 | tee ../artifacts/build.log
+
+      - name: Verify and package APK
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='OurFridge/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          cp "$APK" artifacts/OurFridge-v0.1.0-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs artifacts/OurFridge-v0.1.0-debug.apk | tee artifacts/apk-signature.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging artifacts/OurFridge-v0.1.0-debug.apk | tee artifacts/apk-badging.txt
+          sha256sum artifacts/OurFridge-v0.1.0-debug.apk | tee artifacts/sha256.txt
+
+      - name: Upload APK and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OurFridge-build-${{ github.run_number }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
