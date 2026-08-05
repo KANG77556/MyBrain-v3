@@ -1,0 +1,127 @@
+name: ChalkakCoach Stage9 Build
+
+on:
+  push:
+    branches:
+      - feat/chalkakcoach-stage9-scene-framing
+  pull_request:
+    paths:
+      - "chalkakcoach-stage9/**"
+      - ".github/workflows/chalkakcoach-stage9.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Restore stage8 and apply stage9 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p chalkakcoach-stage9/build
+          cat chalkakcoach-stage8/minimal.tar.xz.b64.part-* > chalkakcoach-stage9/build/stage8.tar.xz.b64
+          base64 --decode chalkakcoach-stage9/build/stage8.tar.xz.b64 > chalkakcoach-stage9/build/stage8.tar.xz
+          tar -xJf chalkakcoach-stage9/build/stage8.tar.xz -C chalkakcoach-stage9/build
+          cat chalkakcoach-stage9/stage9.patch.part-* > chalkakcoach-stage9/build/stage9.patch
+          echo "19a606c0bf51e6e5e1055947f72f6bebe2b5f15e23b216693a85616f501c1cc5  chalkakcoach-stage9/build/stage9.patch" | sha256sum -c -
+          cd chalkakcoach-stage9/build/ChalkakCoach
+          git apply --check ../stage9.patch
+          git apply --whitespace=nowarn ../stage9.patch
+
+      - name: Unit tests and debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd chalkakcoach-stage9/build/ChalkakCoach
+          gradle clean testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee ../gradle-build.log
+
+      - name: Summarize tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p chalkakcoach-stage9/build/delivery
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          import xml.etree.ElementTree as ET
+          result_dir = Path('chalkakcoach-stage9/build/ChalkakCoach/app/build/test-results/testDebugUnitTest')
+          tests = failures = errors = skipped = 0
+          files = sorted(result_dir.glob('TEST-*.xml'))
+          classes = []
+          for path in files:
+              root = ET.parse(path).getroot()
+              tests += int(root.attrib.get('tests', 0))
+              failures += int(root.attrib.get('failures', 0))
+              errors += int(root.attrib.get('errors', 0))
+              skipped += int(root.attrib.get('skipped', 0))
+              classes.append(root.attrib.get('name', path.stem))
+          out_dir = Path('chalkakcoach-stage9/build/delivery')
+          out = out_dir / 'TEST-SUMMARY.txt'
+          out.write_text(
+              f'xml_files={len(files)}\ntests={tests}\nfailures={failures}\nerrors={errors}\nskipped={skipped}\nclasses=' + '|'.join(classes) + '\n',
+              encoding='utf-8',
+          )
+          if not files or failures or errors or tests < 1:
+              raise SystemExit(f'Unexpected test result: files={len(files)}, tests={tests}, failures={failures}, errors={errors}')
+          target = out_dir / 'test-results-xml'
+          if target.exists():
+              shutil.rmtree(target)
+          shutil.copytree(result_dir, target)
+          PY
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/chalkakcoach-stage9/build"
+          APK="$ROOT/ChalkakCoach/app/build/outputs/apk/debug/app-debug.apk"
+          OUT="$ROOT/delivery"
+          test -s "$APK"
+          cp "$APK" "$OUT/ChalkakCoach-v0.9.0-Scene-AutoFraming-debug.apk"
+          test -s "$OUT/ChalkakCoach-v0.9.0-Scene-AutoFraming-debug.apk"
+
+      - name: Verify APK signature and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/chalkakcoach-stage9/build"
+          APK="$ROOT/delivery/ChalkakCoach-v0.9.0-Scene-AutoFraming-debug.apk"
+          OUT="$ROOT/delivery"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK" > "$OUT/APK-SIGNATURE-TEST.txt"
+          sha256sum "$APK" > "$OUT/SHA256SUMS.txt"
+
+      - name: Upload delivery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChalkakCoach-Stage9-v0.9.0
+          path: chalkakcoach-stage9/build/delivery
+          retention-days: 14
+
+      - name: Report workflow run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh issue comment 32 --repo "$GITHUB_REPOSITORY" --body "STAGE9_RUN_ID=${GITHUB_RUN_ID} STATUS=${{ job.status }} SHA=${GITHUB_SHA}"

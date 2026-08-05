@@ -1,0 +1,176 @@
++                analysisFresh = faceState.analyzedAtMillis > 0L && now - faceState.analyzedAtMillis <= 1_500L,
++                resetWhenUnknown = resetWhenEmpty,
++            )
++        }
+         autoFramingDecision = decision
+         if (decision.shouldApplyZoom && !state.isCapturing && state.countdown == null) {
+             state = state.copy(zoomRatio = decision.nextZoomRatio)
+@@ -437,14 +465,14 @@ fun CameraScreen(modifier: Modifier = Modifier) {
+             displayedMessage = faceGuidance.message
+             displayedAccentColor = faceGuidanceColor(faceGuidance.status)
+         }
+-        !compositionGuidance.isReadyForCapture && compositionGuidance.status != CompositionStatus.INACTIVE -> {
+-            displayedMessage = compositionGuidance.message
+-            displayedAccentColor = compositionColor(compositionGuidance.status)
+-        }
+         autoFramingEnabled && autoFramingDecision.isAdjusting -> {
+             displayedMessage = autoFramingDecision.message
+             displayedAccentColor = Color(0xFF66D9FF)
+         }
++        !compositionGuidance.isReadyForCapture && compositionGuidance.status != CompositionStatus.INACTIVE -> {
++            displayedMessage = compositionGuidance.message
++            displayedAccentColor = compositionColor(compositionGuidance.status)
++        }
+         autoCaptureEnabled && autoReadiness.isEligible -> {
+             displayedMessage = "자동 촬영을 위해 그대로 유지하세요"
+             displayedAccentColor = compositionColor(CompositionStatus.READY)
+@@ -648,6 +676,7 @@ fun CameraScreen(modifier: Modifier = Modifier) {
+         )
+         SubjectRecognitionBadge(
+             state = faceState.subjectRecognition,
++            lensRecommendation = lensRecommendation,
+             modifier = Modifier
+                 .align(Alignment.TopCenter)
+                 .statusBarsPadding()
+diff --git a/chalkak_v090_work/ChalkakCoach/app/src/main/java/kr/co/chalkakcoach/camera/SceneAutoFramingController.kt b/app/src/main/java/kr/co/chalkakcoach/camera/SceneAutoFramingController.kt
+new file mode 100644
+index 0000000..e74a793
+--- /dev/null
++++ b/app/src/main/java/kr/co/chalkakcoach/camera/SceneAutoFramingController.kt
+@@ -0,0 +1,163 @@
++package kr.co.chalkakcoach.camera
++
++import kr.co.chalkakcoach.subject.SceneSubject
++import kotlin.math.abs
++import kotlin.math.max
++import kotlin.math.min
++import kotlin.math.sqrt
++
++/**
++ * 얼굴이 없는 장면에서 프레임의 주요 영역과 피사체 종류를 이용해 자동 줌을 계산합니다.
++ * 정확한 사물 경계 대신 저비용 살리언시 면적을 사용하므로, 넓은 데드밴드와 작은 줌 단계를 적용합니다.
++ */
++object SceneAutoFramingController {
++    fun evaluate(
++        subject: SceneSubject,
++        subjectConfidence: Float,
++        saliencyX: Float,
++        saliencyY: Float,
++        salientAreaRatio: Float,
++        edgeDensity: Float,
++        currentZoomRatio: Float,
++        minZoomRatio: Float,
++        maxZoomRatio: Float,
++        isFrontCamera: Boolean,
++        enabled: Boolean,
++        nowMillis: Long,
++        manualPauseUntilMillis: Long,
++        analysisFresh: Boolean,
++        resetWhenUnknown: Boolean,
++    ): AutoFramingDecision {
++        val safeMin = minZoomRatio.coerceAtLeast(1f)
++        val safeMax = maxZoomRatio.coerceAtLeast(safeMin)
++        val current = currentZoomRatio.coerceIn(safeMin, safeMax)
++
++        if (!enabled) return decision(AutoFramingStatus.OFF, current, false, "AI 자동 구도 꺼짐")
++        if (nowMillis < manualPauseUntilMillis) {
++            return decision(AutoFramingStatus.PAUSED, current, false, "수동 줌을 우선합니다")
++        }
++        if (!analysisFresh) {
++            return decision(AutoFramingStatus.WAITING, current, false, "장면을 다시 분석하는 중입니다")
++        }
++
++        // 풍경은 디지털 확대보다 넓은 시야와 수평 유지가 우선입니다.
++        if (subject == SceneSubject.LANDSCAPE) {
++            if (current <= safeMin + APPLY_EPSILON) {
++                return decision(AutoFramingStatus.LOCKED, current, false, "풍경을 넓은 화면으로 유지합니다")
++            }
++            val next = steppedZoom(current, safeMin, safeMin, safeMax)
++            return decision(AutoFramingStatus.ADJUSTING, next, true, "풍경을 넓게 담기 위해 축소합니다")
++        }
++
++        val unsupported = subject in setOf(SceneSubject.UNKNOWN, SceneSubject.PERSON, SceneSubject.GROUP)
++        val minimumConfidence = if (subject == SceneSubject.OBJECT) OBJECT_MIN_CONFIDENCE else MIN_CONFIDENCE
++        if (unsupported || subjectConfidence < minimumConfidence) {
++            return resetOrWait(current, safeMin, safeMax, resetWhenUnknown)
++        }
++
++        // 일반 사물 라벨인데 화면이 지나치게 복잡하면 잘못된 확대를 막습니다.
++        if (subject == SceneSubject.OBJECT && edgeDensity >= COMPLEX_SCENE_EDGE_LIMIT) {
++            return decision(AutoFramingStatus.WAITING, current, false, "복잡한 장면이라 자동 확대를 보류합니다")
++        }
++
++        val desiredArea = targetArea(subject)
++        val measuredArea = salientAreaRatio.coerceIn(0f, 1f)
++        if (measuredArea < MIN_MEASURED_AREA) {
++            return resetOrWait(current, safeMin, safeMax, resetWhenUnknown)
++        }
++
++        val centerOffsetX = abs(saliencyX.coerceIn(0f, 1f) - 0.5f)
++        val safeVerticalCenter = saliencyY in MIN_SAFE_CENTER_Y..MAX_SAFE_CENTER_Y
++        val hasCenterRisk = centerOffsetX > MAX_CENTER_OFFSET_FOR_ZOOM_IN || !safeVerticalCenter
++        val autoMax = min(safeMax, if (isFrontCamera) FRONT_AUTO_MAX_ZOOM else BACK_AUTO_MAX_ZOOM)
++
++        // 면적은 배율의 제곱에 비례하므로 제곱근으로 목표 배율을 계산합니다.
++        val scale = sqrt((desiredArea / measuredArea).coerceAtLeast(0.01f))
++        var target = (current * scale).coerceIn(safeMin, autoMax)
++        if (hasCenterRisk && target > current) {
++            target = (current * EDGE_ZOOM_OUT_FACTOR).coerceAtLeast(safeMin)
++        }
++
++        val relativeError = abs(measuredArea - desiredArea) / desiredArea
++        if (relativeError <= AREA_DEAD_BAND && !hasCenterRisk) {
++            return decision(
++                AutoFramingStatus.LOCKED,
++                current,
++                false,
++                "${subject.koreanLabel} 크기를 안정적으로 유지합니다",
++            )
++        }
++
++        val next = steppedZoom(current, target, safeMin, autoMax)
++        val shouldApply = abs(next - current) >= APPLY_EPSILON
++        if (!shouldApply) {
++            return decision(
++                AutoFramingStatus.LOCKED,
++                current,
++                false,
++                if (hasCenterRisk) "피사체 위치 안내를 따라 주세요" else "${subject.koreanLabel} 구도 유지 중",
++            )
++        }
++
++        val message = when {
++            next > current -> "AI가 ${subject.koreanLabel} 크기에 맞춰 확대합니다"
++            hasCenterRisk -> "잘림 방지를 위해 화면을 넓힙니다"
++            else -> "AI가 ${subject.koreanLabel} 크기에 맞춰 축소합니다"
++        }
++        return decision(AutoFramingStatus.ADJUSTING, next, true, message)
++    }
++
++    private fun resetOrWait(
++        current: Float,
++        safeMin: Float,
++        safeMax: Float,
++        resetWhenUnknown: Boolean,
++    ): AutoFramingDecision {
++        if (!resetWhenUnknown || current <= safeMin + APPLY_EPSILON) {
++            return decision(AutoFramingStatus.WAITING, current, false, "장면을 분석하는 중입니다")
++        }
++        val next = steppedZoom(current, safeMin, safeMin, safeMax)
++        return decision(AutoFramingStatus.ADJUSTING, next, true, "새 장면을 찾기 위해 화면을 넓힙니다")
++    }
++
++    private fun targetArea(subject: SceneSubject): Float = when (subject) {
++        SceneSubject.FOOD -> 0.38f
++        SceneSubject.PET -> 0.32f
++        SceneSubject.VEHICLE -> 0.34f
++        SceneSubject.PLANT -> 0.30f
++        SceneSubject.DOCUMENT -> 0.50f
++        SceneSubject.OBJECT -> 0.28f
++        else -> 0.30f
++    }
++
++    private fun steppedZoom(current: Float, target: Float, minZoom: Float, maxZoom: Float): Float {
++        val maxStep = max(MIN_ZOOM_STEP, current * MAX_STEP_RATIO)
++        return when {
++            target > current -> min(current + maxStep, target)
