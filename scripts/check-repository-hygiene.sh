@@ -5,6 +5,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 failures=0
+secret_scan_file="$(mktemp)"
+trap 'rm -f "$secret_scan_file"' EXIT
 
 fail() {
   printf 'ERROR: %s\n' "$1" >&2
@@ -18,11 +20,16 @@ if [[ -n "$sensitive_files" ]]; then
 fi
 
 legacy_debug_password="$(printf '%s%s' 'mybrain-debug-' 'only')"
-if git grep -n -F "$legacy_debug_password" -- app .github scripts >/tmp/mybrain-hygiene-secret.txt 2>/dev/null; then
-  cat /tmp/mybrain-hygiene-secret.txt >&2
-  fail '공개된 개발 서명 비밀번호가 소스 또는 CI에 남아 있습니다.'
+if git grep -n -F "$legacy_debug_password" -- . >"$secret_scan_file" 2>/dev/null; then
+  cat "$secret_scan_file" >&2
+  fail '폐기된 개발 서명 비밀번호가 Git 추적 텍스트에 남아 있습니다.'
 fi
-rm -f /tmp/mybrain-hygiene-secret.txt
+
+private_key_headers="$(git grep -n -I -E -- '-----BEGIN ([A-Z0-9]+ )?PRIVATE KEY-----' -- . || true)"
+if [[ -n "$private_key_headers" ]]; then
+  printf '%s\n' "$private_key_headers" >&2
+  fail 'PEM 개인키 헤더가 Git 추적 텍스트에 남아 있습니다.'
+fi
 
 if ! grep -Fq 'applicationIdSuffix ".debug"' app/build.gradle; then
   fail 'Debug applicationIdSuffix가 .debug으로 설정되지 않았습니다.'
