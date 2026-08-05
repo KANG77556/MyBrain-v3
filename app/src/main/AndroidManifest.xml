@@ -20,7 +20,7 @@
     <application
         android:name=".MyBrainApplication"
         android:allowBackup="false"
-        android:label="MyBrain AI"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyBrain">
 
