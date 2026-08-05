@@ -186,18 +186,18 @@ Expected: exit code `0`.
 - Consumes: merged `v2`, approved files from `docs/development-baseline-design`.
 - Produces: `chore/development-baseline` containing the approved spec and plan before implementation changes.
 
-- [ ] **Step 1: `v2`에서 구현 브랜치를 만든다**
+- [ ] **Step 1: `v2`와 설계 브랜치를 fetch하고 구현 브랜치를 만든다**
 
 Run:
 
 ```bash
-git fetch origin v2
+git fetch origin v2 docs/development-baseline-design
 git switch v2
 git pull --ff-only origin v2
 git switch -c chore/development-baseline
 ```
 
-Expected: branch `chore/development-baseline`, parent equals current `origin/v2`.
+Expected: branch `chore/development-baseline`, parent equals current `origin/v2`, remote ref `origin/docs/development-baseline-design` exists.
 
 - [ ] **Step 2: 설계 문서를 설계 브랜치에서 복사한다**
 
@@ -290,7 +290,7 @@ require_fixed() {
   local path="$1"
   local pattern="$2"
   local message="$3"
-  if [[ ! -f "$path" ]] || ! grep -Fq "$pattern" "$path"; then
+  if [[ ! -f "$path" ]] || ! grep -Fq -- "$pattern" "$path"; then
     fail "$message"
   fi
 }
@@ -395,7 +395,9 @@ for path in "${baseline_files[@]}"; do
 done
 
 if ((${#existing_baseline_files[@]} > 0)); then
-  placeholder_hits="$(grep -nE '\b(TBD|TODO|FIXME)\b|implement later|fill in details' \
+  unfinished_words="$(printf '%s|%s|%s' 'T''BD' 'TO''DO' 'FIX''ME')"
+  unfinished_phrases="$(printf '%s|%s' 'implement ''later' 'fill in ''details')"
+  placeholder_hits="$(grep -nE "\\b(${unfinished_words})\\b|${unfinished_phrases}" \
     "${existing_baseline_files[@]}" || true)"
   if [[ -n "$placeholder_hits" ]]; then
     printf '%s\n' "$placeholder_hits" >&2
@@ -856,30 +858,31 @@ Create `docs/DEVELOPMENT_ROADMAP_KO.md`:
 
 완료 조건:
 
-- GitHub Secrets가 있는 실행에서 `MyBrainAI-v2-release`가 생성됩니다.
-- APK Signature Scheme v2와 v3가 성공합니다.
-- signer 인증서 SHA-256이 workflow의 `EXPECTED_CERT_SHA256`과 일치합니다.
-- 신규 설치와 기존 정식 앱 위 업데이트 설치를 검증합니다.
+- GitHub Secrets가 있는 실행에서 `MyBrainAI-v2-release` 생성
+- APK Signature Scheme v2와 v3 성공
+- signer SHA-256이 `EXPECTED_CERT_SHA256`과 일치
+- 신규 설치와 기존 정식 앱 위 업데이트 설치 성공
+- APK SHA-256과 서명 보고서 보관
 
 ### 2. Room schema export와 migration 기준선
 
 완료 조건:
 
-- Room schema JSON의 저장 경로와 버전 관리 정책이 정해집니다.
-- 현재 DB 버전의 schema가 저장됩니다.
-- migration 누락 시 CI가 실패합니다.
-- CRUD, transaction, 중복 저장과 migration 계측 테스트가 성공합니다.
-- 백업·복구 호환성 영향이 문서화됩니다.
+- Room schema export 경로와 버전 관리 정책 확정
+- 현재 DB 버전의 schema JSON 저장
+- migration 누락 시 CI 실패
+- CRUD, transaction, 중복 저장과 migration 계측 테스트 성공
+- 백업·복구 호환성 영향 문서화
 
 ### 3. Android 15 실행 smoke test
 
 완료 조건:
 
-- Debug APK와 AndroidTest APK가 빌드됩니다.
-- Android 15 규격 에뮬레이터에 설치됩니다.
-- 런처 Activity가 실행되고 프로세스가 생존합니다.
-- 초기 Room Database 생성에서 치명적 예외가 없습니다.
-- 실패 시 logcat과 테스트 보고서가 아티팩트로 남습니다.
+- Debug APK와 AndroidTest APK 빌드
+- Android 15 규격 에뮬레이터 설치
+- 런처 Activity 실행과 프로세스 생존
+- 초기 Room Database 생성에서 치명적 예외 없음
+- logcat과 테스트 보고서 아티팩트 보관
 
 ## P1 — 핵심 입력·검토·저장 흐름
 
@@ -895,12 +898,12 @@ Create `docs/DEVELOPMENT_ROADMAP_KO.md`:
 
 완료 조건:
 
-- 오프라인에서 로컬 입력과 저장이 가능합니다.
-- AI 실패 시 원본 입력을 보존하고 로컬 또는 수동 경로를 제공합니다.
-- 날짜가 모호하면 자동 확정하지 않고 검토를 요구합니다.
-- 저장 버튼 중복 탭으로 중복 레코드가 생기지 않습니다.
-- 일정 충돌을 사용자에게 설명하고 저장 선택권을 제공합니다.
-- 저장 성공 후 알림과 위젯이 갱신됩니다.
+- 오프라인 로컬 입력과 저장
+- AI 실패 시 원본 입력 보존과 대체 경로
+- 모호한 날짜의 사용자 검토
+- 중복 탭 저장 방지
+- 일정 충돌 설명과 저장 선택권
+- 저장 성공 후 알림과 위젯 갱신
 
 추적 이슈 제목:
 
@@ -912,12 +915,12 @@ P1: Define quick-entry review and save acceptance scenarios
 
 완료 조건:
 
-- 재부팅과 앱 업데이트 후 알림이 복원됩니다.
-- 시스템 시간과 시간대 변경 후 예약 시간이 일관됩니다.
-- 반복 일정의 다음 실행 시간이 경계값 테스트를 통과합니다.
-- 알림과 정확한 알람 권한 거부 시 제한 동작을 설명합니다.
-- 오늘·일정·할 일·빠른 메모 위젯이 저장 변경을 반영합니다.
-- Android 15 기기 또는 동등 에뮬레이터에서 검증합니다.
+- 재부팅과 앱 업데이트 후 알림 복원
+- 시간과 시간대 변경 후 일관된 실행 시각
+- 반복 일정 경계값 테스트
+- 알림과 정확한 알람 권한 거부 제한 동작
+- 오늘·일정·할 일·빠른 메모 위젯 갱신
+- Android 15 기기 또는 동등 에뮬레이터 검증
 
 추적 이슈 제목:
 
@@ -929,12 +932,12 @@ P2: Verify reminder rescheduling across reboot and timezone changes
 
 완료 조건:
 
-- 암호화 백업 생성과 복호화 검증이 성공합니다.
-- 복구 전 변경 예정 항목을 미리 확인할 수 있습니다.
-- 잘못된 암호, 손상 파일, 일부 충돌이 기존 데이터를 훼손하지 않습니다.
-- 이전 백업 형식의 호환성 정책과 테스트가 있습니다.
-- 서명된 Release APK의 신규 설치와 업데이트 설치가 성공합니다.
-- APK, SHA-256, 인증서 지문, Release 노트와 롤백 APK가 보관됩니다.
+- 암호화 백업 생성과 복호화 검증
+- 복구 전 변경 예정 항목 미리보기
+- 잘못된 암호, 손상 파일, 일부 충돌에서 기존 데이터 유지
+- 이전 백업 형식 호환성 정책과 테스트
+- 고정 서명 Release APK 신규 설치와 업데이트 설치
+- APK, SHA-256, 인증서 지문, Release 노트와 롤백 APK 보관
 
 추적 이슈 제목:
 
@@ -1057,7 +1060,7 @@ gradle --stacktrace assembleRelease
 - [ ] APK Signature Scheme v2와 v3 성공
 - [ ] signer가 1개인지 확인
 - [ ] signer SHA-256이 `.github/workflows/build-v2.yml`의 `EXPECTED_CERT_SHA256`과 일치
-- [ ] 현재 workflow의 예상 인증서 값 `ee9b89627074c2708f7d91ae1a9fcf5ebd8f9611b4df0719e8aa4eef63765520`과 일치
+- [ ] 현재 예상 인증서 `ee9b89627074c2708f7d91ae1a9fcf5ebd8f9611b4df0719e8aa4eef63765520`과 일치
 
 Release 키를 교체할 때는 키 회전 설계, 업데이트 호환성, workflow와 이 문서의 인증서 값을 같은 PR에서 변경합니다.
 
@@ -1800,8 +1803,9 @@ EOF
 Run:
 
 ```bash
-gh issue list --repo KANG77556/MyBrain-v3 --state open --limit 50 \
-  --search 'P0: OR P1: OR P2: OR P3:'
+gh issue list --repo KANG77556/MyBrain-v3 --state open --limit 100 \
+  --json number,title \
+  --jq '.[] | select(.title | test("^P[0-3]:")) | "#\(.number) \(.title)"'
 ```
 
 Expected: 위 여섯 제목이 모두 표시된다.
@@ -1813,9 +1817,11 @@ Expected: 위 여섯 제목이 모두 표시된다.
 - 설계의 브랜치 흐름, 문서 4종, GitHub 템플릿 3종, 코드 배치 규칙, 오류 처리, 테스트 전략, P0~P3 로드맵, Release 체크리스트, 롤백을 모두 작업에 연결했다.
 - PR #91 병합과 관리자 기본 브랜치 변경을 개발 기준선 구현보다 앞선 독립 게이트로 두었다.
 - `chore/development-baseline` push가 실제 CI를 실행하도록 `feature/**`, `fix/**`, `chore/**`, `docs/**`, `test/**` 패턴을 구체적으로 추가했다.
+- 설계 브랜치의 문서를 복사하기 전에 `origin/docs/development-baseline-design`를 명시적으로 fetch한다.
+- `grep` 패턴이 `-`로 시작해도 옵션으로 오인되지 않도록 `grep -Fq --`를 사용한다.
 - 제품 코드, Room 스키마, 권한, 앱 버전, Release Secrets를 변경하는 단계가 없다.
 - Bash 검사에서 필수 파일, README 링크, 명령, 패키지 책임, P0~P3, Release 서명·해시·설치·백업, 이슈·PR 템플릿과 workflow 연결을 확인한다.
-- 모든 생성 파일의 실제 내용을 계획에 포함했고 미정 값이나 구현을 뒤로 미루는 표기를 두지 않았다.
+- 모든 생성 파일의 실제 내용을 계획에 포함했고 미완성 표기를 두지 않았다.
 - Activity, Policy, Parser, Controller, Repository 용어가 설계와 모든 문서에서 동일하다.
 - 대규모 리팩터링 대신 큰 파일 수정 시 관련 책임만 추출하는 점진적 원칙을 유지했다.
 - 개발 기준선 PR 병합 후 등록할 여섯 이슈의 제목, 본문, 완료 조건을 실제 명령으로 정의했다.
