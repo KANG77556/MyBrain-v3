@@ -47,6 +47,11 @@ if ! grep -Fq '"cleanup/**"' .github/workflows/build-v2.yml; then
   fail '대표 V2 워크플로가 cleanup/** push를 감시하지 않습니다.'
 fi
 
+v2_trigger_count="$(grep -Fc '      - "v2"' .github/workflows/build-v2.yml || true)"
+if ((v2_trigger_count < 2)); then
+  fail '대표 V2 워크플로가 v2 push와 pull request 대상을 모두 감시하지 않습니다.'
+fi
+
 if ! grep -Fq 'bash scripts/check-repository-hygiene.sh' .github/workflows/build-v2.yml; then
   fail '대표 V2 워크플로가 저장소 위생 검사를 실행하지 않습니다.'
 fi
