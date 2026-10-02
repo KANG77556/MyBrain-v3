@@ -1,0 +1,33 @@
+name: 기능 제안
+description: MyBrain AI V2의 신규 기능 또는 개선 사항
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 문제/목적
+      description: 어떤 문제를 해결하려는지 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 원하는 동작
+      description: 사용자 관점의 완료 상태를 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 완료 조건
+      description: 테스트 가능하거나 확인 가능한 조건을 적어주세요.
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 우선순위
+      options: ["P0", "P1", "P2", "P3"]
+    validations:
+      required: true
