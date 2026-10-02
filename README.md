@@ -1,6 +1,6 @@
 # MyBrain AI V2
 
-AI 기반 메모·할 일·일정 관리 Android 애플리케이션입니다. 현재 V2 통합 기준선은 `feature/personal-1.1-widgets`이며, 저장소 보존형 정리는 `cleanup/repository-hygiene`에서 검증합니다. 기존 v1.10.1 소스는 `backup/legacy-v1.10.1`에 보관되어 있습니다.
+AI 기반 메모·할 일·일정 관리 Android 애플리케이션입니다. 장기 V2 통합 기준선과 기본 브랜치 전환 대상은 `v2`입니다. 전환 전 레거시 기준선은 `main`과 `backup/main-pre-v2-20260805`에 보존하며, 이전 통합 브랜치 `feature/personal-1.1-widgets`는 전환 후 7일 관찰 기간 동안 호환 참조로 유지합니다. 기존 v1.10.1 소스는 `backup/legacy-v1.10.1`에 별도로 보관되어 있습니다.
 
 ## 개발 환경
 
@@ -39,6 +39,6 @@ Debug APK는 `app/build/outputs/apk/debug/app-debug.apk`에 생성됩니다. Rel
 
 ## 브랜치와 기여
 
-브랜치 역할과 병합 기준은 `docs/BRANCH_POLICY_KO.md`를 따릅니다. 1차 저장소 정리는 `feature/personal-1.1-widgets` 대상 PR로만 병합하며 `main` 승격은 별도 검증과 설계를 거칩니다.
+브랜치 역할과 병합 기준은 `docs/BRANCH_POLICY_KO.md`를 따릅니다. 신규 기능과 저장소 정리 PR은 `v2`를 대상으로 합니다. `main`은 전환 전 레거시 기준선으로 동결하며, GitHub 기본 브랜치 변경과 롤백 절차는 `docs/V2_DEFAULT_BRANCH_TRANSITION_KO.md`에 기록합니다.
 
 보안 문제는 공개 이슈에 올리지 말고 `SECURITY.md`의 비공개 신고 절차를 사용합니다.
