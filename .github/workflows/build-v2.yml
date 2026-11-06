@@ -78,6 +78,7 @@ jobs:
         if: always() && hashFiles('unit-test.log') != ''
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 7
           name: MyBrainAI-v2-unit-test-report
           path: |
             unit-test.log
@@ -110,6 +111,7 @@ jobs:
         if: always() && hashFiles('build.log') != ''
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 7
           name: MyBrainAI-v2-build-log
           path: build.log
           if-no-files-found: error
@@ -117,6 +119,7 @@ jobs:
       - name: Debug APK 업로드
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 7
           name: MyBrainAI-v2-debug
           path: |
             app/build/outputs/apk/debug/app-debug.apk
@@ -145,6 +148,7 @@ jobs:
         if: env.HAS_RELEASE_SIGNING != 'true'
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 7
           name: MyBrainAI-v2-unsigned-release-check
           path: |
             app/build/outputs/apk/release/app-release-unsigned.apk
@@ -203,6 +207,7 @@ jobs:
         if: env.HAS_RELEASE_SIGNING == 'true'
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 30
           name: MyBrainAI-v2-release
           path: |
             ${{ steps.release_files.outputs.apk }}
